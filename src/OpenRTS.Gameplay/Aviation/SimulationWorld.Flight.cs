@@ -326,9 +326,10 @@ public sealed partial class SimulationWorld
             }
             ref var orders = ref actor.Get<OrderState>();
             if (definition.Ammo > 0 && f.Ammo == 0 && !f.ReturnRequested && orders.HasOrder &&
-                orders.ActiveOrder.Kind is UnitActionKind.Attack or UnitActionKind.AttackMove)
+                orders.ActiveOrder.Kind is UnitActionKind.Attack or UnitActionKind.AttackMove or UnitActionKind.AttackContact)
             { f.ReturnRequested = true; f.RequestTick = Tick; }
-            bool go = motion.Moving || definition.Mode == FlightMode.ForwardFlight && orders.HasOrder && orders.ActiveOrder.Kind is UnitActionKind.Attack or UnitActionKind.AttackMove;
+            bool go = motion.Moving || definition.Mode == FlightMode.ForwardFlight && orders.HasOrder &&
+                orders.ActiveOrder.Kind is UnitActionKind.Attack or UnitActionKind.AttackMove or UnitActionKind.AttackContact;
             if (f.ReturnRequested)
             {
                 if (!AssignAirbase(actor))
@@ -621,7 +622,8 @@ public sealed partial class SimulationWorld
                 f.ReturnRequested = false; f.Phase = FlightPhase.Landed; f.ExitPoint = default;
                 ref var orders = ref actor.Get<OrderState>();
                 if (orders.ActiveOrder.Kind == UnitActionKind.ReturnToBase) orders.HasOrder = false;
-                actor.Get<MotionState>().Moving = orders.HasOrder && orders.ActiveOrder.Kind is UnitActionKind.Attack or UnitActionKind.AttackMove;
+                actor.Get<MotionState>().Moving = orders.HasOrder &&
+                    orders.ActiveOrder.Kind is UnitActionKind.Attack or UnitActionKind.AttackMove or UnitActionKind.AttackContact;
             }
         }
     }

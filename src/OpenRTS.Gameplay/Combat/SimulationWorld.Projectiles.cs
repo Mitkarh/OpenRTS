@@ -24,7 +24,11 @@ public sealed partial class SimulationWorld
         var actorIdentity = actor.Get<EntityIdentity>();
         ref var actorOwnership = ref actor.Get<OwnershipState>();
         WorldPosition muzzle, destination;
-        if (point is { } p) { destination = p; muzzle = ObjectGeometry.ClosestPoint(TypeOf(actor), actorSpatial.Position, p); }
+        if (point is { } p)
+        {
+            destination = p;
+            muzzle = ObjectGeometry.ClosestPoint(TypeOf(actor), actorSpatial.Position, p) with { Elevation = actorSpatial.Position.Elevation };
+        }
         else ObjectGeometry.DistanceSquared(TypeOf(actor), actorSpatial.Position, TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, out muzzle, out destination);
         _projectiles.Add(new() { Id = checked(_nextProjectileId++), BornTick = Tick, Source = actorIdentity.Id, Target = target < 0 ? default : _entityHandles[target].Get<EntityIdentity>().Id,
             Owner = actorOwnership.Owner, UnitType = weaponUnitType < 0 ? actorIdentity.Type : weaponUnitType, Mount = mount, Previous = muzzle, Position = muzzle,
@@ -39,7 +43,7 @@ public sealed partial class SimulationWorld
             StepCancellation.ThrowIfCancellationRequested();
             var shot = _projectiles[read]; var weapon = shot.Weapon; shot.Previous = shot.Position;
             if (shot.BornTick == Tick) { _projectiles[write++] = shot; continue; }
-            if (weapon.Projectile == ProjectileKind.Missile)
+            if (weapon.Projectile == ProjectileKind.Missile && shot.Target != default)
             {
                 // shortcut: steering is instantaneous; add turn limits when missiles need inertia.
                 if (!_indices.TryGetValue(shot.Target, out int target) || !IsOnMap(_entityHandles[target])) { Expire(shot); continue; }
@@ -54,32 +58,9 @@ public sealed partial class SimulationWorld
             // shortcut: wall effects use the segment start; calculate exact entry when impact placement matters.
             if (_baseGrid is not null && !(weapon.SpatialTrajectory ? SpatialTerrainClear(shot.Position, next) : TerrainGeometry.Clear(_baseGrid, shot.Position, next, 0)))
             { Hit(shot, default, shot.Position); continue; }
-            EntityId hit = default; int fraction = 65537;
-            if (weapon.Projectile != ProjectileKind.Grenade)
-            {
-                (_combatIndex ?? _motion)!.Query(shot.Position, next, 0, _combatCandidates);
-                foreach (var candidateId in _combatCandidates)
-                {
-                    if (!_indices.TryGetValue(candidateId, out int i)) continue;
-                    ref var body = ref _entityHandles[i];
-                    ref var bodySpatial = ref body.Get<SpatialState>();
-                    var bodyIdentity = body.Get<EntityIdentity>();
-                    ref var bodyOwnership = ref body.Get<OwnershipState>();
-                    if (!WeaponAccepts(weapon, body) || bodyIdentity.Id == shot.Source || !weapon.FriendlyFire && bodyOwnership.Owner == shot.Owner) continue;
-                    int t;
-                    var type = TypeOf(body);
-                    if (weapon.SpatialTrajectory) t = SpatialHitFraction(shot.Position, next, bodySpatial.Previous, bodySpatial.Position, type);
-                    else if (type.Footprint is { } footprint)
-                    {
-                        t = 65537;
-                        for (int f = 0; f < footprint.TargetBounds.Count; f++) t = Math.Min(t, BodyGeometry.HitBoxFraction(shot.Position, next, footprint.TargetBounds[f].Translate(bodySpatial.Position)));
-                    }
-                    else if (type.Body.Kind == BodyKind.Box)
-                        t = BodyGeometry.HitBoxFraction(new(shot.Position.X - bodySpatial.Previous.X, shot.Position.Y - bodySpatial.Previous.Y), new(next.X - bodySpatial.Position.X, next.Y - bodySpatial.Position.Y), ObjectGeometry.Box(type.Body, default));
-                    else t = HitFraction(shot.Position, next, bodySpatial.Previous, bodySpatial.Position, type.Body.HalfWidth);
-                    if (t < fraction || t == fraction && (hit.Value == 0 || bodyIdentity.Id.Value < hit.Value)) { fraction = t; hit = bodyIdentity.Id; }
-                }
-            }
+            int fraction = 65537;
+            var hit = weapon.Projectile == ProjectileKind.Grenade ? default :
+                TraceProjectileHit(weapon, shot.Source, shot.Owner, shot.Position, next, swept: true, out fraction);
             if (hit.Value != 0 && fraction <= 65536)
             { Hit(shot, hit, weapon.SpatialTrajectory ? SpatialInterpolate(shot.Position, next, fraction) : Interpolate(shot.Position, next, fraction)); continue; }
             shot.Position = next;
@@ -98,6 +79,42 @@ public sealed partial class SimulationWorld
         }
         void Expire(ProjectileState shot) => EmitEvent(new(Tick, WorldEventKind.ProjectileExpired, shot.Source, shot.Position, shot.UnitType, Mount: shot.Mount, ProjectileId: shot.Id));
     }
+    private EntityId TraceProjectileHit(WeaponDefinition weapon, EntityId source, uint owner,
+        WorldPosition from, WorldPosition to, bool swept, out int fraction)
+    {
+        EntityId hit = default;
+        fraction = 65537;
+        (_combatIndex ?? _motion)!.Query(from, to, 0, _combatCandidates);
+        foreach (var id in _combatCandidates)
+        {
+            if (!_indices.TryGetValue(id, out int i)) continue;
+            var actor = _entityHandles[i];
+            if (!WeaponAccepts(weapon, actor) || id == source || !weapon.FriendlyFire && actor.Get<OwnershipState>().Owner == owner)
+                continue;
+            var spatial = actor.Get<SpatialState>();
+            var previous = swept ? spatial.Previous : spatial.Position;
+            var type = TypeOf(actor);
+            int t;
+            if (weapon.SpatialTrajectory)
+                t = SpatialHitFraction(from, to, previous, spatial.Position, type);
+            else if (type.Footprint is { } footprint)
+            {
+                t = 65537;
+                foreach (var bounds in footprint.TargetBounds)
+                    t = Math.Min(t, BodyGeometry.HitBoxFraction(from, to, bounds.Translate(spatial.Position)));
+            }
+            else if (type.Body.Kind == BodyKind.Box)
+                t = BodyGeometry.HitBoxFraction(new(from.X - previous.X, from.Y - previous.Y),
+                    new(to.X - spatial.Position.X, to.Y - spatial.Position.Y), ObjectGeometry.Box(type.Body, default));
+            else
+                t = HitFraction(from, to, previous, spatial.Position, type.Body.HalfWidth);
+            if (t > 65536 || t > fraction || t == fraction && hit != default && id.Value > hit.Value) continue;
+            fraction = t;
+            hit = id;
+        }
+        return hit;
+    }
+
     private static WorldPosition Interpolate(WorldPosition a, WorldPosition b, int fraction) =>
         new(a.X + (int)(((long)b.X - a.X) * fraction / 65536), a.Y + (int)(((long)b.Y - a.Y) * fraction / 65536), a.Elevation);
     private static int HitFraction(WorldPosition a0, WorldPosition a1, WorldPosition b0, WorldPosition b1, int radius)

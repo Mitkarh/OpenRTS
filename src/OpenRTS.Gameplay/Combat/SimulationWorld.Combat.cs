@@ -157,6 +157,7 @@ public sealed partial class SimulationWorld
                 if (!state.Animation.IsActive(Tick)) state.Animation = AnimationPlayback.None;
                 if (weaponsDisabled)
                 { state.Target = state.ChargingTarget = default; state.FireAtTick = 0; entityCombat.WeaponReadyTick = Math.Max(entityCombat.WeaponReadyTick, state.ReadyTick); continue; }
+                bool contactOrder = entityOrders.HasOrder && entityOrders.ActiveOrder.Kind == UnitActionKind.AttackContact;
                 bool repairOrder = !stored && entityOrders.HasOrder && entityOrders.ActiveOrder.Kind == UnitActionKind.Repair;
                 bool ordinaryMove = entityOrders.HasOrder && entityOrders.ActiveOrder.Kind == UnitActionKind.Move;
                 int ability = MountAbility(entityIdentity.Type, mountIndex);
@@ -166,7 +167,17 @@ public sealed partial class SimulationWorld
                 if (allowed && (!ordinaryMove || mount.FireWhileMoving) && (!entityMotion.Moving || mount.FireWhileMoving) &&
                     (weapon.Effect != WeaponEffect.Repair || repairOrder || manual || state.AutoCast))
                 {
-                    if (manual)
+                    if (contactOrder)
+                    {
+                        if (!stored && TryGetContact(entityOwnership.Owner, entityOrders.ActiveOrder.ContactId, out var contact) &&
+                            weapon.CanAttackContact(contact.Level) && ContactInRange(origin, contact.Position, weapon))
+                        {
+                            ground = true;
+                            point = contact.Position;
+                            entityPresentation.AimPoint = point;
+                        }
+                    }
+                    else if (manual)
                     {
                         var order = entityOrders.ActiveOrder;
                         if (AbilityInRange(i, order, weapon))
@@ -208,13 +219,29 @@ public sealed partial class SimulationWorld
                             state.Animation = new(type.AnimationIndex(mount.Animation), Tick, weapon.AnimationTicks);
                             entityPresentation.WeaponAnimation = state.Animation;
                             WorldPosition muzzle, impactPoint;
-                            if (ground) { impactPoint = point; muzzle = ObjectGeometry.ClosestPoint(sourceType, entitySpatial.Position, point); }
+                            if (ground)
+                            {
+                                impactPoint = point;
+                                muzzle = ObjectGeometry.ClosestPoint(sourceType, entitySpatial.Position, point) with { Elevation = entitySpatial.Position.Elevation };
+                            }
                             else ObjectGeometry.DistanceSquared(sourceType, entitySpatial.Position, TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, out muzzle, out impactPoint);
                             var hover = sourceType.Flight?.Mode == FlightMode.Hover ? HoverEndpoints.Source : HoverEndpoints.None;
                             if (!ground && TypeOf(_entityHandles[target]).Flight?.Mode == FlightMode.Hover) hover |= HoverEndpoints.Target;
                             EmitEvent(new(Tick, WorldEventKind.WeaponFired, entityIdentity.Id, impactPoint, entityIdentity.Type,
                                 state.Animation.Animation, state.Animation.DurationTicks, TargetEntity: state.Target, Mount: mountIndex, SourcePosition: muzzle) { Hover = hover });
-                            if (weapon.Projectile == ProjectileKind.Hitscan) Impact(weapon, entityOwnership.Owner, state.Target, impactPoint, entityIdentity.Id, entityIdentity.Type, mountIndex);
+                            if (weapon.Projectile == ProjectileKind.Hitscan)
+                            {
+                                var hit = state.Target;
+                                if (contactOrder)
+                                {
+                                    hit = TraceProjectileHit(weapon, entityIdentity.Id, entityOwnership.Owner, muzzle, impactPoint,
+                                        swept: false, out int fraction);
+                                    if (hit != default) impactPoint = weapon.SpatialTrajectory
+                                        ? SpatialInterpolate(muzzle, impactPoint, fraction)
+                                        : Interpolate(muzzle, impactPoint, fraction);
+                                }
+                                Impact(weapon, entityOwnership.Owner, hit, impactPoint, entityIdentity.Id, entityIdentity.Type, mountIndex);
+                            }
                             else Launch(origin, target, mountIndex, weapon, ground ? point : null, entityIdentity.Type, hover);
                             if (manual && state.BurstRemaining == 0) { entityOrders.HasOrder = false; entityOrders.CombatTarget = default; entityOrders.OrderPhase = OrderPhase.Idle; }
                         }

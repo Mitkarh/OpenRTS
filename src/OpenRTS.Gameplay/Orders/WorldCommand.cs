@@ -3,7 +3,7 @@ using OpenRTS.Core.Combat;
 
 namespace OpenRTS.Core.Orders;
 
-public enum CommandKind { Move, MoveAll, Scatter, Spawn, Destroy, BlockCell, UnblockCell, MoveGroup, PlayAnimation, SetVisualStates, Aim, ClearAim, ToggleVisualState, AttackMove, AttackTarget, Stop, HoldPosition, MoveSelected, RepairTarget, Remove, UseAbility, SetAutoCast, EnqueueTask, CancelTasks, PlaceProduced, SetRally, CaptureTarget, Enter, Unload, UnloadAt, PlanConstruction, BuildSite, CancelConstruction, GrantCondition, RevokeCondition, StartUpgrade, CancelUpgrade, Transform, Land, ReturnToBase }
+public enum CommandKind { Move, MoveAll, Scatter, Spawn, Destroy, BlockCell, UnblockCell, MoveGroup, PlayAnimation, SetVisualStates, Aim, ClearAim, ToggleVisualState, AttackMove, AttackTarget, Stop, HoldPosition, MoveSelected, RepairTarget, Remove, UseAbility, SetAutoCast, EnqueueTask, CancelTasks, PlaceProduced, SetRally, CaptureTarget, Enter, Unload, UnloadAt, PlanConstruction, BuildSite, CancelConstruction, GrantCondition, RevokeCondition, StartUpgrade, CancelUpgrade, Transform, Land, ReturnToBase, AttackContact }
 
 public readonly record struct WorldCommand(long Tick, uint Issuer, long Sequence, CommandKind Kind,
     EntityId Entity = default, WorldPosition Position = default, int UnitType = 0, uint Owner = 0,
@@ -22,6 +22,8 @@ public readonly record struct WorldCommand(long Tick, uint Issuer, long Sequence
     /// <summary>Use the actor's current location instead of Position when transforming.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool TransformHere { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public long ContactId { get; init; }
 
     public WorldCommand WithStamp(long tick, uint issuer, long sequence) => this with { Tick = tick, Issuer = issuer, Sequence = sequence };
 }

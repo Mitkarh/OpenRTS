@@ -1,6 +1,7 @@
 namespace OpenRTS.Core.Visibility;
 
-public enum SensorDisplay : byte { Contact, Identified, Model }
+public enum SensorDisplay : byte { Contact, Classified, Identified, Model }
+public enum ContactClass : byte { Unknown, Infantry, Vehicle, Aircraft, Building }
 
 [Flags]
 public enum LiveObservationFields : byte
@@ -110,7 +111,12 @@ public sealed class SensorDefinition
 }
 
 /// <summary>Compact facts of a current contact, with a player-local ID and an optional type.</summary>
-public readonly record struct ContactKnowledge(long Id, WorldPosition Position, int? UnitType, long ObservedTick, long IdentifiedTick);
+public readonly record struct ContactKnowledge(long Id, WorldPosition Position, int? UnitType, long ObservedTick, long IdentifiedTick,
+    ContactClass Class = ContactClass.Unknown)
+{
+    public SensorDisplay Level => UnitType.HasValue ? SensorDisplay.Identified :
+        Class != ContactClass.Unknown ? SensorDisplay.Classified : SensorDisplay.Contact;
+}
 
 /// <summary>Frame projection. Optional measurements are sampled from the live entity at publication.</summary>
 public readonly record struct ContactPose(ContactKnowledge Knowledge, int? Health, uint? States);

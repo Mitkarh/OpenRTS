@@ -21,6 +21,7 @@ internal sealed class SensorState
     internal readonly List<EntityId> Candidates = [], Targets = [];
     internal Dictionary<Key, Observation> Current = [], Pending = [];
     internal readonly Dictionary<Key, ContactKnowledge> Knowledge = [];
+    internal readonly Dictionary<(int Player, long Id), Key> ContactKeys = [];
     internal readonly List<Key> Keys = [];
     internal readonly long[] NextContact;
     internal long NextGrant = 1;
@@ -76,7 +77,7 @@ internal sealed class SensorState
 
     internal void WriteState(BinaryWriter writer)
     {
-        writer.Write(30);
+        writer.Write(31);
         writer.Write(NextGrant);
         writer.Write(Grants.Count);
         foreach (var (entity, grants) in Grants.OrderBy(p => p.Key.Value))
@@ -111,6 +112,7 @@ internal sealed class SensorState
             writer.Write(value.Position.Elevation);
             writer.Write(value.ObservedTick);
             writer.Write(value.IdentifiedTick);
+            writer.Write((byte)value.Class);
         }
     }
 }

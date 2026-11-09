@@ -165,6 +165,7 @@ public sealed partial class SimulationWorld
 
     private void ResolveContacts(SensorState sensors)
     {
+        sensors.ContactKeys.Clear();
         foreach (var key in sensors.Knowledge.Keys)
             if (!sensors.Current.ContainsKey(key)) sensors.Knowledge.Remove(key);
         sensors.Keys.Clear();
@@ -174,17 +175,39 @@ public sealed partial class SimulationWorld
         {
             var entity = _entityHandles[_indices[key.Entity]];
             var observation = sensors.Current[key];
-            bool identified = observation.Display != SensorDisplay.Contact || OrdinaryObservation(sensors.Players[key.Player], entity).HasValue;
+            bool optical = OrdinaryObservation(sensors.Players[key.Player], entity).HasValue;
+            bool identified = optical || observation.Display >= SensorDisplay.Identified;
             if (!sensors.Knowledge.TryGetValue(key, out var knowledge))
                 knowledge = new(checked(sensors.NextContact[key.Player]++), default, null, Tick, -1);
+            int type = entity.Get<EntityIdentity>().Type;
+            var classification = identified || observation.Display == SensorDisplay.Classified
+                ? ClassifyContact(_types[type]) : knowledge.Class;
+            int? knownType = identified ? type : classification == knowledge.Class ? knowledge.UnitType : null;
             sensors.Knowledge[key] = knowledge with
             {
-                Position = entity.Get<SpatialState>().Position with { Elevation = 0 },
+                Position = entity.Get<SpatialState>().Position,
                 ObservedTick = Tick,
-                UnitType = identified ? entity.Get<EntityIdentity>().Type : knowledge.UnitType,
-                IdentifiedTick = identified ? Tick : knowledge.IdentifiedTick
+                Class = classification,
+                UnitType = knownType,
+                IdentifiedTick = identified ? Tick : knownType.HasValue ? knowledge.IdentifiedTick : -1
             };
+            sensors.ContactKeys.Add((key.Player, knowledge.Id), key);
         }
+    }
+
+    private static ContactClass ClassifyContact(UnitDefinition type)
+    {
+        if (type.Flight is not null) return ContactClass.Aircraft;
+        if (type.Footprint is not null || type.Armor == ArmorKind.Building || !type.Movable) return ContactClass.Building;
+        return type.Armor == ArmorKind.Living ? ContactClass.Infantry : ContactClass.Vehicle;
+    }
+
+    private bool TryGetContact(uint viewer, long id, out ContactKnowledge knowledge)
+    {
+        if (_sensors is { } sensors && sensors.ContactKeys.TryGetValue((sensors.PlayerSlot(viewer), id), out var key))
+            return sensors.Knowledge.TryGetValue(key, out knowledge);
+        knowledge = default;
+        return false;
     }
 
     internal void CopyContactPoses(int player, ReadOnlySpan<EntityPose> poses, List<ContactPose> destination)

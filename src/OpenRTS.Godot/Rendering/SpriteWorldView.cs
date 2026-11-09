@@ -1,6 +1,7 @@
 using Godot;
 using OpenRTS.Content;
 using OpenRTS.Core;
+using OpenRTS.Core.Visibility;
 
 namespace OpenRTS.Godot.Rendering;
 
@@ -155,13 +156,15 @@ public sealed class SpriteWorldView
 
     private readonly HashSet<EntityId> _ghostIds = new();
 
-    public void Apply(ReadOnlySpan<EntityPose> poses, float alpha, long tick, int tickRate, ReadOnlySpan<WeaponPose> weapons = default, ReadOnlySpan<ConstructionProjectPose> projects = default, ConstructionProjectPose? preview = null)
+    public void Apply(ReadOnlySpan<EntityPose> poses, float alpha, long tick, int tickRate, ReadOnlySpan<WeaponPose> weapons = default, ReadOnlySpan<ConstructionProjectPose> projects = default, ConstructionProjectPose? preview = null,
+        ReadOnlySpan<ContactPose> contacts = default)
     {
         alpha = Math.Clamp(alpha, 0, 1); double time = tick == 0 ? 0 : tick + alpha; SpriteCount = 0;
         foreach (var batch in _batches) batch.Clear();
         Span<Vector2> pivots = stackalloc Vector2[8];
         Span<float> angles = stackalloc float[8];
         int count = poses.Length + _wrecks.Count + projects.Length + (preview.HasValue ? 1 : 0);
+        foreach (var contact in contacts) if (contact.Knowledge.UnitType.HasValue) count++;
         if (_ordered.Length < count) Array.Resize(ref _ordered, Math.Max(count, _ordered.Length * 2));
         int at = 0;
         foreach (var pose in poses) if (pose.Carrier.Value == 0) _ordered[at++] = pose;
@@ -172,13 +175,16 @@ public sealed class SpriteWorldView
         }
         _ghostIds.Clear();
         uint ghostId = uint.MaxValue;
-        if (projects.Length > 0 || preview.HasValue)
+        if (projects.Length > 0 || preview.HasValue || contacts.Length > 0)
         {
             _liveIds.Clear();
             for (int i = 0; i < at; i++) _liveIds.Add(_ordered[i].Id);
             foreach (var project in projects) _liveIds.Add(project.Id);
             foreach (var project in projects) AppendProject(project);
             if (preview is { } hovered) AppendProject(hovered);
+            foreach (var contact in contacts)
+                if (contact.Knowledge.UnitType is int type)
+                    AppendProject(new(default, 0, type, contact.Knowledge.Position, false));
         }
         void AppendProject(ConstructionProjectPose project)
         {

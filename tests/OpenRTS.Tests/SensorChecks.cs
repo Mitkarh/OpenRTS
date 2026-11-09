@@ -1,5 +1,6 @@
 using OpenRTS.Content;
 using OpenRTS.Core;
+using OpenRTS.Core.Combat;
 using OpenRTS.Core.Orders;
 using OpenRTS.Core.Visibility;
 
@@ -129,6 +130,77 @@ internal static class SensorChecks
             world.Step([new(3, 2, 1, CommandKind.Move, target, Position: new(5120, 1024))]);
             for (int i = 0; i < 8; i++) world.Step([]);
             Check(world.IsVisible(1, target), "leaving the forest did not restore ordinary sight");
+        });
+
+        test("Sensors: contact attack checks weapon threshold and fires without an entity lock", () =>
+        {
+            (SensorDisplay Minimum, SensorDisplay Observed, bool Fires)[] cases =
+            [
+                (SensorDisplay.Contact, SensorDisplay.Contact, true),
+                (SensorDisplay.Classified, SensorDisplay.Contact, false),
+                (SensorDisplay.Classified, SensorDisplay.Classified, true),
+                (SensorDisplay.Identified, SensorDisplay.Classified, false),
+                (SensorDisplay.Identified, SensorDisplay.Identified, true),
+                (SensorDisplay.Model, SensorDisplay.Identified, false)
+            ];
+            foreach (var (minimum, observed, fires) in cases)
+            {
+                var weapon = new WeaponDefinition(4096, 4096, 25, 40, windupTicks: 0, minimumContact: minimum);
+                using var world = SimulationWorld.CreateWithMechanics(new() { FogCellSize = 1024 },
+                    [
+                        new("gun", 100, ["idle", "move", "fire"], weapon: weapon, body: BodyShape.None, sensors: new(detectors: [new("radar", Radar, 8192, observed)])),
+                        new("target", 100, sensors: new(signatures: ["visual", Radar]))
+                    ], 16384, 8192, players: Players);
+                world.RestrictCommandsToPlayers();
+                var gun = world.AddInitialUnit(0, new(1024, 2048), 1);
+                var target = world.AddInitialUnit(1, new(4096, 2048), 2);
+                var frames = new FrameExchange();
+                frames.TryPublish(world);
+                using var frame = frames.AcquireLatest(1)!;
+                var contact = frame.Contacts[0].Knowledge;
+                Check(contact.Level == observed && contact.Class == (observed == SensorDisplay.Contact ? ContactClass.Unknown : ContactClass.Infantry) &&
+                    frame.Poses.Length == 1, "wrong contact disclosure");
+                var attack = new WorldCommand(1, 1, 1, CommandKind.AttackContact, gun) { ContactId = contact.Id };
+                world.Step([attack with { Issuer = 3, Owner = 1 }]);
+                Check(world.Events.ToArray().Any(e => e.Kind == WorldEventKind.CommandDenied), "another player could use this contact");
+                world.Step([attack with { Tick = 2 }]);
+                var events = world.Events.ToArray();
+                Check(events.Any(e => e.Kind == WorldEventKind.WeaponFired) == fires, $"unexpected fire for {minimum}/{observed}");
+                if (fires)
+                {
+                    var shot = events.Single(e => e.Kind == WorldEventKind.WeaponFired);
+                    Check(shot.TargetEntity == default && shot.Position == contact.Position &&
+                        events.Any(e => e.Kind == WorldEventKind.Damaged && e.Entity == target && e.Amount == 25),
+                        "contact fire used an entity lock or did not trace the shot");
+                }
+            }
+        });
+
+        test("Sensors: losing a radar contact stops attack and a launched missile holds the measured destination", () =>
+        {
+            var weapon = new WeaponDefinition(4096, 4096, 25, 1, windupTicks: 0, projectile: ProjectileKind.Missile,
+                projectileSpeed: 512, minimumContact: SensorDisplay.Contact);
+            using var world = SimulationWorld.CreateWithMechanics(new() { FogCellSize = 1024 },
+                [
+                    new("gun", 100, ["idle", "move", "fire"], weapon: weapon, body: BodyShape.None),
+                    new("radar", 100, body: BodyShape.None, sensors: new(detectors: [new("radar", Radar, 8192)])),
+                    new("target", 100, sensors: new(signatures: ["visual", Radar]))
+                ], 16384, 8192, speedPerTick: 1024, players: Players);
+            var gun = world.AddInitialUnit(0, new(1024, 2048), 1);
+            var radar = world.AddInitialUnit(1, new(1024, 3072), 1);
+            var target = world.AddInitialUnit(2, new(4096, 2048), 2);
+            var frames = new FrameExchange();
+            frames.TryPublish(world);
+            using var frame = frames.AcquireLatest(1)!;
+            var contact = frame.Contacts[0].Knowledge;
+            world.Step([new WorldCommand(1, 1, 1, CommandKind.AttackContact, gun) { ContactId = contact.Id }]);
+            Check(world.ProjectileCount == 1, "missile was not launched");
+            world.Step([new(2, 0, 1, CommandKind.Remove, radar), new(2, 2, 1, CommandKind.Move, target, new(4096, 6144))]);
+            var events = world.Events.ToArray().ToList();
+            for (int i = 0; i < 8; i++) { world.Step(); events.AddRange(world.Events.ToArray()); }
+            Check(events.All(e => e.Kind is not (WorldEventKind.WeaponFired or WorldEventKind.Damaged)) &&
+                events.Any(e => e.Kind == WorldEventKind.ProjectileImpact && e.Position == contact.Position && e.TargetEntity == default),
+                "lost contact kept firing or the missile chased a hidden entity");
         });
     }
 }

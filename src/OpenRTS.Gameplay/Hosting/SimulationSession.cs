@@ -28,6 +28,14 @@ public sealed class SimulationSession : SimulationSession<SimulationWorld, World
         Submit(new WorldCommand(0, 0, 0, CommandKind.Transform, entity, position ?? default, Action: action)
             { TransformHere = !position.HasValue, QuarterTurns = quarterTurns });
 
+    public long AttackContact(EntitySet recipients, uint viewer, long contactId, bool queued = false)
+    {
+        ArgumentNullException.ThrowIfNull(recipients);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(contactId);
+        return Submit(new WorldCommand(0, 0, 0, CommandKind.AttackContact, recipients.Ids[0], Owner: viewer,
+            Recipients: recipients, Queued: queued) { ContactId = contactId });
+    }
+
     protected override void ValidateInput(WorldCommand command)
     {
         if (!Enum.IsDefined(command.Kind)) throw new ArgumentOutOfRangeException("kind");

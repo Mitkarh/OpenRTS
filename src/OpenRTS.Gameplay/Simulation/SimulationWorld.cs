@@ -215,6 +215,8 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
         const string batchArgument = "commands";
         if (!Enum.IsDefined(command.Kind))
             throw new ArgumentException("Commands must have a known kind.", batchArgument);
+        if (command.Kind == CommandKind.AttackContact && (command.ContactId <= 0 || command.TargetEntity != default))
+            throw new ArgumentException("AttackContact requires a contact ID without an entity target.", batchArgument);
         if (command.Kind is CommandKind.Move or CommandKind.MoveAll or CommandKind.MoveGroup or CommandKind.Scatter or CommandKind.Spawn or CommandKind.BlockCell or CommandKind.UnblockCell or CommandKind.Aim or CommandKind.AttackMove or CommandKind.MoveSelected or CommandKind.UseAbility or CommandKind.PlaceProduced or CommandKind.SetRally or CommandKind.UnloadAt or CommandKind.PlanConstruction or CommandKind.Land)
             ValidatePosition(command.Position);
         if (command.Kind == CommandKind.Transform)
@@ -393,6 +395,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
             return;
         }
         if (command.Kind is CommandKind.GrantCondition or CommandKind.RevokeCondition) { ApplyConditionCommand(command); return; }
+        if (command.Kind == CommandKind.AttackContact) { ApplyContactAttack(command); return; }
         if (command.Kind is CommandKind.UseAbility or CommandKind.SetAutoCast) { ApplyAbility(command); return; }
         if (command.Kind is CommandKind.EnqueueTask or CommandKind.CancelTasks or CommandKind.PlaceProduced or CommandKind.SetRally)
         {

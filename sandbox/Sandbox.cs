@@ -14,12 +14,14 @@ public partial class Sandbox : Node3D
     private SimulationSession? _session;
     private bool _fogScenario;
     private bool _sensorScenario;
+    private bool _sensorVisibility;
     private bool _verifySensors;
     private int _fogHoldTicks;
     private OpenRTS.Core.Visibility.FogMode _matchFogMode = OpenRTS.Core.Visibility.FogMode.Visible;
     private FogDisplayStyle _fogStyle = FogDisplayStyle.Circles;
     private int _matchPlayers = 2;
-    private bool PlayerFog => _fogScenario || _mapMatch is not null && _matchFogMode != OpenRTS.Core.Visibility.FogMode.Visible;
+    private bool PlayerFog => _fogScenario || _mapMatch is not null &&
+        (_sensorVisibility || _matchFogMode != OpenRTS.Core.Visibility.FogMode.Visible);
     private uint _fogViewer = 1;
     private FogWorldView? _fogView;
     private UnitCatalog? _catalog;
@@ -67,7 +69,7 @@ public partial class Sandbox : Node3D
                 {
                     _sensorScenario = _fogScenario = _showcase = true;
                     _fogStyle = FogDisplayStyle.Compare;
-                    if (arg == "--verify-sensors") { _verifySensors = _verifySimulation = true; _ticks = 1; }
+                    if (arg == "--verify-sensors") { _verifySensors = _verifySimulation = true; _ticks = 6; }
                     continue;
                 }
                 if (arg == "--aviation") { mapPath = AviationScenario.Map; continue; }
@@ -125,10 +127,18 @@ public partial class Sandbox : Node3D
             if (_sensorScenario) units = FogScenario.AddSensorProfiles(units);
             if (_fogScenario) units = FogScenario.AddVision(units);
             var unitSources = new System.Collections.Generic.List<ContentSource> { new("content/units.yaml", units) };
-            if (_buildings) unitSources.Add(new("buildings.yaml", System.IO.File.ReadAllText(ProjectSettings.GlobalizePath("res://content/buildings.yaml"))));
+            if (_buildings)
+            {
+                string buildings = System.IO.File.ReadAllText(ProjectSettings.GlobalizePath("res://content/buildings.yaml"));
+                if (_sensorScenario) buildings = FogScenario.AddVision(FogScenario.AddSensorProfiles(buildings));
+                unitSources.Add(new("buildings.yaml", buildings));
+            }
+            string weapons = System.IO.File.ReadAllText(ProjectSettings.GlobalizePath("res://content/weapons.yaml"));
+            if (_sensorScenario) weapons = FogScenario.AddRadarWeapons(weapons);
             _catalog = UnitCatalog.Load(unitSources,
                 LocomotionCatalog.Load([new("content/terrain.yaml", terrain.GetAsText())]),
-                WeaponCatalog.Load([new("weapons.yaml", System.IO.File.ReadAllText(ProjectSettings.GlobalizePath("res://content/weapons.yaml")))]));
+                WeaponCatalog.Load([new("weapons.yaml", weapons)]));
+            _sensorVisibility = _catalog.Units.Any(unit => unit.Sensors is not null);
             if (showSetup)
             {
                 OpenMatchSetup(_catalog);
@@ -137,6 +147,7 @@ public partial class Sandbox : Node3D
             if (_skirmish || mapPath is not null)
             {
                 _mapMatch = mapPath == AviationScenario.Map ? AviationScenario.Load(_catalog, ReadMapSource) : MapScenario.Load(_catalog, ReadMapSource, mapPath ?? MapScenario.DefaultMap, startSetPath);
+                if (_sensorScenario) _matchFogMode = OpenRTS.Core.Visibility.FogMode.Hidden;
                 _skirmish = _mapMatch.Map.IsSkirmish || mapPath == AviationScenario.Map;
             }
             if (_showcase) _count = _mapMatch?.UnitCount ?? (_buildings ? BuildingScenario.UnitCount : ShowcaseScenario.UnitCount);
@@ -217,10 +228,11 @@ public partial class Sandbox : Node3D
         _sitePlacement = null; _selectedProject = default; _visibleProjects = []; _visibleProjectsTick = -1; _constructionViewer = 1;
         var catalog = _catalog ?? throw new InvalidOperationException("Контент не загружен.");
         _combatEffects?.Clear(); _sprites?.ClearWrecks();
+        _rtsOverlay?.RadarContacts.Clear();
         var map = _mapMatch;
         var opponent = _opponent = _opponentProfile is { } profile ? SkirmishAiScenario.Create(catalog, profile, map!.Map, 2, _opponentStarts) : null;
-        _session = new SimulationSession(() => _fogScenario ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, workers: _workers, restrictPlayerCommands: opponent is not null) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
-            _verifyFog ? FogScenario.Commands : _verifyAviation ? AviationScenario.Commands.Where(c => c.Tick <= _ticks).ToArray() : map is not null ? [] : _productionScenario ? ProductionScenario.Commands(catalog) : _buildings ? BuildingScenario.Commands(catalog) : _showcase ? (_verifyPresentation ? ShowcaseScenario.VerificationCommands(catalog) : []) : _navigation ? (_verifySimulation ? NavigationScenario.Commands(_count, _ticks) : [])
+        _session = new SimulationSession(() => _fogScenario && (!_sensorScenario || map is null) ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, workers: _workers, restrictPlayerCommands: opponent is not null) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
+            _verifySensors ? FogScenario.RadarCommands : _verifyFog ? FogScenario.Commands : _verifyAviation ? AviationScenario.Commands.Where(c => c.Tick <= _ticks).ToArray() : map is not null ? [] : _productionScenario ? ProductionScenario.Commands(catalog) : _buildings ? BuildingScenario.Commands(catalog) : _showcase ? (_verifyPresentation ? ShowcaseScenario.VerificationCommands(catalog) : []) : _navigation ? (_verifySimulation ? NavigationScenario.Commands(_count, _ticks) : [])
                 : DiagnosticScenario.Commands(_count, _verifySimulation ? _ticks : long.MaxValue),
             _verifySimulation ? _ticks : null, realtime: !_verifySimulation || _pacedVerification,
             maximumEventBacklog: Math.Max(65536, _count + 1024),
@@ -278,7 +290,7 @@ public partial class Sandbox : Node3D
                             _selected = _displayPoses[i].Id;
                             break;
                         }
-                RefreshSelection(); UpdateConstructionView(frame); UpdateCommandPanel(frame); UpdateSelection(alpha); UpdateRtsCursor(); if (_buildings) UpdateFootprintPreview();
+                RefreshSelection(); UpdateRadarContacts(frame); UpdateConstructionView(frame); UpdateCommandPanel(frame); UpdateSelection(alpha); UpdateRtsCursor(); if (_buildings) UpdateFootprintPreview();
             }
             _obstacles?.Apply(frame.Grid);
             while (_session.TryReadEvent(out var value))
@@ -307,7 +319,7 @@ public partial class Sandbox : Node3D
                     _ => _notice
                 };
             }
-            _sprites?.Apply(frame.Poses, alpha, frame.Tick, frame.TickRate, frame.Weapons, _visibleProjects, BuildingPreview() ?? UpgradePreview());
+            _sprites?.Apply(frame.Poses, alpha, frame.Tick, frame.TickRate, frame.Weapons, _visibleProjects, BuildingPreview() ?? UpgradePreview(), frame.Contacts);
             _combatEffects?.Apply(frame.Projectiles, alpha, frame.Tick, _sprites?.FlightSurface ?? 0, PlayerFog ? frame : null);
             UpdateTerminal(frame, alpha);
             if (_verifySensors) { VerifySensors(frame); return; }

@@ -4,6 +4,7 @@ using System.Linq;
 using Godot;
 using OpenRTS.Core;
 using OpenRTS.Core.Orders;
+using OpenRTS.Core.Visibility;
 using OpenRTS.Godot.Controls;
 
 public partial class Sandbox
@@ -22,6 +23,7 @@ public partial class Sandbox
     private bool _canMove, _canAttack, _canAttackMove, _canRepair, _canControl;
     private readonly HashSet<(Locomotor Profile, int Component)> _cursorProfiles = [];
     private readonly List<Control> _rtsPanels = [];
+    private readonly Dictionary<EntityId, SensorDisplay> _radarWeapons = [];
 
     private void CreateSelectionRing()
     {
@@ -30,6 +32,8 @@ public partial class Sandbox
         AddChild(_selectionRing);
         var layer = new CanvasLayer { Layer = 20 }; AddChild(layer);
         _rtsOverlay = new(); layer.AddChild(_rtsOverlay);
+        if (_sensorVisibility)
+            _rtsOverlay.RadarAtlas = GD.Load<Texture2D>("res://resources/ui/radar-contacts.png");
         _rtsOverlay.RegisterCursor("ability", new Color(1, 0.7f, 0.2f));
         _rtsOverlay.RegisterCursor("grenade", new Color(1, 0.55f, 0.12f), 18);
         _rtsOverlay.RegisterCursor("harvest", new Color(0.5f, 0.85f, 1), 18);
@@ -37,6 +41,67 @@ public partial class Sandbox
         _rtsOverlay.RegisterCursor("capture", new Color(0.95f, 0.85f, 0.2f), 20);
         _rtsOverlay.RegisterCursor("repair", new Color(0.2f, 1, 0.65f));
         if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Hidden;
+    }
+
+    private void UpdateRadarContacts(FrameExchange.FrameLease frame)
+    {
+        var overlay = _rtsOverlay!;
+        overlay.RadarContacts.Clear();
+        _radarWeapons.Clear();
+        if (frame.Contacts.IsEmpty) return;
+        var field = Playfield();
+        foreach (var pose in frame.Contacts)
+        {
+            var contact = pose.Knowledge;
+            var p = contact.Position;
+            var point = _camera!.UnprojectPosition(new Vector3(p.X, p.Elevation, p.Y) / WorldPosition.UnitsPerCell);
+            if (field.HasPoint(point)) overlay.RadarContacts.Add((contact, point));
+        }
+        foreach (var id in _selection.Ids)
+        {
+            if (!_selectionPoses.TryGetValue(id, out var pose) || !Controls(pose.Presentation.Owner) ||
+                pose.Construction.Active || pose.Upgrade.Active) continue;
+            var type = _catalog!.Units[pose.UnitType];
+            var threshold = SensorDisplay.Model;
+            for (int m = 0; m < type.Weapons.Count; m++)
+            {
+                var mount = type.Weapons[m];
+                if (mount.Weapon.MinimumContact >= threshold || !type.MountEnabled(m, pose.Upgrade.Completed)) continue;
+                bool autoCast = m < pose.WeaponCount && frame.Weapons[pose.WeaponOffset + m].AutoCast;
+                if (!autoCast && type.Abilities.Any(a => a.Kind == AbilityKind.Weapon && a.Mount == mount.Id)) continue;
+                threshold = mount.Weapon.MinimumContact;
+            }
+            if (threshold < SensorDisplay.Model) _radarWeapons.Add(id, threshold);
+        }
+    }
+
+    private ContactKnowledge? PickRadarContact(Vector2 pixel)
+    {
+        if (_rtsOverlay is null) return null;
+        ContactKnowledge? picked = null;
+        float best = 22 * 22;
+        foreach (var (contact, position) in _rtsOverlay.RadarContacts)
+        {
+            float distance = pixel.DistanceSquaredTo(position);
+            if (distance >= best) continue;
+            best = distance;
+            picked = contact;
+        }
+        return picked;
+    }
+
+    private bool IssueRadarAttack(ContactKnowledge contact, bool queued)
+    {
+        var ids = _radarWeapons.Where(pair => pair.Value <= contact.Level && _selection.Contains(pair.Key))
+            .Select(pair => pair.Key).ToArray();
+        if (ids.Length == 0)
+        {
+            _notice = "Оружию выбранных юнитов нужно точнее опознать цель.";
+            return false;
+        }
+        _session!.AttackContact(new EntitySet(ids), CommandOwner, contact.Id, queued);
+        _notice = "";
+        return true;
     }
     private void RefreshSelection()
     {
@@ -209,6 +274,13 @@ public partial class Sandbox
         if (HandleCustomTarget(click, point, picked)) return;
         if (click.ButtonIndex == MouseButton.Left && _armedAction is { } armed)
         {
+            if (armed is UnitActionKind.Attack or UnitActionKind.AttackMove && picked is null &&
+                PickRadarContact(click.Position) is { } contact)
+            {
+                if (IssueRadarAttack(contact, click.ShiftPressed || _queueArmed) && !click.ShiftPressed) _armedAction = null;
+                UpdateRtsCursor();
+                return;
+            }
             var kind = armed == UnitActionKind.AttackMove && picked is { } armedEnemy && Enemy(armedEnemy) ? UnitActionKind.Attack : armed;
             if (IssueAction(kind, point, kind is UnitActionKind.Attack or UnitActionKind.Repair or UnitActionKind.Enter ? picked?.Id ?? default : default, click.ShiftPressed || _queueArmed) && !click.ShiftPressed)
                 _armedAction = null;
@@ -229,6 +301,8 @@ public partial class Sandbox
         if (!CanIssue(UnitActionKind.Stop)) { _notice = "Выберите свои юниты."; return; }
         if (click.AltPressed && Selected() is { } unit)
         { _session!.Submit(CommandKind.Aim, point, unit.Id, targetEntity: picked?.Id ?? default); return; }
+        if (!click.CtrlPressed && picked is null && PickRadarContact(click.Position) is { } radar)
+        { IssueRadarAttack(radar, click.ShiftPressed); return; }
         if (picked is { } airbase && Ally(airbase) && _catalog!.Units[airbase.UnitType].Airbase is not null && CanIssue(UnitActionKind.ReturnToBase))
         { IssueAction(UnitActionKind.ReturnToBase, point, airbase.Id, click.ShiftPressed); return; }
         if (!click.CtrlPressed && picked is { } supply && (TryContextUpgrade(supply) || ContextSupply(supply))) return;
@@ -334,6 +408,11 @@ public partial class Sandbox
             else if (_armedAction == UnitActionKind.UnloadAt) cursor = RtsCursor.Unload;
             else if (_armedAction == UnitActionKind.Enter)
                 cursor = hovered is { } entry && CanBoardSelected(entry) ? RtsCursor.Enter : RtsCursor.Unavailable;
+            else if (_armedCustom is null && (_armedAction is null or UnitActionKind.Attack or UnitActionKind.AttackMove) &&
+                hovered is null && !Input.IsPhysicalKeyPressed(Key.Ctrl) && !Input.IsPhysicalKeyPressed(Key.Alt) &&
+                PickRadarContact(_pointer) is { } contact)
+                cursor = !CanIssue(UnitActionKind.Stop) ? RtsCursor.Inspect :
+                    _radarWeapons.Any(pair => pair.Value <= contact.Level && _selection.Contains(pair.Key)) ? RtsCursor.Attack : RtsCursor.Unavailable;
             else if (_armedAction is null && _armedCustom is null && !Input.IsPhysicalKeyPressed(Key.Ctrl) && !Input.IsPhysicalKeyPressed(Key.Alt) && hovered is { } host && CanUnload(host))
                 cursor = RtsCursor.Unload;
             else if (_armedAction is null && _armedCustom is null && !Input.IsPhysicalKeyPressed(Key.Ctrl) && !Input.IsPhysicalKeyPressed(Key.Alt) && hovered is { } transport && CanBoardSelected(transport))

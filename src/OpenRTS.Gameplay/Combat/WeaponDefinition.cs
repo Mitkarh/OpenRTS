@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using OpenRTS.Core.Visibility;
 
 namespace OpenRTS.Core.Combat;
 
@@ -13,6 +14,7 @@ public sealed record WeaponDefinition
     public TargetCategories Targets { get; }
     public TargetCategories? ExcludedTargets { get; }
     public bool SpatialTrajectory { get; }
+    public SensorDisplay MinimumContact { get; }
     public int Range { get; }
     public int AcquireRange { get; }
     public int Damage { get; }
@@ -36,18 +38,20 @@ public sealed record WeaponDefinition
         string id = "weapon", ProjectileKind projectile = ProjectileKind.Hitscan, WeaponEffect effect = WeaponEffect.Damage,
         int projectileSpeed = 256, int travelLimit = 16384, int splashRadius = 0,
         int burst = 1, int burstIntervalTicks = 2, int animationTicks = 4,
-        int livingModifier = 100, int mechanicalModifier = 100, int buildingModifier = 100, bool friendlyFire = false, int passengerDamage = 0, bool passengerDamageSpill = false, TargetCategories? targets = null, bool spatialTrajectory = false, TargetCategories? excludedTargets = null)
+        int livingModifier = 100, int mechanicalModifier = 100, int buildingModifier = 100, bool friendlyFire = false, int passengerDamage = 0, bool passengerDamageSpill = false, TargetCategories? targets = null, bool spatialTrajectory = false, TargetCategories? excludedTargets = null,
+        SensorDisplay minimumContact = SensorDisplay.Model)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         Targets = targets ?? TargetCategories.Ground; ExcludedTargets = excludedTargets; SpatialTrajectory = spatialTrajectory;
+        MinimumContact = minimumContact;
         if (range is < 512 or > 8192 || acquireRange < range || acquireRange > 12288 || damage is < 0 or > 1000000 || damage == 0 && passengerDamage == 0 ||
             cooldownTicks is < 1 or > 1000000 || windupTicks is < 0 or > 1000 || burst is < 1 or > 64 ||
             burstIntervalTicks is < 1 or > 10000 || animationTicks is < 1 or > 1000 ||
             projectileSpeed is < 1 or > 4096 || travelLimit < range || travelLimit > 65536 || splashRadius is < 0 or > 8192 ||
             passengerDamage is < 0 or > 1000000 || passengerDamageSpill && passengerDamage == 0 ||
-            !Enum.IsDefined(projectile) || !Enum.IsDefined(effect) ||
+            !Enum.IsDefined(projectile) || !Enum.IsDefined(effect) || !Enum.IsDefined(minimumContact) ||
             livingModifier is < 0 or > 1000 || mechanicalModifier is < 0 or > 1000 || buildingModifier is < 0 or > 1000 ||
-            effect == WeaponEffect.Repair && (projectile != ProjectileKind.Hitscan || splashRadius != 0 || friendlyFire || passengerDamage != 0))
+            effect == WeaponEffect.Repair && (projectile != ProjectileKind.Hitscan || splashRadius != 0 || friendlyFire || passengerDamage != 0 || minimumContact != SensorDisplay.Model))
             throw new ArgumentException("Invalid weapon range, timing, projectile or effect parameters.");
         Id = id; Range = range; AcquireRange = acquireRange; Damage = damage; CooldownTicks = cooldownTicks; WindupTicks = windupTicks;
         Projectile = projectile; Effect = effect; ProjectileSpeed = projectileSpeed; TravelLimit = travelLimit; SplashRadius = splashRadius;
@@ -56,8 +60,10 @@ public sealed record WeaponDefinition
     }
     public int Modifier(ArmorKind armor) => armor switch { ArmorKind.Living => LivingModifier, ArmorKind.Mechanical => MechanicalModifier, _ => BuildingModifier };
     public bool CanTarget(TargetCategories categories) => Targets.Intersects(categories) && ExcludedTargets?.Intersects(categories) != true;
+    public bool CanAttackContact(SensorDisplay level) => Effect == WeaponEffect.Damage && level >= MinimumContact;
     public void WriteState(BinaryWriter writer)
     {
+        if (MinimumContact != SensorDisplay.Model) { writer.Write(-31); writer.Write((byte)MinimumContact); }
         Targets.Write(writer); writer.Write(ExcludedTargets is not null); ExcludedTargets?.Write(writer); writer.Write(SpatialTrajectory);
         writer.Write(Id); writer.Write(Range); writer.Write(AcquireRange); writer.Write(Damage); writer.Write(CooldownTicks); writer.Write(WindupTicks);
         writer.Write((int)Projectile); writer.Write((int)Effect); writer.Write(ProjectileSpeed); writer.Write(TravelLimit); writer.Write(SplashRadius);

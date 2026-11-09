@@ -3,6 +3,17 @@
   "date": "2026-11-04",
   "entries": [
     {
+      "id": "radar-contacts",
+      "destination": "sandbox/resources/ui/radar-contacts.png",
+      "date": "2026-11-09",
+      "prompt": "Create a single transparent sprite atlas for a desktop RTS battlefield radar HUD, wide horizontal layout, exactly five equally spaced independent small icons in one row centered at 10%, 30%, 50%, 70%, 90% of canvas width, all centered vertically. In order left to right: anonymous radar contact (solid central diamond and four disconnected scanner corner brackets); infantry class (upright helmeted soldier silhouette); ground vehicle class (top-down tank with wide treads and barrel); aircraft class (top-down swept wing fighter); building class (compact bunker with squared roof and doorway). Each class icon has same thin broken scanner corner brackets. High contrast pale warm amber fills, deep charcoal outlining, very clean bold shape language, crisp pixel-friendly edges, readable at 28x28 pixels, generous transparent gutters, no text, no captions, no digits, no shadows stretching outside cells, no separate panel or opaque backing. Genuine transparent alpha.",
+      "transparent_background": true,
+      "sha256": "90d0c20379dc76fbbc4138895dd10b63a4166d47a00ad110bc852575f61a735f",
+      "origin_file": "exec-5f58cb0f-05f1-47f2-b4dd-2f6bac6c59b0.png",
+      "width": 2172,
+      "height": 724
+    },
+    {
       "id": "rifleman",
       "destination": "sandbox/assets/units/rifleman.png",
       "prompt": "Use case: stylized-concept. Asset type: production sprite for a top-down RTS game. Orthographic camera exactly 90 degrees overhead, no perspective, no isometric angle. Crisp hand-painted game art with restrained realistic military detail, readable at 64-128 pixels, dark outlines, muted charcoal/olive armor, soft ambient highlights, no ground shadow outside the subject. One isolated asset only, facing straight toward the TOP of the image. Center its body/rotation pivot exactly at the canvas center. Square 1024x1024 composition with generous transparent margins. Actual transparent RGBA background, no checkerboard, no backdrop, no text, no labels, no watermark, no insignia. Team color convention: flat saturated MAGENTA paint panels (RGB about 255,0,255) in small clearly defined opaque areas; ONLY the team-color panels may use magenta, with neutral gray/olive materials everywhere else. Preserve that separation for shader recoloring. No colored rim lighting. Subject: one infantry soldier holding an assault rifle with both hands, rifle pointed toward the top; overhead helmet, shoulders and backpack visible, compact stable standing pose. Small magenta team paint on helmet crown and shoulder armor, olive fatigues, steel rifle. No muzzle flash, no second pose, no ground tile.",

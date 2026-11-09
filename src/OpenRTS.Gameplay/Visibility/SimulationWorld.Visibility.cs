@@ -109,6 +109,8 @@ public sealed partial class SimulationWorld
         {
             var e = _entityHandles[i]; uint owner = e.Get<OwnershipState>().Owner;
             ref var orders = ref e.Get<OrderState>(); ref var visual = ref e.Get<PresentationState>();
+            if (orders.HasOrder && orders.ActiveOrder.Kind == UnitActionKind.AttackContact &&
+                !TryGetContact(owner, orders.ActiveOrder.ContactId, out _)) EndContactOrder(i);
             if (orders.HasOrder && orders.ActiveOrder.Target.Value != 0 && !IsVisible(owner, orders.ActiveOrder.Target))
             { orders.HasOrder = false; orders.CombatTarget = default; orders.OrderPhase = OrderPhase.Idle; Halt(i); CancelWindups(i); }
             if (orders.CombatTarget.Value != 0 && !IsVisible(owner, orders.CombatTarget)) { orders.CombatTarget = default; CancelWindups(i); }

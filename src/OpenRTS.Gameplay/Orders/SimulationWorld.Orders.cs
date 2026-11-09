@@ -67,6 +67,9 @@ public sealed partial class SimulationWorld
             return true;
         }
         bool repair = order.Kind == UnitActionKind.Repair;
+        if (order.Kind == UnitActionKind.AttackContact &&
+            (!TryGetContact(entity.Get<OwnershipState>().Owner, order.ContactId, out var contact) ||
+                !HasContactWeapon(index, contact))) return false;
         var weapon = OrderWeapon(index, repair, order.Target);
         if (order.Kind is UnitActionKind.Move or UnitActionKind.AttackMove && !_types[entityIdentity.Type].Movable ||
             order.Kind is UnitActionKind.Attack or UnitActionKind.AttackMove or UnitActionKind.Repair && weapon is null ||
@@ -145,6 +148,7 @@ public sealed partial class SimulationWorld
             if (entityOrders.HasOrder && entityOrders.ActiveOrder.Kind == UnitActionKind.Build) { _construction!.UpdateOrder(entity, entityOrders.ActiveOrder); continue; }
             if (entityOrders.HasOrder && entityOrders.ActiveOrder.Kind == UnitActionKind.Capture) { _capture!.Advance(entity, Tick); continue; }
             if (entityOrders.HasOrder && entityOrders.ActiveOrder.Kind == UnitActionKind.Ability) { UpdateAbilityOrder(i); continue; }
+            if (entityOrders.HasOrder && entityOrders.ActiveOrder.Kind == UnitActionKind.AttackContact) { UpdateContactOrder(i); continue; }
             bool repair = entityOrders.HasOrder && entityOrders.ActiveOrder.Kind == UnitActionKind.Repair;
             var weapon = OrderWeapon(i, repair, entityOrders.HasOrder ? entityOrders.ActiveOrder.Target : entityOrders.CombatTarget);
             if (entityMotion.Moving && entityOrders.HasOrder && entityOrders.ActiveOrder.Kind is UnitActionKind.Stop or UnitActionKind.HoldPosition) continue;
@@ -195,6 +199,6 @@ public sealed partial class SimulationWorld
             writer.Write(entityOrders.AutoBuild);
         writer.Write(entityOrders.PendingOrders?.Count ?? 0);
         if (entityOrders.PendingOrders is not null) foreach (var order in entityOrders.PendingOrders) Write(order);
-        void Write(UnitOrder order) { writer.Write((int)order.Kind); writer.Write(order.Position.X); writer.Write(order.Position.Y); writer.Write(order.Position.Elevation); writer.Write(order.Target.Value); writer.Write(order.Group); writer.Write(order.Cohort); writer.Write(order.Ability); }
+        void Write(UnitOrder order) { writer.Write((int)order.Kind); writer.Write(order.Position.X); writer.Write(order.Position.Y); writer.Write(order.Position.Elevation); writer.Write(order.Target.Value); writer.Write(order.Group); writer.Write(order.Cohort); writer.Write(order.Ability); if (order.Kind == UnitActionKind.AttackContact) writer.Write(order.ContactId); }
     }
 }

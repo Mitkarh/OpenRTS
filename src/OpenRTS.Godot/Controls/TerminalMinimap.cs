@@ -46,7 +46,7 @@ public partial class TerminalMinimap : Control
             {
                 var knowledge = contact.Knowledge;
                 _contacts.Add((new Vector2(knowledge.Position.X, knowledge.Position.Y) / WorldPosition.UnitsPerCell,
-                    knowledge.UnitType.HasValue));
+                    knowledge.Level >= SensorDisplay.Classified));
             }
             changed = true;
         }

@@ -8,22 +8,49 @@ public partial class Sandbox
 {
     private bool _verifyFog, _fogCaptureStarted;
 
-    private void VerifySensors(FrameExchange.FrameLease frame)
+    private async void VerifySensors(FrameExchange.FrameLease frame)
     {
-        if (!_session!.Completion.IsCompleted || frame.Tick != _ticks) return;
-        if (frame.Viewer != 1 || frame.Poses.Length != 3 || frame.Contacts.Length != 2)
-            throw new InvalidOperationException($"Expected three models and two radar contacts for player 1. Got {frame.Poses.Length} models and {frame.Contacts.Length} contacts for player {frame.Viewer}.");
-        foreach (var contact in frame.Contacts)
-            if (contact.Knowledge.UnitType.HasValue || contact.Health.HasValue || contact.States.HasValue)
-                throw new InvalidOperationException("The initial radar contacts should be anonymous.");
-        GD.Print("OPENRTS_SENSORS:PASS filtered models and anonymous radar contacts");
+        if (_verificationDone || !_session!.Completion.IsCompleted || frame.Tick != _ticks) return;
         _verificationDone = true;
-        GetTree().Quit();
+        try
+        {
+            CheckRadarFrame(frame);
+            if (_capturePath is not null && DisplayServer.GetName() != "headless")
+            {
+                _camera!.Size = 30;
+                CenterCamera(new(17, 17));
+                UpdateTerminal(frame, _displayAlpha);
+                UpdateRadarContacts(frame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var picture = GetViewport().GetTexture().GetImage();
+                if (picture.SavePng(Path.GetFullPath(_capturePath)) != Error.Ok) throw new IOException("Radar capture failed.");
+            }
+            GD.Print("OPENRTS_SENSORS:PASS three radar levels and a shot at a contact");
+            GetTree().Quit();
+        }
+        catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
+    }
+
+    private void CheckRadarFrame(FrameExchange.FrameLease frame)
+    {
+        if (frame.Viewer != 1 || frame.Poses.Length != 3 || frame.Contacts.Length != 3 || _rtsOverlay?.RadarAtlas is null)
+            throw new InvalidOperationException($"Expected a loaded atlas, three models and three radar contacts for player 1. Got {frame.Poses.Length} models and {frame.Contacts.Length} contacts for player {frame.Viewer}.");
+        int levels = 0;
+        foreach (var contact in frame.Contacts)
+        {
+            if (contact.Health.HasValue || contact.States.HasValue) throw new InvalidOperationException("Radar contacts disclosed live fields.");
+            levels |= 1 << (int)contact.Knowledge.Level;
+        }
+        if (levels != 7) throw new InvalidOperationException("Expected anonymous, classified and identified radar contacts.");
+        using var truth = _session!.Frames.AcquireLatest()!;
+        if (truth.Projectiles.Length != 1) throw new InvalidOperationException("The cannon should fire at the radar contact.");
     }
 
     private void SwitchFogViewer()
     {
         _fogViewer = _fogViewer >= (_fogScenario ? 2 : _matchPlayers) ? 1u : _fogViewer + 1; _constructionViewer = _fogViewer;
+        _rtsOverlay?.RadarContacts.Clear();
         _selection.Reset(); _focusStartingBase = true; _combatEffects?.Clear(); _sprites?.ClearWrecks();
     }
     private async void VerifyFog(FrameExchange.FrameLease frame)
