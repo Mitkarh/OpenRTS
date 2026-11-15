@@ -9,7 +9,7 @@ using OpenRTS.Core;
 try
 {
     var path = "sandbox/content/units.yaml";
-    string? mapPath = null, startSetPath = null, aiConfig = null, aiProfile = null;
+    string? mapPath = null, startSetPath = null, aiConfig = null, aiProfile = null, modPath = null;
     bool fogRetentionBenchmark = false, fogGroupsBenchmark = false, fogBenchmark = false, fog = false, skirmishAi = false, ticksSpecified = false, aviation = false;
     uint? aiPlayer = null;
     bool simulate = false, benchmark = false, hasPath = false, navigation = false, reverseJobs = false, showcase = false, buildings = false, sizeBenchmark = false, production = false, ecsBenchmark = false, skirmish = false;
@@ -23,6 +23,7 @@ try
         else if (argument == "--aviation") { aviation = simulate = true; mapPath = AviationScenario.Map; }
         else if (argument == "--skirmish") { skirmish = simulate = true; }
         else if (argument == "--skirmish-ai") { skirmishAi = simulate = true; }
+        else if (argument.StartsWith("--mod=", StringComparison.Ordinal) && argument.Length > 6) modPath = argument[6..];
         else if (argument.StartsWith("--ai-player=", StringComparison.Ordinal) && uint.TryParse(argument[12..], out uint player) && player is >= 1 and <= MapScenario.MaximumPlayers) aiPlayer = player;
         else if (argument.StartsWith("--ai-config=", StringComparison.Ordinal) && argument.Length > 12) aiConfig = argument[12..];
         else if (argument.StartsWith("--ai-profile=", StringComparison.Ordinal) && argument.Length > 13) aiProfile = argument[13..];
@@ -41,7 +42,7 @@ try
         else if (argument.StartsWith("--ticks=", StringComparison.Ordinal) && int.TryParse(argument[8..], out value) && value is >= 1 and <= 1000000) { ticks = value; ticksSpecified = true; }
         else if (argument.StartsWith("--workers=", StringComparison.Ordinal) && int.TryParse(argument[10..], out value) && value is >= 1 and <= 64) workers = value;
         else if (!argument.StartsWith("--", StringComparison.Ordinal) && !hasPath) { path = argument; hasPath = true; }
-        else throw new ArgumentException("Usage: OpenRTS.Headless [units.yaml] [--simulate|--benchmark|--fog-retention-benchmark|--ecs-benchmark|--size-benchmark|--showcase|--buildings|--production] [--navigation] [--skirmish|--skirmish-ai|--map=path] [--ai-player=1..4] [--ai-config=path] [--ai-profile=id] [--start-set=path] [--workers=1..64] [--reverse-jobs] [--count=1..1000000] [--ticks=1..1000000]");
+        else throw new ArgumentException("Usage: OpenRTS.Headless [units.yaml] [--mod=game.yaml] [--simulate|--benchmark|--fog-retention-benchmark|--ecs-benchmark|--size-benchmark|--showcase|--buildings|--production] [--navigation] [--skirmish|--skirmish-ai|--map=path] [--ai-player=1..4] [--ai-config=path] [--ai-profile=id] [--start-set=path] [--workers=1..64] [--reverse-jobs] [--count=1..1000000] [--ticks=1..1000000]");
     }
     if (skirmishAi && skirmish)
         throw new ArgumentException("Select either the scripted skirmish or the AI skirmish.");
@@ -59,22 +60,34 @@ try
     if (sizeBenchmark) { SizeBenchmark.Run(count, ticks, workers, reverseJobs); return 0; }
     if (buildings && (showcase || navigation || benchmark)) throw new ArgumentException("Buildings is a separate fixture.");
     if (showcase && (navigation || benchmark)) throw new ArgumentException("Showcase is a presentation fixture; use navigation/benchmark separately.");
-    var terrainPath = Path.Combine(Path.GetDirectoryName(path)!, "terrain.yaml");
-    var locomotion = File.Exists(terrainPath) ? LocomotionCatalog.Load([new(terrainPath, File.ReadAllText(terrainPath))]) : null;
-    var weaponPath = Path.Combine(Path.GetDirectoryName(path)!, "weapons.yaml");
-    var sources = new List<ContentSource> { new(path, fog ? FogScenario.AddVision(File.ReadAllText(path)) : File.ReadAllText(path)) };
-    if (buildings || mapRequested) { var buildingPath = Path.Combine(Path.GetDirectoryName(path)!, "buildings.yaml"); sources.Add(new(buildingPath, File.ReadAllText(buildingPath))); }
-    var catalog = UnitCatalog.Load(sources, locomotion, File.Exists(weaponPath) ? WeaponCatalog.Load([new(weaponPath, File.ReadAllText(weaponPath))]) : null);
+    if (hasPath && modPath is not null) throw new ArgumentException("Choose a legacy units file or --mod, not both.");
+    var manifest = hasPath ? null : GameManifest.Load(modPath ?? (buildings || mapRequested ? "sandbox/game.yaml" : "sandbox/diagnostic-game.yaml"));
+    var settings = manifest?.Settings ?? GameSettings.Load([]);
+    UnitCatalog catalog;
+    if (manifest is not null)
+        catalog = manifest.LoadUnits(fog ? manifest.Rules.Select(source => source with { Text = FogScenario.AddVision(source.Text) }) : null);
+    else
+    {
+        // Preserve the positional units.yaml entry point for existing consumers.
+        var terrainPath = Path.Combine(Path.GetDirectoryName(path)!, "terrain.yaml");
+        var weaponPath = Path.Combine(Path.GetDirectoryName(path)!, "weapons.yaml");
+        var sources = new List<ContentSource> { new(path, fog ? FogScenario.AddVision(File.ReadAllText(path)) : File.ReadAllText(path)) };
+        if (buildings || mapRequested) { var buildingPath = Path.Combine(Path.GetDirectoryName(path)!, "buildings.yaml"); sources.Add(new(buildingPath, File.ReadAllText(buildingPath))); }
+        catalog = UnitCatalog.Load(sources,
+            File.Exists(terrainPath) ? LocomotionCatalog.Load([new(terrainPath, File.ReadAllText(terrainPath))]) : null,
+            File.Exists(weaponPath) ? WeaponCatalog.Load([new(weaponPath, File.ReadAllText(weaponPath))]) : null);
+    }
     Console.WriteLine("OPENRTS_CONTENT:" + JsonSerializer.Serialize(catalog.Summary));
     if (simulate)
     {
         ContentSource ReadMapSource(string file)
         {
+            if (manifest is not null && !Path.IsPathRooted(file)) return manifest.Files.Read(file);
             string fullPath = Path.Combine("sandbox", file);
             return new(file, File.ReadAllText(fullPath));
         }
-        var map = aviation ? AviationScenario.Load(catalog, ReadMapSource) : mapRequested ? MapScenario.Load(catalog, ReadMapSource, mapPath ?? MapScenario.DefaultMap, startSetPath) : null;
-        SimulationWorld Create() => fog ? FogScenario.Create(catalog) : map is not null ? map.CreateWorld(workers) : buildings ? BuildingScenario.Create(catalog, workers) : showcase ? ShowcaseScenario.Create(catalog) : navigation ? NavigationScenario.Create(catalog, count, workers, reverseJobs) : DiagnosticScenario.Create(catalog, count);
+        var map = aviation ? AviationScenario.Load(catalog, ReadMapSource) : mapRequested ? MapScenario.Load(catalog, ReadMapSource, mapPath ?? settings.Match.DefaultMap, startSetPath, settings.Match.DefaultStartSet) : null;
+        SimulationWorld Create() => fog ? FogScenario.Create(catalog) : map is not null ? map.CreateWorld(new(), speedPerTick: settings.Simulation.SpeedPerTick, workers: workers, tickRate: settings.Simulation.TickRate) : buildings ? BuildingScenario.Create(catalog, workers) : showcase ? ShowcaseScenario.Create(catalog) : navigation ? NavigationScenario.Create(catalog, count, workers, reverseJobs) : DiagnosticScenario.Create(catalog, count);
         using var world = Create();
         var commands = fog ? [] : skirmish && startSetPath is null ? SkirmishScenario.Commands() : aviation ? AviationScenario.Commands : map is not null ? [] : production ? ProductionScenario.Commands(catalog) : buildings ? BuildingScenario.Commands(catalog) : showcase ? ShowcaseScenario.VerificationCommands(catalog) : navigation ? NavigationScenario.Commands(count, ticks) : benchmark
             ? new WorldCommand[] { new(1, 0, 1, CommandKind.MoveAll, Position: new(world.Width, world.Depth)) }
@@ -83,8 +96,9 @@ try
         if (skirmishAi)
         {
             uint player = aiPlayer ?? 2;
-            string config = aiConfig ?? Path.Combine(Path.GetDirectoryName(path)!, "skirmish-ai.yaml");
-            var profile = SkirmishAiCatalog.Load(new(config, File.ReadAllText(config)), catalog, aiProfile ?? SkirmishAiScenario.ProfileId);
+            string config = aiConfig ?? (manifest is null ? Path.Combine(Path.GetDirectoryName(path)!, "skirmish-ai.yaml") : settings.Match.AiConfig);
+            var aiSource = aiConfig is null && manifest is not null ? manifest.Files.Read(config) : new(config, File.ReadAllText(config));
+            var profile = SkirmishAiCatalog.Load(aiSource, catalog, aiProfile ?? settings.Match.AiProfile);
             var ai = SkirmishAiScenario.Create(catalog, profile, map!.Map, player);
             int issued = 0, attacks = 0, completedBuildings = 0, trained = 0, captured = 0, trucks = 0, upgradedMines = 0;
             EntityPose[] poses = [];

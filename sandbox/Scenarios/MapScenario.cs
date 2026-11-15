@@ -28,12 +28,13 @@ public static class MapScenario
         return map.Prepare(players, startingSet);
     }
 
-    public static MapMatch Load(UnitCatalog catalog, Func<string, ContentSource> read, string mapPath, string? startSetPath = null)
+    public static MapMatch Load(UnitCatalog catalog, Func<string, ContentSource> read, string mapPath, string? startSetPath = null,
+        string? defaultStartSetPath = null)
     {
         var map = GameMap.Load(read(mapPath), catalog);
         if (!map.IsSkirmish && startSetPath is not null)
             throw new ArgumentException($"Map '{map.Id}' has fixed placements and does not accept a starting set.");
-        var startingSet = map.IsSkirmish ? StartingSet.Load(read(startSetPath ?? DefaultStartSet)) : null;
+        var startingSet = map.IsSkirmish ? StartingSet.Load(read(startSetPath ?? defaultStartSetPath ?? DefaultStartSet)) : null;
         return Prepare(map, startingSet, map.Slots);
     }
 }

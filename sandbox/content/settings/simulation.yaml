@@ -1,0 +1,4 @@
+# Ordinary map matches; diagnostic fixtures retain their fixed parameters.
+Simulation:
+  TickRate: 25
+  SpeedPerTick: 128

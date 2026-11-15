@@ -19,20 +19,17 @@ public partial class Sandbox
     {
         GameMap Map(string path) => GameMap.Load(ReadMapSource(path), catalog);
         StartingSet Set(string path) => StartingSet.Load(ReadMapSource(path));
-        (string Title, string Description, GameMap Map)[] maps =
-            [
-                ("Долина", "Открытая долина с дорогами, озером и четырьмя месторождениями.", Map(MapScenario.DefaultMap)),
-                ("Перекрёсток", "Городские кварталы и вокзал у пересечения дорог.", Map(MapScenario.CrossroadsMap)),
-                ("Береговая станция", "Два посёлка разделены рекой. Дороги сходятся к двум переправам.", Map(MapScenario.RiversideMap))
-            ];
-        (string Title, StartingSet Set)[] modes =
-            [
-                ("Снабжение · центр, инженер и грузовик", Set(MapScenario.DefaultStartSet)),
-                ("Пехотный старт · площадка и два бойца", Set(MapScenario.InfantryStartSet))
-            ];
+        var settings = _manifest.Settings.Match;
+        var mapChoices = settings.Maps.Length == 0 ? [new MatchChoice { Path = settings.DefaultMap, Title = settings.DefaultMap }] : settings.Maps;
+        var setChoices = settings.StartingSets.Length == 0 ? [new MatchChoice { Path = settings.DefaultStartSet, Title = settings.DefaultStartSet }] : settings.StartingSets;
+        var maps = mapChoices.Select(choice => (choice.Title, choice.Description, Map(choice.Path))).ToArray();
+        if (maps.Any(choice => !choice.Item3.IsSkirmish)) throw new ArgumentException("Экран настройки принимает только skirmish-карты.");
+        var modes = setChoices.Select(choice => (choice.Title, Set(choice.Path))).ToArray();
         _matchSetup = new();
         AddChild(_matchSetup);
-        _matchSetup.Build(TerminalTheme(), catalog.Locomotion!, maps, modes);
+        _matchSetup.Build(TerminalTheme(), catalog.Locomotion!, maps, modes,
+            Array.FindIndex(mapChoices, choice => choice.Path == settings.DefaultMap),
+            Array.FindIndex(setChoices, choice => choice.Path == settings.DefaultStartSet));
         _matchSetup.Launch += BeginMatchFromSetup;
         if (_verifyAiMatch) SelectAiVerificationMatch();
         else if (_verifyMatchSetup) SelectVerificationMatch();
@@ -48,7 +45,7 @@ public partial class Sandbox
             _radarStyle = _matchSetup.SelectedRadarStyle;
             _matchPlayers = slots.Length;
             _mapMatch = MapScenario.Prepare(map, set, slots);
-            _opponentProfile = aiOpponent ? SkirmishAiCatalog.Load(ReadMapSource("content/skirmish-ai.yaml"), _catalog!, _aiProfileId ?? SkirmishAiScenario.ProfileId) : null;
+            _opponentProfile = aiOpponent ? SkirmishAiCatalog.Load(ReadMapSource(_manifest.Settings.Match.AiConfig), _catalog!, _aiProfileId ?? _manifest.Settings.Match.AiProfile) : null;
             _opponentStarts = aiOpponent ? slots : null;
             _count = _mapMatch.UnitCount;
             _matchSetup!.SetLaunching(true, "Подготовка поля боя…");

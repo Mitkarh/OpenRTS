@@ -1,0 +1,12 @@
+Version: 1
+Title: OpenRTS Sandbox
+Rules:
+  - content/units.yaml
+  - content/buildings.yaml
+Terrain: [content/terrain.yaml]
+Weapons: [content/weapons.yaml]
+Models:
+  - content/models.yaml
+  - content/buildings-models.yaml
+Effects: [content/effects.yaml]
+Settings: [content/settings]

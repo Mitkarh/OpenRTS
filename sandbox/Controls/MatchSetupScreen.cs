@@ -33,7 +33,8 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     public event Action<GameMap, StartingSet, string[], bool>? Launch;
 
     public void Build(Theme theme, LocomotionCatalog terrain,
-        (string Title, string Description, GameMap Map)[] maps, (string Title, StartingSet Set)[] modes)
+        (string Title, string Description, GameMap Map)[] maps, (string Title, StartingSet Set)[] modes,
+        int defaultMap = 0, int defaultMode = 0)
     {
         Name = "MatchSetup";
         Layer = 10;
@@ -107,6 +108,8 @@ public sealed partial class MatchSetupScreen : CanvasLayer
 
         foreach (var map in maps) _maps.AddItem(map.Title);
         foreach (var mode in modes) _modes.AddItem(mode.Title);
+        _maps.Select(defaultMap);
+        _modes.Select(defaultMode);
         _maps.ItemSelected += _ => SelectMap(PlayerCount);
         _modes.ItemSelected += _ => { UpdateOpponent(); _status.Text = ""; };
         _count.ItemSelected += _ => UpdatePlayers();
