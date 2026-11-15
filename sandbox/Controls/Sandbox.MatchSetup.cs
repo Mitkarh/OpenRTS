@@ -45,6 +45,7 @@ public partial class Sandbox
         {
             _matchFogMode = _matchSetup!.SelectedFog;
             _fogStyle = _matchSetup.SelectedFogStyle;
+            _radarStyle = _matchSetup.SelectedRadarStyle;
             _matchPlayers = slots.Length;
             _mapMatch = MapScenario.Prepare(map, set, slots);
             _opponentProfile = aiOpponent ? SkirmishAiCatalog.Load(ReadMapSource("content/skirmish-ai.yaml"), _catalog!, _aiProfileId ?? SkirmishAiScenario.ProfileId) : null;

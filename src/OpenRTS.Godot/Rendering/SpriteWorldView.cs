@@ -157,14 +157,14 @@ public sealed class SpriteWorldView
     private readonly HashSet<EntityId> _ghostIds = new();
 
     public void Apply(ReadOnlySpan<EntityPose> poses, float alpha, long tick, int tickRate, ReadOnlySpan<WeaponPose> weapons = default, ReadOnlySpan<ConstructionProjectPose> projects = default, ConstructionProjectPose? preview = null,
-        ReadOnlySpan<ContactPose> contacts = default)
+        ReadOnlySpan<ContactPose> contacts = default, ContactDisplayStyle contactStyle = ContactDisplayStyle.BuildingModels)
     {
         alpha = Math.Clamp(alpha, 0, 1); double time = tick == 0 ? 0 : tick + alpha; SpriteCount = 0;
         foreach (var batch in _batches) batch.Clear();
         Span<Vector2> pivots = stackalloc Vector2[8];
         Span<float> angles = stackalloc float[8];
         int count = poses.Length + _wrecks.Count + projects.Length + (preview.HasValue ? 1 : 0);
-        foreach (var contact in contacts) if (contact.Knowledge.UnitType.HasValue) count++;
+        foreach (var contact in contacts) if (ContactDisplay.ShowsModel(contact.Knowledge, contactStyle)) count++;
         if (_ordered.Length < count) Array.Resize(ref _ordered, Math.Max(count, _ordered.Length * 2));
         int at = 0;
         foreach (var pose in poses) if (pose.Carrier.Value == 0) _ordered[at++] = pose;
@@ -183,8 +183,8 @@ public sealed class SpriteWorldView
             foreach (var project in projects) AppendProject(project);
             if (preview is { } hovered) AppendProject(hovered);
             foreach (var contact in contacts)
-                if (contact.Knowledge.UnitType is int type)
-                    AppendProject(new(default, 0, type, contact.Knowledge.Position, false));
+                if (ContactDisplay.ShowsModel(contact.Knowledge, contactStyle) && contact.Knowledge.UnitType is int type)
+                    AppendProject(new(default, 0, type, contact.Knowledge.Position, false) { QuarterTurns = contact.QuarterTurns });
         }
         void AppendProject(ConstructionProjectPose project)
         {

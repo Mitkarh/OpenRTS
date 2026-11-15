@@ -43,6 +43,13 @@ public partial class Sandbox
             levels |= 1 << (int)contact.Knowledge.Level;
         }
         if (levels != 7) throw new InvalidOperationException("Expected anonymous, classified and identified radar contacts.");
+        var building = new ContactKnowledge(1, default, 0, 0, 0, ContactClass.Building);
+        var vehicle = building with { Class = ContactClass.Vehicle };
+        if (!OpenRTS.Godot.Rendering.ContactDisplay.ShowsModel(building, OpenRTS.Godot.Rendering.ContactDisplayStyle.BuildingModels) ||
+            OpenRTS.Godot.Rendering.ContactDisplay.ShowsModel(vehicle, OpenRTS.Godot.Rendering.ContactDisplayStyle.BuildingModels) ||
+            OpenRTS.Godot.Rendering.ContactDisplay.ShowsModel(building, OpenRTS.Godot.Rendering.ContactDisplayStyle.Icons) ||
+            !OpenRTS.Godot.Rendering.ContactDisplay.ShowsModel(vehicle, OpenRTS.Godot.Rendering.ContactDisplayStyle.IdentifiedModels))
+            throw new InvalidOperationException("Contact display preferences chose an incorrect representation.");
         using var truth = _session!.Frames.AcquireLatest()!;
         if (truth.Projectiles.Length != 1) throw new InvalidOperationException("The cannon should fire at the radar contact.");
     }

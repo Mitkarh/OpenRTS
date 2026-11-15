@@ -14,7 +14,7 @@ public static class FogScenario
     public static string AddRadarWeapons(string yaml) =>
         Regex.Replace(yaml, @"(?m)^cannon:\r?\n  Weapon:$", "$0\n    MinimumContact: Contact");
 
-    public static string AddSensorProfiles(string yaml) => Regex.Replace(yaml, @"(?m)^(rifleman|tank|fighter|tiltrotor|bunker-cannon|headquarters|crane|bunker):$", match =>
+    public static string AddSensorProfiles(string yaml) => Regex.Replace(yaml, @"(?m)^(rifleman|tank|fighter|tiltrotor|bunker-cannon|crane|bunker):$", match =>
         match.Value + "\n  Sensors:\n" + (match.Groups[1].Value switch
         {
             "rifleman" => """

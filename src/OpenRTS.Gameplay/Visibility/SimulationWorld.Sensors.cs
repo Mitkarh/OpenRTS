@@ -160,7 +160,48 @@ public sealed partial class SimulationWorld
             }
         }
         (sensors.Current, sensors.Pending) = (sensors.Pending, sensors.Current);
+        RememberBuildings(sensors);
         ResolveContacts(sensors);
+    }
+
+    private void RememberBuildings(SensorState sensors)
+    {
+        for (int i = 0; i < Count; i++)
+        {
+            var entity = _entityHandles[i];
+            var type = TypeOf(entity);
+            if (type.Movable || type.Footprint is not { TargetBounds.Count: > 0 } || !IsOnMap(entity) || IsConstructing(entity)) continue;
+            var identity = entity.Get<EntityIdentity>();
+            for (int p = 0; p < sensors.Players.Count; p++)
+            {
+                uint viewer = sensors.Players[p];
+                if (entity.Get<OwnershipState>().Owner == viewer)
+                { sensors.Buildings.Remove(new(p, identity.Id)); continue; }
+                if (ModelObservation(viewer, identity.Id).HasValue)
+                    sensors.Buildings[new(p, identity.Id)] = new(entity.Get<SpatialState>().Position, identity.Type, RotationOf(entity), Tick);
+            }
+        }
+        foreach (var (key, memory) in sensors.Buildings)
+        {
+            uint viewer = sensors.Players[key.Player];
+            if (ModelObservation(viewer, key.Entity).HasValue) continue;
+            if (_fog is null || FullyObservedBuilding(viewer, memory))
+                sensors.Buildings.Remove(key);
+        }
+    }
+
+    private bool FullyObservedBuilding(uint viewer, SensorState.BuildingMemory memory)
+    {
+        var footprint = _types[memory.UnitType].WithRotation(memory.QuarterTurns).Footprint!;
+        foreach (var bounds in footprint.TargetBounds)
+        {
+            var b = bounds.Translate(memory.Position);
+            int left = Math.Max(0, b.MinX) / _fog!.CellSize, top = Math.Max(0, b.MinY) / _fog.CellSize;
+            int right = (Math.Min(Width, b.MaxX) - 1) / _fog.CellSize, bottom = (Math.Min(Depth, b.MaxY) - 1) / _fog.CellSize;
+            for (int y = top; y <= bottom; y++) for (int x = left; x <= right; x++)
+                if (_fog.At(viewer, y * _fog.Columns + x) != CellVisibility.Visible) return false;
+        }
+        return true;
     }
 
     private void ResolveContacts(SensorState sensors)
@@ -191,6 +232,10 @@ public sealed partial class SimulationWorld
                 UnitType = knownType,
                 IdentifiedTick = identified ? Tick : knownType.HasValue ? knowledge.IdentifiedTick : -1
             };
+            if (!knownType.HasValue && sensors.Buildings.TryGetValue(key, out var memory) &&
+                memory.Position == sensors.Knowledge[key].Position)
+                sensors.Knowledge[key] = sensors.Knowledge[key] with
+                { UnitType = memory.UnitType, Class = ContactClass.Building, IdentifiedTick = memory.SeenTick };
             sensors.ContactKeys.Add((key.Player, knowledge.Id), key);
         }
     }
@@ -221,7 +266,15 @@ public sealed partial class SimulationWorld
             var fields = sensors.Current[key].Fields;
             destination.Add(new(sensors.Knowledge[key],
                 fields.HasFlag(LiveObservationFields.Health) ? pose.Health : null,
-                fields.HasFlag(LiveObservationFields.States) ? pose.Presentation.States : null));
+                fields.HasFlag(LiveObservationFields.States) ? pose.Presentation.States : null)
+                { QuarterTurns = sensors.Buildings.TryGetValue(key, out var remembered) ? remembered.QuarterTurns : 0 });
+        }
+        foreach (var (key, memory) in sensors.Buildings.OrderBy(p => p.Key.Entity.Value))
+        {
+            if (key.Player != player || ModelObservation(sensors.Players[player], key.Entity).HasValue ||
+                sensors.Current.ContainsKey(key) && sensors.Knowledge[key].Position == memory.Position) continue;
+            destination.Add(new(new(0, memory.Position, memory.UnitType, memory.SeenTick, memory.SeenTick, ContactClass.Building), null, null)
+                { QuarterTurns = memory.QuarterTurns });
         }
     }
 }

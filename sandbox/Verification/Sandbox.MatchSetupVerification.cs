@@ -17,6 +17,8 @@ public partial class Sandbox
 
         var fog = FindOption("Fog");
         CheckSkirmish(fog.ItemCount == 3 && fog.Selected == 0 && FindOption("FogStyle").ItemCount == 3, "Fog settings missing.");
+        CheckSkirmish(FindOption("RadarStyle").ItemCount == 3 && FindOption("RadarStyle").Selected == 1,
+            "Radar display preferences or their default are missing.");
         Choose(fog, 1); CheckSkirmish(!FindOption("FogStyle").Disabled, "Explored mode lost style choice.");
         Choose(fog, 2); CheckSkirmish(FindOption("FogStyle").Disabled, "Visible mode must disable fog styling.");
         if (_verifyFogMatch) Choose(fog, 0);
@@ -53,7 +55,7 @@ public partial class Sandbox
             GD.Print("OPENRTS_FOG_MATCH:PASS hidden match, unit vision, filtering, minimap and player control");
             _verificationDone = true; GetTree().Quit(); return;
         }
-        CheckSkirmish(frame.Poses.Length == 26 && Controls(3), "Third side or alternate starting set is missing.");
+        CheckSkirmish(frame.Poses.Length == 26 && (PlayerFog ? !Controls(3) : Controls(3)), "Third side or alternate starting set is missing.");
         var poses = frame.Poses.ToArray();
         for (uint owner = 1; owner <= 3; owner++)
         {

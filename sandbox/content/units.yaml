@@ -1,4 +1,5 @@
 ^unit:
+  Sensors: { Signatures: [visual, radar.ground] }
   Vision: { Radius: 6144 }
   Buildable: { Ticks: 75, Cost: 100 }
   Movement: { Locomotor: infantry }

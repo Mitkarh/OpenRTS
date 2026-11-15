@@ -119,4 +119,7 @@ public readonly record struct ContactKnowledge(long Id, WorldPosition Position, 
 }
 
 /// <summary>Frame projection. Optional measurements are sampled from the live entity at publication.</summary>
-public readonly record struct ContactPose(ContactKnowledge Knowledge, int? Health, uint? States);
+public readonly record struct ContactPose(ContactKnowledge Knowledge, int? Health, uint? States)
+{
+    public int QuarterTurns { get; init; }
+}

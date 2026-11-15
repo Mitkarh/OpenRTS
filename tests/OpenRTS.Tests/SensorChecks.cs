@@ -16,6 +16,65 @@ internal static class SensorChecks
 
     internal static void Run(Action<string, Action> test)
     {
+        test("Sensors: building memory survives hidden destruction until the whole footprint is observed", () =>
+        {
+            using var world = SimulationWorld.CreateWithMechanics(new() { FogCellSize = 1024 },
+                [
+                    new("scout", 100, body: BodyShape.None, visionRadius: 8192, sensors: new()),
+                    new("building", 100, movable: false, footprint: new(2, 2,
+                        [new(0, 0, new(false)), new(1, 0, new(false)), new(0, 1, new(false)), new(1, 1, new(false))]))
+                ], 16384, 16384, navigationGrid: new(16, 16), players: Players);
+            var building = world.AddInitialUnit(1, new(4096, 4096), 2);
+            var scout = world.AddInitialUnit(0, new(2048, 4096), 1);
+            var frames = new FrameExchange();
+            frames.TryPublish(world);
+            world.Step([new(1, 0, 1, CommandKind.Remove, scout)]);
+            frames.TryPublish(world);
+            using var remembered = frames.AcquireLatest(1)!;
+            Check(remembered.Contacts.Length == 1 && remembered.Contacts[0].Knowledge is { Id: 0, UnitType: 1 } &&
+                remembered.Contacts[0].Health is null && remembered.Contacts[0].States is null,
+                "building memory was lost or retained live fields");
+            world.Step([new(2, 0, 1, CommandKind.Destroy, building)]);
+            frames.TryPublish(world);
+            using (var hidden = frames.AcquireLatest(1)!)
+                Check(hidden.Contacts.Length == 1, "hidden destruction removed memory");
+            world.Step([new(3, 0, 1, CommandKind.Spawn, Position: new(2048, 4096), UnitType: 0, Owner: 1)]);
+            frames.TryPublish(world);
+            using var inspected = frames.AcquireLatest(1)!;
+            Check(inspected.Contacts.Length == 0 && remembered.Contacts.Length == 1,
+                "inspection did not retire the old snapshot or changed an old lease");
+        });
+
+        test("Sensors: an HQ built by the crane reveals a distant radar contact until removal", () =>
+        {
+            var catalog = UnitCatalog.Load([
+                new("units", File.ReadAllText("sandbox/content/units.yaml")),
+                new("buildings", File.ReadAllText("sandbox/content/buildings.yaml"))
+            ], LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
+            int Type(string id) => catalog.Units.ToList().FindIndex(unit => unit.Id == id);
+            using var world = SimulationWorld.CreateWithMechanics(new() { FogCellSize = 1024 }, catalog.Units,
+                65536, 32768, navigationGrid: new(64, 32), players: [new(1, "Blue", 10000), new(2, "Red")]);
+            var crane = world.AddInitialUnit(Type("crane"), new(2560, 8704), 1);
+            var enemy = world.AddInitialUnit(Type("tank"), new(40960, 8704), 2);
+            var frames = new FrameExchange();
+            frames.TryPublish(world);
+            using (var before = frames.AcquireLatest(1)!) Check(before.Contacts.Length == 0, "radar worked before construction");
+            world.Step([new(1, 1, 1, CommandKind.PlanConstruction, crane, new(8192, 8704), Action: "site-radar")]);
+            for (int i = 0; i < 320; i++) world.Step();
+            frames.TryPublish(world);
+            EntityId hq;
+            using (var frame = frames.AcquireLatest(1)!)
+            {
+                hq = frame.Poses.ToArray().Single(p => p.UnitType == Type("headquarters")).Id;
+                Check(frame.Contacts.Length == 1 && frame.Contacts[0].Knowledge.Position == new WorldPosition(40960, 8704) &&
+                    !world.IsVisible(1, enemy), "completed HQ did not discover the target at its radar boundary");
+            }
+            world.Step([new(world.Tick + 1, 0, 1, CommandKind.Remove, hq)]);
+            frames.TryPublish(world);
+            using var after = frames.AcquireLatest(1)!;
+            Check(after.Contacts.Length == 0, "removed HQ kept revealing targets");
+        });
+
         test("Sensors: YAML compiles profiles and affects the gameplay fingerprint", () =>
         {
             UnitCatalog Load(int range) => UnitCatalog.Load([new("sensors", $$"""

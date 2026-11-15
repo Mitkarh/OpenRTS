@@ -21,6 +21,8 @@ internal sealed class SensorState
     internal readonly List<EntityId> Candidates = [], Targets = [];
     internal Dictionary<Key, Observation> Current = [], Pending = [];
     internal readonly Dictionary<Key, ContactKnowledge> Knowledge = [];
+    internal readonly record struct BuildingMemory(WorldPosition Position, int UnitType, int QuarterTurns, long SeenTick);
+    internal readonly Dictionary<Key, BuildingMemory> Buildings = [];
     internal readonly Dictionary<(int Player, long Id), Key> ContactKeys = [];
     internal readonly List<Key> Keys = [];
     internal readonly long[] NextContact;
@@ -113,6 +115,17 @@ internal sealed class SensorState
             writer.Write(value.ObservedTick);
             writer.Write(value.IdentifiedTick);
             writer.Write((byte)value.Class);
+        }
+        if (Buildings.Count > 0)
+        {
+            writer.Write(-32);
+            writer.Write(Buildings.Count);
+            foreach (var (key, value) in Buildings.OrderBy(p => p.Key.Player).ThenBy(p => p.Key.Entity.Value))
+            {
+                writer.Write(key.Player); writer.Write(key.Entity.Value);
+                writer.Write(value.Position.X); writer.Write(value.Position.Y); writer.Write(value.Position.Elevation);
+                writer.Write(value.UnitType); writer.Write(value.QuarterTurns); writer.Write(value.SeenTick);
+            }
         }
     }
 }

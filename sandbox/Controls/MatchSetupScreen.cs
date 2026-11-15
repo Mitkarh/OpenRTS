@@ -9,6 +9,9 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     private readonly OptionButton _maps = new() { Name = "Maps" };
     private readonly OptionButton _fog = new() { Name = "Fog", TooltipText = "Скрыта: требуется разведка. Разведана: известна вся местность, объекты только в обзоре. Видима: все объекты видны." };
     private readonly OptionButton _fogStyle = new() { Name = "FogStyle" };
+    private readonly OptionButton _radarStyle = new() { Name = "RadarStyle" };
+    public OpenRTS.Godot.Rendering.ContactDisplayStyle SelectedRadarStyle =>
+        (OpenRTS.Godot.Rendering.ContactDisplayStyle)_radarStyle.Selected;
     public OpenRTS.Core.Visibility.FogMode SelectedFog => (OpenRTS.Core.Visibility.FogMode)_fog.Selected;
     public OpenRTS.Godot.Rendering.FogDisplayStyle SelectedFogStyle => (OpenRTS.Godot.Rendering.FogDisplayStyle)_fogStyle.Selected;
     private readonly OptionButton _modes = new() { Name = "Modes" };
@@ -78,6 +81,11 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         _fog.AddItem("Скрыта · нужна разведка"); _fog.AddItem("Разведана · только текущий обзор"); _fog.AddItem("Видима · без тумана");
         _fogStyle.AddItem("Точная сетка"); _fogStyle.AddItem("Круги обзора"); _fogStyle.AddItem("Круги и границы сетки"); _fogStyle.Select(1);
         AddField(setup, "Туман войны", _fog); AddField(setup, "Отображение тумана · F9 в игре", _fogStyle);
+        _radarStyle.AddItem("Иконки всех контактов");
+        _radarStyle.AddItem("Модели зданий, иконки юнитов");
+        _radarStyle.AddItem("Модели всех опознанных объектов");
+        _radarStyle.Select(1);
+        AddField(setup, "Радарные контакты · F7 в игре", _radarStyle);
         _fog.ItemSelected += _ => _fogStyle.Disabled = SelectedFog == OpenRTS.Core.Visibility.FogMode.Visible;
         setup.AddChild(_opponent);
         setup.AddChild(Sandbox.TerminalHeading("СТАРТОВЫЕ ПОЗИЦИИ"));
@@ -186,6 +194,7 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     {
         _maps.Disabled = _modes.Disabled = _count.Disabled = _fog.Disabled = _launch.Disabled = busy;
         _fogStyle.Disabled = busy || SelectedFog == OpenRTS.Core.Visibility.FogMode.Visible;
+        _radarStyle.Disabled = busy;
         _opponent.Disabled = busy || !CanUseOpponent;
         foreach (var start in _starts) start.Disabled = busy;
         _status.Text = message;

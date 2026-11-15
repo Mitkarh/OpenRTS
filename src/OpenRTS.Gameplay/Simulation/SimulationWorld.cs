@@ -96,7 +96,8 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
             var viewers = initialPlayers.Where(p => p.Id != 0).Select(p => p.Id).ToArray();
             if (hasFog)
                 _fog = new(width, depth, viewers, mechanics.FogCellSize!.Value, mechanics.OptimizeFogGroups, mechanics.FogMode, mechanics.FogVisibilityHoldTicks);
-            if (hasSensors) _sensors = new(_types, viewers);
+            // Trusted diagnostic worlds without observers do not maintain player knowledge.
+            if (hasSensors && viewers.Length > 0) _sensors = new(_types, viewers);
         }
         _buildRecipes = new(_types);
         _production = new(this, _types, _buildRecipes, _economy, mechanics.ProductionRate, StorageGate);

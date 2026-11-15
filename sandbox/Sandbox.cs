@@ -15,6 +15,7 @@ public partial class Sandbox : Node3D
     private bool _fogScenario;
     private bool _sensorScenario;
     private bool _sensorVisibility;
+    private ContactDisplayStyle _radarStyle = ContactDisplayStyle.BuildingModels;
     private bool _verifySensors;
     private int _fogHoldTicks;
     private OpenRTS.Core.Visibility.FogMode _matchFogMode = OpenRTS.Core.Visibility.FogMode.Visible;
@@ -319,7 +320,8 @@ public partial class Sandbox : Node3D
                     _ => _notice
                 };
             }
-            _sprites?.Apply(frame.Poses, alpha, frame.Tick, frame.TickRate, frame.Weapons, _visibleProjects, BuildingPreview() ?? UpgradePreview(), frame.Contacts);
+            if (_rtsOverlay is not null) _rtsOverlay.RadarStyle = _radarStyle;
+            _sprites?.Apply(frame.Poses, alpha, frame.Tick, frame.TickRate, frame.Weapons, _visibleProjects, BuildingPreview() ?? UpgradePreview(), frame.Contacts, _radarStyle);
             _combatEffects?.Apply(frame.Projectiles, alpha, frame.Tick, _sprites?.FlightSurface ?? 0, PlayerFog ? frame : null);
             UpdateTerminal(frame, alpha);
             if (_verifySensors) { VerifySensors(frame); return; }
@@ -426,6 +428,7 @@ public partial class Sandbox : Node3D
                 Key code = key.PhysicalKeycode == Key.None ? key.Keycode : key.PhysicalKeycode;
                 if (PlayerFog && code == Key.F8 && _opponentProfile is null) SwitchFogViewer();
                 else if (PlayerFog && code == Key.F9) _fogStyle = (FogDisplayStyle)(((int)_fogStyle + 1) % 3);
+                else if (PlayerFog && code == Key.F7) _radarStyle = (ContactDisplayStyle)(((int)_radarStyle + 1) % 3);
                 else if (_terminal is not null && code == Key.F10) ToggleTerminalLayout();
                 else if (_terminal is not null && code == Key.F11) SetTerminalFullscreen(!_exclusiveFullscreen);
                 else if (_matchMenu?.Visible == true) { if (code == Key.Escape) ToggleMatchMenu(); }

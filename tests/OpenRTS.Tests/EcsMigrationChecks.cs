@@ -51,8 +51,9 @@ internal static class EcsMigrationChecks
             });
     }
 
-    // Preserve the pre-fog mechanical baseline; positive vision radii have their own fingerprint tests.
-    private static string LegacyContent(string path) => System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(path), @"(?m)^  Vision:.*\r?\n", "");
+    // Preserve the pre-observer mechanical baseline; fog, sensors and radar construction have separate checks.
+    private static string LegacyContent(string path) => System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(path),
+        @"(?m)^(  (Vision|Sensors):.*|      site-radar:.*)\r?\n", "");
 
     // Format 28/catalog 13 with the higher aviation profiles. Normalized ground traces still match 3ae082f.
     private static readonly Dictionary<string, string> Expected = new()

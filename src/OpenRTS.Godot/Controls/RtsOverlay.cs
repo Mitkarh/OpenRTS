@@ -1,5 +1,6 @@
 using Godot;
 using OpenRTS.Core.Visibility;
+using OpenRTS.Godot.Rendering;
 
 namespace OpenRTS.Godot.Controls;
 
@@ -18,6 +19,7 @@ public partial class RtsOverlay : Control
     public List<(Rect2 Bounds, float Fraction)> UpgradeBars { get; } = [];
     public List<(Rect2 Bounds, float Fraction, Color Color)> CaptureBars { get; } = [];
     public Texture2D? RadarAtlas { get; set; }
+    public ContactDisplayStyle RadarStyle { get; set; } = ContactDisplayStyle.BuildingModels;
     public List<(ContactKnowledge Contact, Vector2 Position)> RadarContacts { get; } = [];
     private sealed record CursorStyle(Color Color, float Radius, SpriteFrames? Frames, string Sequence, Vector2 Hotspot);
     private readonly System.Collections.Generic.Dictionary<string, CursorStyle> _custom = new(StringComparer.Ordinal);
@@ -45,8 +47,9 @@ public partial class RtsOverlay : Control
             float tile = atlas.GetWidth() / 5f;
             foreach (var (contact, position) in RadarContacts)
             {
-                float size = contact.UnitType.HasValue ? 25 : 44;
-                var center = contact.UnitType.HasValue ? position + new Vector2(13, -13) : position;
+                if (ContactDisplay.ShowsModel(contact, RadarStyle)) continue;
+                const float size = 44;
+                var center = position;
                 var region = new Rect2((int)contact.Class * tile, (atlas.GetHeight() - tile) / 2, tile, tile);
                 DrawTextureRectRegion(atlas, new Rect2(center - Vector2.One * size / 2, Vector2.One * size), region);
             }

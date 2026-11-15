@@ -82,6 +82,7 @@ public partial class Sandbox
         float best = 22 * 22;
         foreach (var (contact, position) in _rtsOverlay.RadarContacts)
         {
+            if (contact.Id == 0) continue;
             float distance = pixel.DistanceSquaredTo(position);
             if (distance >= best) continue;
             best = distance;

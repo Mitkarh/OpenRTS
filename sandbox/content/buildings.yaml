@@ -1,4 +1,5 @@
 ^building:
+  Sensors: { Signatures: [visual, radar.ground] }
   Vision: { Radius: 7168 }
   Buildable:
     { Ticks: 125, Cost: 500, Kind: PlaceBuilding, PlacementRadius: 102400 }
@@ -86,6 +87,7 @@ factory:
 
 headquarters:
   Inherits: ^building
+  Sensors: { Signatures: [visual, radar.ground], Detectors: [{Channel: radar, Signature: radar.ground, Range: 32768}, {Channel: radar, Signature: radar.ground, Range: 16384, Display: Classified}] }
   Footprint: { Rows: ["####", "####", "####"] }
   Presentation: { Model: headquarters, Name: HQ · Радар }
 
@@ -141,6 +143,7 @@ supply-truck:
       site-supply: { Unit: supply-center, OnSite: true }
       site-airfield: { Unit: airfield, OnSite: true }
       site-helipad: { Unit: helipad, OnSite: true }
+      site-radar: { Unit: headquarters, OnSite: true }
   ActionPanel:
     Buttons:
       site-power: { Label: Электростанция, Hotkey: E, Order: 2 }
@@ -150,6 +153,7 @@ supply-truck:
       site-supply: { Label: Центр снабжения, Hotkey: I, Order: 7 }
       site-airfield: { Label: Аэродром, Order: 10 }
       site-helipad: { Label: Вертолётная площадка, Order: 11 }
+      site-radar: { Label: HQ · Радар, Order: 12 }
 
 crane:
   Inherits: ^building
