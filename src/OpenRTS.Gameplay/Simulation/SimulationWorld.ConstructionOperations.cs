@@ -39,7 +39,7 @@ public sealed partial class SimulationWorld
     bool IConstructionWorld.CanApproach(Entity actor, WorldPosition position)
     {
         int type = actor.Get<EntityIdentity>().Type;
-        return StopAllowed(type, position) && (_navigation is null ||
+        return StopAllowed(type, position) && (_motion ?? _combatIndex)?.ClearPlacement(position, out _, TypeOf(actor).Body) != false && (_navigation is null ||
             Resolver(type).CanReach(actor.Get<SpatialState>().Position, position, StepCancellation));
     }
     bool IConstructionWorld.TrySetTarget(EntityId actor, WorldPosition position) => SetTarget(_indices[actor], position);
@@ -62,11 +62,11 @@ public sealed partial class SimulationWorld
         CancelTransformation(actor, stop: false);
         CancelWindups(index);
         ref var orders = ref entity.Get<OrderState>();
+        if (orders.HasOrder) orders.SuspendedOrder ??= orders.ActiveOrder;
         orders.ActiveOrder = new(UnitActionKind.Move, position);
         orders.HasOrder = true;
         orders.OrderPhase = OrderPhase.Moving;
         orders.CombatTarget = default;
-        orders.PendingOrders?.Clear();
         return true;
     }
 
@@ -89,6 +89,7 @@ public sealed partial class SimulationWorld
     void IConstructionWorld.ReleaseEntityId(EntityId id) => ReleaseEntityId(id);
     bool IConstructionWorld.CanAfford(uint owner, long cost) => _economy.CanAfford(owner, cost);
     bool IConstructionWorld.Spend(uint owner, long cost) => _economy.Spend(owner, cost);
+    void IConstructionWorld.Refund(uint owner, long cost) => _economy.Credit(owner, cost);
 
     Entity IConstructionWorld.SpawnFoundation(EntityId id, int type, WorldPosition position, uint owner, int health, int quarterTurns, Action<Entity> initialize)
     {
@@ -104,6 +105,7 @@ public sealed partial class SimulationWorld
             EconomySystem.ActivateIncome(entity, TypeOf(entity).Economy, Tick);
         }
         _economy.InvalidatePower();
+        foreach (var queue in TypeOf(entity).TaskQueues) ClearExit(entity, ProductionExit(entity, queue.Exit));
     }
 
     void IConstructionWorld.Emit(WorldEvent value) => EmitEvent(value);

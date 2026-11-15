@@ -52,17 +52,31 @@ internal static class EcsMigrationChecks
     }
 
     // Preserve the pre-observer mechanical baseline; fog, sensors and radar construction have separate checks.
-    private static string LegacyContent(string path) => System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(path),
-        @"(?m)^(  (Vision|Sensors):.*|      site-radar:.*)\r?\n", "");
+    private static string LegacyContent(string path)
+    {
+        var result = new System.Text.StringBuilder();
+        int skippedIndent = -1;
+        foreach (string line in File.ReadLines(path))
+        {
+            string content = line.TrimStart(' ');
+            int indent = line.Length - content.Length;
+            if (skippedIndent >= 0 && (content.Length == 0 || indent > skippedIndent)) continue;
+            skippedIndent = -1;
+            if (indent == 2 && (content.StartsWith("Vision:") || content.StartsWith("Sensors:")) ||
+                indent == 6 && content.StartsWith("site-radar:")) { skippedIndent = indent; continue; }
+            result.AppendLine(line);
+        }
+        return result.ToString();
+    }
 
-    // Format 28/catalog 13 with the higher aviation profiles. Normalized ground traces still match 3ae082f.
+    // Mechanics format 33: paid projects and suspended clearance orders; producer exit lanes forbid stopping.
     private static readonly Dictionary<string, string> Expected = new()
     {
-        ["direct"] = "8C1F6760F09485F80DC743124CB606EDE6C4BE8613713C01525803C98A7EF682",
-        ["navigation"] = "094E28BF5F2FE380BCADB5B2F438B9BC0406FD69B1FCF3F8DDFA450D2439187E",
-        ["combat"] = "5145E06628186DED27756A7C1842375E611A44083FA09B660F61908BFFBF7692",
-        ["buildings"] = "49F633653BB408E0D31F9FD269B33C2B3AC871F7088FB9C549A3C664B8EF53BE",
-        ["production"] = "849694E8162F694FC255D9F704FE9A9B6DC06A5B98BABB40ED0036306F1F44F0"
+        ["direct"] = "BC64411A3027697D47A269DC4FC0ACC33C16DF13FE4939626ABE45954223C699",
+        ["navigation"] = "3761CA22F5F87D8D88B5F927348B3761BCCD4465F2EA070D23461B7110BFA57B",
+        ["combat"] = "5C8B30FF1CF6F931184ECEE41CDD16B3F3BDF3E175427E80322AC59C3FA67E52",
+        ["buildings"] = "A78761E08AD173E62B23C5ADB35EEE53A14248DFE9B15F42DFED97EC1427A373",
+        ["production"] = "9F9327A08D92CF9B48F299938FFD1FA3F339C457190CBCBB34A5F540E0B2D0B8"
     };
 
     internal static readonly JsonSerializerOptions TraceOptions = new() { Converters = { new EntitySetWriter() } };

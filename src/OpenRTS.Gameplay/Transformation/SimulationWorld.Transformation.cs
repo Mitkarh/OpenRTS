@@ -93,6 +93,7 @@ public sealed partial class SimulationWorld
         _transformations.Add(id.Value, new(recipe, position, turns, followMove ? requested : null)
             { LastProgress = Tick, LastPosition = from });
         ref var orders = ref actor.Get<OrderState>();
+        orders.SuspendedOrder = null;
         orders.ActiveOrder = new(UnitActionKind.Transform, position);
         orders.HasOrder = true;
         orders.OrderPhase = from == position || !source.Movable ? OrderPhase.Waiting : OrderPhase.Approaching;

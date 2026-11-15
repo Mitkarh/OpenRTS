@@ -36,6 +36,7 @@ internal interface IConstructionWorld
     void ReleaseEntityId(EntityId id);
     bool CanAfford(uint owner, long cost);
     bool Spend(uint owner, long cost);
+    void Refund(uint owner, long cost);
     Entity SpawnFoundation(EntityId id, int type, WorldPosition position, uint owner, int health, int quarterTurns, Action<Entity> initialize);
     void CompleteFoundation(Entity entity, Action<Entity> clearFoundation);
     void Emit(WorldEvent value);

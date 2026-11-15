@@ -84,6 +84,7 @@ public sealed partial class SimulationWorld
             }
             ref var orders = ref actor.Get<OrderState>();
             orders.HasOrder = false;
+            orders.SuspendedOrder = null;
             orders.PendingOrders?.Clear();
             orders.CombatTarget = default;
             truck.Automatic = true;

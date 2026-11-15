@@ -24,7 +24,8 @@ public sealed partial class SimulationWorld
         return id;
     }
 
-    private bool TryFindExitPlacement(int type, WorldPosition exit, int radius, out WorldPosition point, UnitDefinition? origin = null)
+    private bool TryFindExitPlacement(int type, WorldPosition exit, int radius, out WorldPosition point, UnitDefinition? origin = null,
+        WorldPosition? originPosition = null, WorldBox? avoid = null, bool clearPath = false)
     {
         point = default;
         long best = long.MaxValue;
@@ -43,7 +44,13 @@ public sealed partial class SimulationWorld
                 var candidate = new WorldPosition(exit.X + x, exit.Y + y, exit.Elevation);
                 if (candidate.X < body.HalfWidth || candidate.X > Width - body.HalfWidth ||
                     candidate.Y < body.HalfHeight || candidate.Y > Depth - body.HalfHeight || !StopAllowed(type, candidate)) continue;
-                if (origin is not null && ObjectGeometry.DistanceSquared(definition, candidate, origin, exit, out _, out _) == 0) continue;
+                if (avoid is { } area && BodyGeometry.SweptBox(candidate, candidate, area, body)) continue;
+                if (clearPath && _navigation is not null &&
+                    !TerrainGeometry.Clear(_navigation.Grid, exit, candidate, body, definition.Locomotor)) continue;
+                var center = originPosition ?? exit;
+                if (origin is not null && (origin.Footprint is { } footprint
+                    ? Construction.ConstructionGeometry.Touches(footprint, center, candidate, candidate, body)
+                    : ObjectGeometry.DistanceSquared(definition, candidate, origin, center, out _, out _) == 0)) continue;
                 if (index is not null && !index.ClearPlacement(candidate, out _, body)) continue;
                 best = distance;
                 point = GroundPosition(candidate, exit.Elevation);

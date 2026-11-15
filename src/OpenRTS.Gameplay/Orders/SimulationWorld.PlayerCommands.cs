@@ -15,6 +15,9 @@ public sealed partial class SimulationWorld
     private bool CanApplyPlayerCommand(WorldCommand command)
     {
         bool Owns(EntityId id) => TryGetGameplayOwner(id, out uint owner) && owner == command.Issuer;
+        if (command.Kind == CommandKind.StartUpgrade && command.Entity == command.TargetEntity && command.Recipients is null)
+            return command.Owner == 0 ? Owns(command.Entity) : command.Owner == command.Issuer && TryGetGameplayOwner(command.Entity, out uint targetOwner) &&
+                (targetOwner == 0 || targetOwner == command.Issuer);
         if (command.Kind is CommandKind.CancelConstruction or CommandKind.CancelUpgrade)
             return command.Recipients is null && command.Owner == command.Issuer && command.TargetEntity != default;
         if (command.Kind is CommandKind.Aim or CommandKind.ClearAim or CommandKind.Transform)

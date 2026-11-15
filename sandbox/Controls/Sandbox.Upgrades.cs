@@ -7,6 +7,9 @@ using OpenRTS.Core;
 public partial class Sandbox
 {
     private readonly Dictionary<string, Button> _upgradeButtons = new();
+    private uint UpgradeOwner => CommandOwner != 0 ? CommandOwner : _constructionViewer;
+    private IEnumerable<EntityPose> UpgradeTargets() => _selection.Ids.ToArray()
+        .Where(id => _selectionPoses.ContainsKey(id) && _selectionPoses[id].UnitType == _activeType).Select(id => _selectionPoses[id]);
 
     private static string UpgradeLabel(string id) => id switch
     {
@@ -37,55 +40,43 @@ public partial class Sandbox
     private (EntityId Actor, UpgradeDefinition Upgrade)? ContextUpgrade(EntityPose target)
     {
         var upgrade = _catalog!.Units[target.UnitType].DefaultUpgrade;
-        if (upgrade is not { Support: true } || !UpgradeAvailable(target, upgrade, CommandOwner)) return null;
+        if (upgrade is not { Support: true } || !(UpgradeAvailable(target, upgrade, CommandOwner) ||
+            target.Upgrade.Project == upgrade.Id && target.Upgrade.Payer == CommandOwner)) return null;
         foreach (var id in ActiveRecipients())
             if (CanSupportUpgrade(_selectionPoses[id], target)) return (id, upgrade);
         return null;
     }
 
-    private bool TryContextUpgrade(EntityPose target)
+    private bool TryContextUpgrade(EntityPose target, bool queued = false)
     {
         if (ContextUpgrade(target) is not { } command) return false;
-        SubmitUpgrade(command.Actor, target.Id, command.Upgrade.Id);
+        SubmitUpgrade(command.Actor, target.Id, command.Upgrade.Id, queued: queued);
         return true;
     }
 
-    private void SubmitUpgrade(EntityId actor, EntityId target, string variant) =>
-        _session!.Submit(CommandKind.StartUpgrade, entity: actor, targetEntity: target, action: variant);
+    private void SubmitUpgrade(EntityId actor, EntityId target, string variant, bool queued = false, uint owner = 0) =>
+        _session!.Submit(CommandKind.StartUpgrade, entity: actor, targetEntity: target, action: variant, queued: queued, owner: owner);
 
     private void ActivateUpgrade(UpgradeDefinition variant)
     {
-        foreach (var target in ActiveRecipients().Select(id => _selectionPoses[id]))
+        foreach (var target in UpgradeTargets())
         {
-            uint owner = target.Presentation.Owner;
+            uint owner = UpgradeOwner;
             if (!UpgradeAvailable(target, variant, owner)) continue;
-            if (!variant.Support)
-            {
-                SubmitUpgrade(target.Id, target.Id, variant.Id);
-                return;
-            }
-            var supporter = _displayPoses.Take(_displayCount).Where(p => p.Presentation.Owner == owner &&
-                    p.Order.Phase == OpenRTS.Core.Orders.OrderPhase.Idle && CanSupportUpgrade(p, target))
-                .OrderBy(p => ObjectGeometry.DistanceSquared(_catalog!.Units[p.UnitType].WithRotation(p.QuarterTurns), p.Current,
-                    _catalog.Units[target.UnitType].WithRotation(target.QuarterTurns), target.Current, out _, out _)).ThenBy(p => p.Id.Value).FirstOrDefault();
-            if (supporter.Id != default)
-            {
-                SubmitUpgrade(supporter.Id, target.Id, variant.Id);
-                return;
-            }
+            SubmitUpgrade(target.Id, target.Id, variant.Id, owner: owner);
+            return;
         }
-        _notice = "Для апгрейда нужен свободный инженер или кран.";
+        _notice = "Апгрейд недоступен для этого здания или владельца.";
     }
 
     private void AddUpgradeButtons()
     {
         foreach (var upgrade in _catalog!.Units[_activeType].Upgrades)
         {
-            if (upgrade.ClaimNeutral) continue;
             var button = IconButton(UpgradeLabel(upgrade.Id), null, 120);
             button.Pressed += () => ActivateUpgrade(upgrade);
             button.TooltipText = $"{UpgradeLabel(upgrade.Id)} · {upgrade.Cost:N0} кр.\n" +
-                (upgrade.Support ? "Требует свободного инженера или крана." : "Выполняется самостоятельно.");
+                (upgrade.Support ? "Разместить оплаченный проект. Свободный инженер подъедет автоматически; другого можно назначить по проекту." : "Выполняется самостоятельно.");
             _customRow!.AddChild(button);
             _upgradeButtons.Add(upgrade.Id, button);
         }
@@ -105,8 +96,8 @@ public partial class Sandbox
         foreach (var upgrade in type.Upgrades)
         {
             if (!_upgradeButtons.TryGetValue(upgrade.Id, out var button)) continue;
-            var poses = ids.Select(id => _selectionPoses[id]);
-            button.Disabled = !poses.Any(p => UpgradeAvailable(p, upgrade, p.Presentation.Owner));
+            var poses = UpgradeTargets();
+            button.Disabled = !poses.Any(p => UpgradeAvailable(p, upgrade, UpgradeOwner));
             var building = poses.FirstOrDefault(p => p.Upgrade.Project == upgrade.Id);
             button.Text = building.Id == default ? UpgradeLabel(upgrade.Id) :
                 $"{UpgradeLabel(upgrade.Id)} {100 * building.Upgrade.Work / building.Upgrade.Required}%";

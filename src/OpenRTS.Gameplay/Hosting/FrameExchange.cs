@@ -28,6 +28,8 @@ public sealed partial class FrameExchange
         public int PlayerCount;
         public ConstructionProjectPose[] Projects = [];
         public int ProjectCount;
+        public readonly List<SupplySourcePose> SupplySources = [];
+        public readonly HashSet<EntityId> ResourceIds = [];
         public int TaskCount;
         public int WeaponCount, ProjectileCount;
         public int Count, Readers, TickRate, NavigationWaitingCount, MovingCount, LocalSearches, Yields, GoalExchanges, QueueWaiting;
@@ -51,6 +53,9 @@ public sealed partial class FrameExchange
             if (slot.Poses.Length < world.Count) Array.Resize(ref slot.Poses, Math.Max(world.Count, checked(Math.Max(16, slot.Poses.Length * 2))));
             world.SynchronizeVisibility();
             world.CopyPoses(slot.Poses);
+            world.CopySupplySources(slot.SupplySources);
+            slot.ResourceIds.Clear();
+            foreach (var resource in slot.SupplySources) slot.ResourceIds.Add(resource.Id);
             slot.WeaponCount = world.WeaponCount; slot.ProjectileCount = world.ProjectileCount;
             if (slot.Weapons.Length < slot.WeaponCount) Array.Resize(ref slot.Weapons, Math.Max(slot.WeaponCount, slot.Weapons.Length * 2));
             if (slot.Projectiles.Length < slot.ProjectileCount) Array.Resize(ref slot.Projectiles, Math.Max(slot.ProjectileCount, slot.Projectiles.Length * 2));

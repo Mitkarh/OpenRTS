@@ -44,7 +44,7 @@ barracks:
       rifleman: { Label: Автоматчик }
       sniper: { Label: Снайпер }
       rocketeer: { Label: Ракетчик }
-  Footprint: { Rows: ["####", "#==#", "#++#"] }
+  Footprint: { Rows: ["####", "#++#", "#++#"] }
   Presentation: { Model: barracks, Name: Бараки }
 
 factory:
@@ -62,24 +62,24 @@ factory:
   Actions:
     Definitions:
       apc: { Unit: apc-mg }
-      engineer: {Unit: construction-engineer}
-      tank: {Unit: tank, Cost: 180, Ticks: 150}
-      mixed-tank: {Unit: tank-mixed, Cost: 260, Ticks: 175}
+      engineer: { Unit: construction-engineer }
+      tank: { Unit: tank, Cost: 180, Ticks: 150 }
+      mixed-tank: { Unit: tank-mixed, Cost: 260, Ticks: 175 }
       repair: { Mount: repair, AutoCast: true }
   ActionPanel:
     Buttons:
       apc: { Label: БТР, Order: 0 }
-      engineer: {Label: Инженер, Order: 1}
-      tank: {Label: Танк, Order: 2}
-      mixed-tank: {Label: Пушечно-ракетный танк, Order: 3}
-      repair: {Label: Ремонт, Cursor: repair, Order: 4}
-  Footprint: { Rows: ["#####", "###==", "###==", "###++"] }
+      engineer: { Label: Инженер, Order: 1 }
+      tank: { Label: Танк, Order: 2 }
+      mixed-tank: { Label: Пушечно-ракетный танк, Order: 3 }
+      repair: { Label: Ремонт, Cursor: repair, Order: 4 }
+  Footprint: { Rows: ["#####", "###++", "###++", "###++"] }
   Armaments:
     Mounts:
       repair: { Weapon: factory-repair, Animation: produce }
   Upgrades:
     Variants:
-      heavy: {Cost: 600, Ticks: 175, Products: [tank, mixed-tank]}
+      heavy: { Cost: 600, Ticks: 175, Products: [tank, mixed-tank] }
   Presentation:
     Model: upgradable-factory
     Name: Завод · ремонтная зона
@@ -87,7 +87,20 @@ factory:
 
 headquarters:
   Inherits: ^building
-  Sensors: { Signatures: [visual, radar.ground], Detectors: [{Channel: radar, Signature: radar.ground, Range: 32768}, {Channel: radar, Signature: radar.ground, Range: 16384, Display: Classified}] }
+  Sensors:
+    {
+      Signatures: [visual, radar.ground],
+      Detectors:
+        [
+          { Channel: radar, Signature: radar.ground, Range: 32768 },
+          {
+            Channel: radar,
+            Signature: radar.ground,
+            Range: 16384,
+            Display: Classified,
+          },
+        ],
+    }
   Footprint: { Rows: ["####", "####", "####"] }
   Presentation: { Model: headquarters, Name: HQ · Радар }
 
@@ -131,7 +144,12 @@ supply-truck:
     Buttons:
       harvest: { Label: Добыча, Cursor: harvest }
   Presentation:
-    { Model: supply-truck, Name: Грузовик снабжения, Animations: [idle, move], States: [damaged, loaded] }
+    {
+      Model: supply-truck,
+      Name: Грузовик снабжения,
+      Animations: [idle, move],
+      States: [damaged, loaded],
+    }
 
 ^structure-recipes:
   Actions:
@@ -181,7 +199,14 @@ mine:
   Supply: { Role: Mine, Capacity: 300000 }
   Upgrades:
     Variants:
-      owned: {Cost: 900, Ticks: 150, Support: true, Default: true, ClaimNeutral: true}
+      owned:
+        {
+          Cost: 900,
+          Ticks: 150,
+          Support: true,
+          Default: true,
+          ClaimNeutral: true,
+        }
   Health: { Destruction: Neutralize }
   Economy: { Energy: 0 }
   Footprint: { Rows: ["###", "###", "#+#", "#+#"] }
@@ -194,25 +219,38 @@ mine:
 
 bunker:
   Inherits: ^building
-  Buildable: {Ticks: 100, Cost: 400}
-  Economy: {Energy: 0}
-  Transport: {Accepts: [infantry], Slots: 4, FireFromInside: true}
+  Buildable: { Ticks: 100, Cost: 400 }
+  Economy: { Energy: 0 }
+  Transport: { Accepts: [infantry], Slots: 4, FireFromInside: true }
   Armaments:
     Mounts:
-      cannon: {Weapon: cannon}
-      machinegun: {Weapon: rifle}
-      missiles: {Weapon: missile}
+      cannon: { Weapon: cannon }
+      machinegun: { Weapon: rifle }
+      missiles: { Weapon: missile }
   Upgrades:
     Variants:
-      expanded: {Cost: 250, Ticks: 100, Support: true, Default: true, Seats: 8}
-      cannon: {Cost: 350, Ticks: 125, Support: true, Mounts: [cannon]}
-      mixed: {Cost: 400, Ticks: 140, Support: true, Mounts: [machinegun, missiles]}
-  Footprint: {Rows: ['##', '##']}
+      expanded:
+        { Cost: 250, Ticks: 100, Support: true, Default: true, Seats: 8 }
+      cannon: { Cost: 350, Ticks: 125, Support: true, Mounts: [cannon] }
+      mixed:
+        { Cost: 400, Ticks: 140, Support: true, Mounts: [machinegun, missiles] }
+  Footprint: { Rows: ["##", "##"] }
   Presentation:
     Model: bunker-upgradable
     Name: Бункер
     Animations: [idle, construct, produce, fire]
-    States: [damaged, working, destroyed, lowpower, constructing, expanded, cannon, mixed, garrisoned]
+    States:
+      [
+        damaged,
+        working,
+        destroyed,
+        lowpower,
+        constructing,
+        expanded,
+        cannon,
+        mixed,
+        garrisoned,
+      ]
 
 oil-derrick:
   Inherits: ^building
@@ -336,7 +374,19 @@ airfield:
   Buildable: { Ticks: 200, Cost: 1800 }
   Economy: { Energy: -20 }
   Footprint:
-    Rows: ["########", "########", "########", "########", "########", "########", "########", "########", "########", "########"]
+    Rows:
+      [
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+      ]
   Airbase:
     Slots: [[-2048, -512], [2048, -512], [-2048, 2048], [2048, 2048]]
     Accepts: [fighter]
@@ -375,5 +425,6 @@ helipad:
       tiltrotor: { Unit: tiltrotor }
   ActionPanel:
     Buttons:
-      tiltrotor: { Label: Конвертоплан, Icon: "res://assets/units/tiltrotor.png" }
+      tiltrotor:
+        { Label: Конвертоплан, Icon: "res://assets/units/tiltrotor.png" }
   Presentation: { Model: helipad, Name: Вертолётная площадка }

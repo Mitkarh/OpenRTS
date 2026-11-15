@@ -74,7 +74,7 @@ internal static class ConstructionChecks
 
         test("Construction: insufficient credits wait without cloning the map and resume on income", () =>
         {
-            using var world = new SimulationWorld(Types(), 524288, 524288, navigationGrid: new(512, 512),
+            using var world = SimulationWorld.CreateWithMechanics(new() { ConstructionPayment = OpenRTS.Core.Construction.ConstructionPaymentPolicy.Foundation }, Types(), 524288, 524288, navigationGrid: new(512, 512),
                 players: [new(1, "Blue", 0)]);
             var engineer = world.AddInitialUnit(0, new(5376, 8192), 1);
             var grid = world.NavigationGrid;
@@ -116,8 +116,8 @@ internal static class ConstructionChecks
                 var project = Projects(world).Single().Id;
                 for (int i = 0; i < 39; i++) world.Step();
                 NavigationChecks.Check(Projects(world).Single().Clearing && Pose(world, occupant).Current == Site &&
-                    Pose(world, engineer).Current != new WorldPosition(4096, 8704) && Player(world, 1).Credits == 500,
-                    "The engineer did not approach and wait for the occupied exit without spending");
+                    Pose(world, engineer).Current != new WorldPosition(4096, 8704) && Player(world, 1).Credits == 475,
+                    "The engineer did not approach and wait for the paid site's occupied exit");
 
                 world.Step([new(world.Tick + 1, 0, 1, CommandKind.Move, blocker, new(4096, 10752))]);
                 int started = 0, completed = 0, cancelled = 0;
@@ -432,8 +432,8 @@ internal static class ConstructionChecks
                 blocked.AddInitialUnit(blocker, Site, blocker == 0 ? 2u : 1u);
                 blocked.Step([new(1, 0, 1, CommandKind.PlanConstruction, new(1), Site, Action: "power")]);
                 NavigationChecks.Check(blocked.Count == 2 && Projects(blocked).Length == 0 && Player(blocked, 1).Credits == 500 &&
-                    blocked.Events.ToArray().Any(e => e.Kind == WorldEventKind.ConstructionCancelled),
-                    "Blocked foundation did not cancel cleanly");
+                    blocked.Events.ToArray().Any(e => e.Kind is WorldEventKind.ConstructionCancelled or WorldEventKind.ActionUnavailable),
+                    "Blocked site was not rejected or refunded cleanly");
             }
         });
 

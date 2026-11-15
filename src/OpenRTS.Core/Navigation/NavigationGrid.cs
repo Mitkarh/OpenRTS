@@ -18,6 +18,7 @@ public sealed class NavigationGrid
     public bool HasSurface => _surface is not null;
     public IReadOnlyList<WorldBox> Obstacles => Array.AsReadOnly(_obstacles);
     public bool HasTerrain => _terrain is not null;
+    public bool HasStoppingRestrictions => _noStop is not null;
     public int MaximumTerrain { get; }
     public int Width { get; }
     public int Height { get; }

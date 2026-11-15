@@ -100,10 +100,11 @@ public sealed partial class FrameExchange
                 Health = health ? p.Health : 0, Presentation = states ? p.Presentation : p.Presentation with { States = 0 },
                 TerrainStranded = states && p.TerrainStranded, Construction = states ? p.Construction : default,
                 Carrier = visible.Contains(p.Carrier) ? p.Carrier : default,
-                HasRally = mine && p.HasRally, Rally = mine ? p.Rally : default, Supply = mine ? p.Supply : default,
-                Capture = mine ? p.Capture : default, AutoBuild = mine && p.AutoBuild,
+                HasRally = mine && p.HasRally, Rally = mine ? p.Rally : default,
+                Supply = mine || states && source.ResourceIds.Contains(p.Id) ? p.Supply : default,
+                Capture = mine || states ? p.Capture : default, AutoBuild = mine && p.AutoBuild,
                 Transformation = mine ? p.Transformation : default,
-                Upgrade = mine ? p.Upgrade : states ? p.Upgrade with { Project = null, Work = 0, Required = 0, Payer = 0 } : default,
+                Upgrade = mine || p.Upgrade.Payer == viewer ? p.Upgrade : states ? p.Upgrade with { Project = null, Work = 0, Required = 0, Payer = 0 } : default,
                 Flight = p.Flight with { Airbase = visible.Contains(p.Flight.Airbase) ? p.Flight.Airbase : default, Ammo = mine ? p.Flight.Ammo : 0, Capacity = mine ? p.Flight.Capacity : 0 } };
             poses.Add(p);
         }

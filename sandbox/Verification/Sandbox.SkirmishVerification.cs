@@ -17,6 +17,7 @@ public partial class Sandbox
         {
             CheckSkirmish(frame.Poses.Length == 14 && frame.Players.Length == 3, "Skirmish players/objects not initialized");
             CheckSkirmish(frame.Players.ToArray().Where(p => p.Id != 0).All(p => p.Credits == 5000), "Initial funds wrong");
+            VerifyRallyProjection();
             var empty = _sprites!.Node.GetNode<MultiMeshInstance3D>("Sprite_supply-truck-empty").Multimesh;
             CheckSkirmish(empty.VisibleInstanceCount == 2, "Starting trucks did not use the empty sprite");
             CheckSkirmish(_rtsOverlay!.HealthBars.Count == 1, "Selected base has no world health bar");
@@ -104,13 +105,14 @@ public partial class Sandbox
                     new(point.X / 1024f, 0, point.Y / 1024f));
             }
             Place(2, Key.E, new(24 * 1024 + 512, 25 * 1024), new(27 * 1024 + 512, 30 * 1024));
-            Place(5, Key.T, new WorldPosition(55 * 1024 + 512, 37 * 1024));
+            Place(5, Key.T, new WorldPosition(59 * 1024 + 512, 37 * 1024));
             _skirmishCheck = 2; _session!.StepOnce(); return;
         }
         if (_skirmishCheck == 2)
         {
             if (frame.Tick < 2) return;
-            CheckSkirmish(frame.ConstructionProjects.Length == 3 && _visibleProjects.Length == 1 && _visibleProjects[0].Owner == 2, "Red project visibility is wrong");
+            CheckSkirmish(frame.ConstructionProjects.Length == 3 && _visibleProjects.Length == 1 && _visibleProjects[0].Owner == 2,
+                $"Red project visibility is wrong: total={frame.ConstructionProjects.Length}, visible={_visibleProjects.Length}, notice={_notice}");
             var engineer = frame.Poses.ToArray().Single(p => p.Id.Value == 2);
             CheckSkirmish(engineer.Order.Kind == UnitActionKind.Build && engineer.Order.QueuedCount == 1, "Shift did not queue construction orders");
             _selection.Change([new(1)], SelectionChange.Replace); RefreshSelection();
@@ -138,9 +140,17 @@ public partial class Sandbox
             _selection.Change([new(2)], SelectionChange.Replace);
             RefreshSelection();
             CenterCamera(new Vector2(mine.Current.X, mine.Current.Y) / WorldPosition.UnitsPerCell);
+            _selection.Change([mine.Id], SelectionChange.Replace);
+            RefreshSelection();
+            UpdateCommandPanel(frame);
+            CheckSkirmish(_upgradeButtons.TryGetValue("owned", out var upgradeButton) && !upgradeButton.Disabled,
+                "Selecting a neutral mine did not offer its upgrade");
+            ActivateUpgrade(_catalog!.Units[mine.UnitType].DefaultUpgrade!);
+            _selection.Change([new(2)], SelectionChange.Replace);
+            RefreshSelection();
             _pointer = Screen(mine);
             UpdateRtsCursor();
-            CheckSkirmish(UpgradePreview() is { Id.Value: 7 } && _rtsOverlay!.CustomCursor == "build", "Mine preview or cursor is missing");
+            CheckSkirmish(UpgradePreview() is { Id.Value: 7, Upgrade: "owned" } && _rtsOverlay!.CustomCursor == "upgrade", "Mine preview or cursor is missing");
             CheckSkirmish(TryContextUpgrade(mine), "Default upgrade command was not issued");
             _skirmishCheck = 4;
             _session!.StepOnce();
@@ -181,6 +191,21 @@ public partial class Sandbox
         _verificationDone = true;
         if (_capturePath is null || DisplayServer.GetName() == "headless") GetTree().Quit();
         else CaptureTerminal();
+    }
+
+    private void VerifyRallyProjection()
+    {
+        var producer = _selectionPoses[new(1)];
+        var target = producer.Current with { X = producer.Current.X + 4096, Y = producer.Current.Y + 4096 };
+        _selectionPoses[new(1)] = producer with { HasRally = true, Rally = target };
+        float previousAlpha = _displayAlpha;
+        _displayAlpha = 0.1f; UpdateRtsCursor();
+        var first = _rtsOverlay!.Rally;
+        _displayAlpha = 0.9f; UpdateRtsCursor();
+        CheckSkirmish(first.HasValue && first == _rtsOverlay.Rally && _rtsOverlay.RallyExit.HasValue &&
+            _rtsOverlay.RallyExit != first, "The rally flag interpolated from its building or has no exit line");
+        _selectionPoses[new(1)] = producer;
+        _displayAlpha = previousAlpha;
     }
 
     private async void CaptureTerminal()

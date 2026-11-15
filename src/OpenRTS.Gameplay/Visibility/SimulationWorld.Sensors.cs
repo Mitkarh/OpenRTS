@@ -91,7 +91,7 @@ public sealed partial class SimulationWorld
         {
             int player = sensors.PlayerSlot(viewer);
             if (player < 0) return null;
-            if (entity.Get<OwnershipState>().Owner == viewer) return LiveObservationFields.All;
+            if (entity.Get<OwnershipState>().Owner == viewer || OwnsUpgradeProject(entity, viewer)) return LiveObservationFields.All;
             if (!IsOnMap(entity)) return null;
             var ordinary = OrdinaryObservation(viewer, entity);
             if (sensors.Current.TryGetValue(new(player, id), out var observation) && observation.Display == SensorDisplay.Model)
@@ -99,7 +99,7 @@ public sealed partial class SimulationWorld
             return ordinary;
         }
         if (_fog!.PlayerSlot(viewer) < 0) return null;
-        return entity.Get<OwnershipState>().Owner == viewer || IsOnMap(entity) && InOpticalCoverage(viewer, entity)
+        return entity.Get<OwnershipState>().Owner == viewer || OwnsUpgradeProject(entity, viewer) || IsOnMap(entity) && InOpticalCoverage(viewer, entity)
             ? LiveObservationFields.All : null;
     }
 

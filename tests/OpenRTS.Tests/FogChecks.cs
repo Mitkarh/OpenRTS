@@ -13,6 +13,55 @@ internal static class FogChecks
 
     internal static void Run(Action<string, Action> test)
     {
+        test("Fog: capture progress reaches visible neutral and enemy buildings without selection or hidden-state leaks", () =>
+        {
+            foreach (bool sensors in new[] { false, true })
+            foreach (uint owner in new uint[] { 0, 2 })
+            {
+                using var w = SimulationWorld.CreateWithMechanics(new() { FogCellSize = 1024 },
+                    [new("engineer", 100, body: BodyShape.None, visionRadius: 8192, sensors: sensors ? new(detectors:
+                        [new("optical", "visual", 8192, SensorDisplay.Model, ["scan"], LiveObservationFields.All)]) : null,
+                        abilities: [new("capture", "", Kind: AbilityKind.Capture, Range: 4096)]),
+                     new("building", 100, body: BodyShape.None, movable: false, capturable: new(6),
+                        sensors: sensors ? new(concealments: [new("optical", "scan")]) : null),
+                     new("monitor", 100, body: BodyShape.None, visionRadius: sensors ? 8192 : 0, sensors: sensors ? new(detectors:
+                        [new("optical", "visual", 8192, SensorDisplay.Model, ["scan"], LiveObservationFields.Health)]) : null)],
+                    16384, 8192, players: [new(1, "Blue"), new(2, "Red"), new(3, "Monitor"), new(4, "Hidden")]);
+                var engineer = w.AddInitialUnit(0, new(2048, 4096), 1);
+                var target = w.AddInitialUnit(1, new(4096, 4096), owner);
+                w.AddInitialUnit(2, new(6144, 4096), 3);
+                var frames = new FrameExchange(); frames.TryPublish(w);
+                using var before = frames.AcquireLatest(1)!;
+                w.Step([new(1, 1, 1, CommandKind.CaptureTarget, engineer, TargetEntity: target)]);
+                w.Step(); frames.TryPublish(w);
+                using (var attacker = frames.AcquireLatest(1)!)
+                using (var defender = frames.AcquireLatest(2)!)
+                using (var monitor = frames.AcquireLatest(3)!)
+                using (var hidden = frames.AcquireLatest(4)!)
+                {
+                    Check(attacker.Poses.ToArray().Single(p => p.Id == target).Capture is { Owner: 1, Progress: 2, Duration: 6 },
+                        "The capturer's player frame lost progress on a building it does not own");
+                    if (owner == 2) Check(defender.Poses.ToArray().Single(p => p.Id == target).Capture.Progress == 2,
+                        "The defender could not see the capture bar on its building");
+                    Check(hidden.Poses.ToArray().All(p => p.Id != target) && monitor.Poses.ToArray().All(p => p.Capture == default),
+                        "Capture progress revealed a hidden building or a restricted live state");
+                    if (sensors) Check(monitor.Poses.ToArray().Any(p => p.Id == target), "The restricted model fixture was not visible");
+                    Check(before.Poses.ToArray().Single(p => p.Id == target).Capture == default, "Capture changed an older frame lease");
+                }
+                w.Step([new(3, 1, 1, CommandKind.Stop, engineer)]); frames.TryPublish(w);
+                using (var decaying = frames.AcquireLatest(1)!)
+                    Check(decaying.Poses.ToArray().Single(p => p.Id == target).Capture.Progress == 1, "Interrupted work lost its decaying bar");
+                w.Step(); frames.TryPublish(w);
+                using (var idle = frames.AcquireLatest(1)!)
+                    Check(idle.Poses.ToArray().Single(p => p.Id == target).Capture == default, "Zero progress left a capture bar");
+                w.Step([new(5, 1, 1, CommandKind.CaptureTarget, engineer, TargetEntity: target)]);
+                for (int i = 0; i < 5; i++) w.Step();
+                frames.TryPublish(w);
+                using var completed = frames.AcquireLatest(1)!;
+                Check(completed.Poses.ToArray().Single(p => p.Id == target) is { Presentation.Owner: 1, Capture.Progress: 0 },
+                    "Completed capture left its progress bar");
+            }
+        });
         test("Fog: incremental coverage equals exact full reference including clipped cells", () =>
         {
             var random = new Random(9102026);

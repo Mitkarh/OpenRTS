@@ -23,4 +23,5 @@ internal sealed class ConstructionProject(EntityId id, uint owner, int unitType,
     public BuildDefinition Recipe { get; } = recipe;
     public int QuarterTurns { get; } = quarterTurns;
     public long ReservedAt, LastAttempt;
+    public int Paid;
 }

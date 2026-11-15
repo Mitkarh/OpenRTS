@@ -34,6 +34,7 @@ public sealed class GameplayRegistration<T> where T : class
 
 public sealed class GameplayMechanics
 {
+    public ConstructionPaymentPolicy ConstructionPayment { get; init; } = ConstructionPaymentPolicy.Blueprint;
     /// <summary>Null disables fog; positive size enables circular vision on an independent grid.</summary>
     public int? FogCellSize { get; init; }
     /// <summary>Experimental gameplay visibility retention; zero keeps instantaneous visibility.</summary>
@@ -88,6 +89,8 @@ public sealed partial class SimulationWorld
 {
     private void WriteMechanics(BinaryWriter writer)
     {
+        writer.Write(33); // Paid blueprints and suspended orders during clearance.
+        writer.Write((int)_mechanics.ConstructionPayment);
         WriteTransformations(writer);
         writer.Write(28); // Includes named target categories, spatial weapons and flight state.
         if (_capture is not null && ReferenceEquals(_mechanics.Capture, GameplayMechanics.BuiltInCapture))

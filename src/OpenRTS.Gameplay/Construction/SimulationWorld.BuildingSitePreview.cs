@@ -22,8 +22,9 @@ public sealed partial class SimulationWorld
         if (distance <= range) return true;
         if (!type.Movable) return false;
         var resolver = Resolver(actor.Get<EntityIdentity>().Type);
-        foreach (var point in ConstructionGeometry.Exits(footprint, position, from, type.Body, Width, Depth))
-            if (resolver.CanStop(point) && resolver.CanReach(from, point, cancellationToken)) return true;
+        foreach (var point in ConstructionGeometry.Approaches(footprint, position, from, type.Body, type.ConstructionRange, Width, Depth))
+            if (ObjectGeometry.DistanceSquared(type, point, target, position, out _, out _) <= range &&
+                resolver.CanStop(point) && resolver.CanReach(from, point, cancellationToken)) return true;
         return false;
     }
 

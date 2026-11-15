@@ -14,7 +14,8 @@ internal interface IProductionWorld
     bool ProductEnabled(Entity actor, int product);
     GameplayConditions ReadConditions(UnitDefinition type, uint owner);
     void RebuildMotionIndex();
-    bool TryFindExitPlacement(int type, WorldPosition origin, int radius, out WorldPosition exit);
+    bool TryFindExitPlacement(Entity producer, int type, WorldPosition origin, int radius, out WorldPosition exit);
+    void ClearExit(Entity producer, WorldPosition exit);
     UnitDefinition TypeOf(Entity actor);
     int RotationOf(Entity actor);
     bool TryPlaceBuilding(int type, WorldPosition position, uint owner, int quarterTurns, out EntityId created);

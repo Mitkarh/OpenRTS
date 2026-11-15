@@ -43,6 +43,9 @@ public sealed partial class SimulationWorld
     {
         if (_fog is not null && order.Target.Value != 0 && !IsVisible(_entityHandles[index].Get<OwnershipState>().Owner, order.Target)) return false;
         ref var entity = ref _entityHandles[index];
+        if (order.Kind == UnitActionKind.Build && CanSupportUpgradeProject(entity, order.Target))
+            order = order with { Kind = UnitActionKind.UpgradeSupport };
+        if (order.Kind == UnitActionKind.UpgradeSupport && !CanSupportUpgradeProject(entity, order.Target)) return false;
         var entityIdentity = entity.Get<EntityIdentity>();
         ref var entityPresentation = ref entity.Get<PresentationState>();
         ref var entityNavigation = ref entity.Get<NavigationAgentState>();
@@ -62,6 +65,7 @@ public sealed partial class SimulationWorld
         if (order.Kind is UnitActionKind.Land or UnitActionKind.ReturnToBase)
         {
             if (!StartFlightOrder(entity, order)) { EmitEvent(new(Tick, WorldEventKind.InvalidOrder, entityIdentity.Id)); return false; }
+            entityOrders.SuspendedOrder = null;
             entityOrders.ActiveOrder = order; entityOrders.HasOrder = true; entityOrders.OrderStarted = Tick;
             entityOrders.CombatTarget = default; CancelWindups(index); entityOrders.OrderPhase = OrderPhase.Approaching;
             return true;
@@ -90,6 +94,7 @@ public sealed partial class SimulationWorld
         { entityPresentation.HasAim = false; entityPresentation.AimEntity = default; }
         entityOrders.CombatTarget = default; CancelWindups(index);
         _capture?.Reset(entity);
+        entityOrders.SuspendedOrder = null;
         entityOrders.ActiveOrder = order; entityOrders.HasOrder = order.Kind != UnitActionKind.Stop || entityMotion.Moving;
         entityOrders.OrderStarted = Tick;
         entityOrders.OrderPhase = order.Kind == UnitActionKind.HoldPosition ? OrderPhase.Holding : entityMotion.Moving ? OrderPhase.Moving : OrderPhase.Idle;
@@ -131,6 +136,11 @@ public sealed partial class SimulationWorld
             if (entityNavigation.TerrainStranded) { entityOrders.OrderPhase = OrderPhase.Waiting; continue; }
             if (entityOrders.HasOrder && !entityMotion.Moving && entityOrders.CombatTarget.Value == 0 && entityOrders.ActiveOrder.Kind is UnitActionKind.Move or UnitActionKind.AttackMove or UnitActionKind.Stop)
                 entityOrders.HasOrder = false;
+            if (!entityOrders.HasOrder && entityOrders.SuspendedOrder is { } suspended)
+            {
+                entityOrders.SuspendedOrder = null;
+                StartOrder(i, suspended);
+            }
             while (!entityOrders.HasOrder && entityOrders.PendingOrders is { Count: > 0 }) StartOrder(i, entityOrders.PendingOrders.Dequeue());
             if (!entityOrders.HasOrder && entityOrders.CombatTarget.Value == 0)
             {
@@ -195,6 +205,8 @@ public sealed partial class SimulationWorld
         ref var entityOrders = ref entity.Get<OrderState>();
         writer.Write(entityNavigation.OrderGroup); writer.Write(entityOrders.HasOrder); Write(entityOrders.ActiveOrder); writer.Write((int)entityOrders.OrderPhase); writer.Write(entityOrders.OrderStarted);
         writer.Write(entityOrders.CombatTarget.Value);
+        writer.Write(entityOrders.SuspendedOrder.HasValue);
+        if (entityOrders.SuspendedOrder is { } suspended) Write(suspended);
         if (entity.Get<EntityDefinition>().Armament?.Abilities.Any(a => a.Kind == AbilityKind.Build) == true)
             writer.Write(entityOrders.AutoBuild);
         writer.Write(entityOrders.PendingOrders?.Count ?? 0);

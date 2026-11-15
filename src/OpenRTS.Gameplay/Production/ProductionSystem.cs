@@ -250,6 +250,7 @@ internal sealed class ProductionSystem(IProductionWorld world, UnitDefinition[] 
                 var task = tasks[0];
                 var recipe = recipes[typeIndex, task.Product];
                 var settings = type.TaskQueues[q];
+                bool newlyReady = !task.Ready;
                 if (!task.Ready && !AdvanceTask(id, task, recipe.Build, settings.Payment, type, owner)) continue;
                 if (recipe.Build.Kind == ProductionKind.PlaceBuilding || completed == 32) continue;
                 if (!rebuilt)
@@ -266,6 +267,7 @@ internal sealed class ProductionSystem(IProductionWorld world, UnitDefinition[] 
                     _ => (settings.Exit.X, settings.Exit.Y)
                 };
                 var exit = new WorldPosition(Math.Clamp(from.X + x, 0, world.Width), Math.Clamp(from.Y + y, 0, world.Depth));
+                if (newlyReady || (world.Tick + id.Value) % 8 == 0) world.ClearExit(actor, exit);
                 EntityId spawned;
                 if (types[recipe.UnitType].Flight is not null)
                 {
@@ -278,7 +280,7 @@ internal sealed class ProductionSystem(IProductionWorld world, UnitDefinition[] 
                 }
                 else
                 {
-                    if (!world.TryFindExitPlacement(recipe.UnitType, exit, settings.ExitSearchRadius, out var position))
+                    if (!world.TryFindExitPlacement(actor, recipe.UnitType, exit, settings.ExitSearchRadius, out var position))
                     {
                         if (!task.Blocked) world.Emit(new(world.Tick, WorldEventKind.ProductionBlocked, id));
                         task.Blocked = true;

@@ -237,7 +237,7 @@ internal static class SkirmishAiChecks
             NavigationChecks.Check(holding, "Group did not hold the assembly point.");
         });
 
-        test("AI2 reserves the unpaid blueprint before ordering a replacement truck", () =>
+        test("AI2 accounts for a paid blueprint before ordering a replacement truck", () =>
         {
             var start = Read(MapScenario.DefaultStartSet);
             var map = MapScenario.Load(catalog, path => path == MapScenario.DefaultStartSet
@@ -250,11 +250,11 @@ internal static class SkirmishAiChecks
             world.Step(ai.Plan(world));
             var projects = new ConstructionProjectPose[world.ConstructionProjectCount];
             world.CopyConstructionProjects(projects);
-            NavigationChecks.Check(projects.Single() is { Owner: 2, UnpaidCost: 500 }, "The blueprint did not expose its actual unpaid cost.");
+            NavigationChecks.Check(projects.Single() is { Owner: 2, UnpaidCost: 0 }, "The visible blueprint was not paid.");
             var players = new PlayerPose[world.PlayerCount];
             world.CopyPlayers(players);
-            NavigationChecks.Check(players.Single(p => p.Id == 2).Credits == 1000 && !ai.Plan(world).Any(c => c.Action == "truck"),
-                "The bot committed credits needed to start the unpaid building.");
+            NavigationChecks.Check(players.Single(p => p.Id == 2).Credits == 500 && !ai.Plan(world).Any(c => c.Action == "truck"),
+                "The bot spent the same blueprint credits twice.");
         });
 
         test("AI2 reserves deferred queue balances and releases them after cancellation", () =>

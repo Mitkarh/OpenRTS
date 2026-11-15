@@ -32,7 +32,7 @@ public partial class Sandbox
             foreach (var project in frame.ConstructionProjects)
                 if (project.Owner == _constructionViewer) _visibleProjectBuffer.Add(project);
             foreach (var pose in frame.Poses)
-                if (pose.Upgrade.Payer == _constructionViewer && pose.Upgrade is { Active: false, Project: { } variant })
+                if (pose.Upgrade.Payer == _constructionViewer && pose.Upgrade.Project is { } variant)
                     _visibleProjectBuffer.Add(UpgradeGhost(pose, variant, _constructionViewer));
             _visibleProjects = _visibleProjectBuffer.ToArray();
         }
@@ -88,6 +88,12 @@ public partial class Sandbox
     {
         var target = _catalog!.Units[type].WithRotation(_placementTurns);
         if (_displayBaseGrid is { } grid && !target.Footprint!.AllowsConstruction(grid, point, target.Locomotor)) return false;
+        for (int i = 0; i < _displayCount; i++)
+        {
+            var pose = _displayPoses[i];
+            var existing = _catalog.Units[pose.UnitType].WithRotation(pose.QuarterTurns);
+            if (!existing.Movable && existing.Footprint is { } footprint && target.Footprint!.Overlaps(point, footprint, pose.Current)) return false;
+        }
         foreach (var id in ActiveRecipients())
         {
             var builder = _selectionPoses[id];
@@ -132,10 +138,12 @@ public partial class Sandbox
             if (!click.ShiftPressed) { _sitePlacement = null; _panelDirty = true; }
             return true;
         }
-        if (_armedAction is not null || _armedCustom is not null || click.ButtonIndex != MouseButton.Right || click.CtrlPressed || click.AltPressed) return false;
+        if (_armedAction is not null || _armedCustom is not null || click.CtrlPressed || click.AltPressed) return false;
 
         var project = PickProject(point);
-        if (project is { } plan && plan.Upgrade is null && BuildersFor(plan.Owner, plan.Position) is { Length: > 0 } planners)
+        if (click.ButtonIndex is not (MouseButton.Right or MouseButton.Left) ||
+            click.ButtonIndex == MouseButton.Left && project?.Upgrade is null) return false;
+        if (project is { } plan && BuildersFor(plan.Owner, plan.Position) is { Length: > 0 } planners)
         {
             _session!.Submit(CommandKind.BuildSite, recipients: new(planners), targetEntity: plan.Id, queued: click.ShiftPressed);
             return true;

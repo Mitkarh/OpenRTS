@@ -3,20 +3,7 @@ namespace OpenRTS.Core.Construction;
 internal static class ConstructionGeometry
 {
     internal static bool Overlaps(FootprintDefinition first, WorldPosition a, FootprintDefinition second, WorldPosition b)
-    {
-        if (Math.Abs(a.X - b.X) >= first.HalfWidth + second.HalfWidth ||
-            Math.Abs(a.Y - b.Y) >= first.HalfHeight + second.HalfHeight) return false;
-        foreach (var firstCell in first.Cells)
-        {
-            var left = first.Bounds(firstCell, a);
-            foreach (var secondCell in second.Cells)
-            {
-                var right = second.Bounds(secondCell, b);
-                if (left.MinX < right.MaxX && right.MinX < left.MaxX && left.MinY < right.MaxY && right.MinY < left.MaxY) return true;
-            }
-        }
-        return false;
-    }
+        => first.Overlaps(a, second, b);
 
     internal static bool Touches(FootprintDefinition footprint, WorldPosition site, WorldPosition from, WorldPosition to, BodyShape body)
     {
@@ -28,14 +15,29 @@ internal static class ConstructionGeometry
     }
 
     internal static IEnumerable<WorldPosition> Exits(FootprintDefinition footprint, WorldPosition site, WorldPosition from, BodyShape body, int width, int depth)
+        => PerimeterExits(footprint.HalfWidth, footprint.HalfHeight, site, from, body, width, depth);
+
+    internal static IEnumerable<WorldPosition> Approaches(FootprintDefinition footprint, WorldPosition site, WorldPosition from,
+        BodyShape body, int range, int width, int depth)
     {
-        var primary = Exits(footprint.HalfWidth, footprint.HalfHeight, site, from, body, width, depth).ToArray();
+        for (int margin = 0; ; margin = margin == 0 ? Math.Min(256, range - 1) : Math.Min(margin * 2, range - 1))
+        {
+            foreach (var point in PerimeterExits(footprint.HalfWidth + margin, footprint.HalfHeight + margin, site, from, body, width, depth))
+                yield return point;
+            if (margin >= range - 1) yield break;
+        }
+    }
+
+    private static IEnumerable<WorldPosition> PerimeterExits(int halfWidth, int halfHeight, WorldPosition site, WorldPosition from,
+        BodyShape body, int width, int depth)
+    {
+        var primary = Exits(halfWidth, halfHeight, site, from, body, width, depth).ToArray();
         foreach (var point in primary.OrderBy(p => ObjectGeometry.Squared(from, p))) yield return point;
 
-        int left = site.X - footprint.HalfWidth - body.HalfWidth - 1;
-        int right = site.X + footprint.HalfWidth + body.HalfWidth + 1;
-        int top = site.Y - footprint.HalfHeight - body.HalfHeight - 1;
-        int bottom = site.Y + footprint.HalfHeight + body.HalfHeight + 1;
+        int left = site.X - halfWidth - body.HalfWidth - 1;
+        int right = site.X + halfWidth + body.HalfWidth + 1;
+        int top = site.Y - halfHeight - body.HalfHeight - 1;
+        int bottom = site.Y + halfHeight + body.HalfHeight + 1;
         var perimeter = new List<WorldPosition>();
         // shortcut: fallback samples the bounded footprint perimeter every 256 units; narrow authored entrances may need exact points.
         for (int x = left; x < right; x += 256) { Add(new(x, top)); Add(new(x, bottom)); }

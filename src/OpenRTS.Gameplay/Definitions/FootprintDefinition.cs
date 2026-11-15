@@ -35,6 +35,21 @@ public sealed class FootprintDefinition
     }
     public WorldBox Bounds(FootprintCell cell, WorldPosition position) => new(position.X - HalfWidth + cell.X * CellSize, position.Y - HalfHeight + cell.Y * CellSize,
         position.X - HalfWidth + (cell.X + 1) * CellSize, position.Y - HalfHeight + (cell.Y + 1) * CellSize);
+    public bool Overlaps(WorldPosition position, FootprintDefinition other, WorldPosition otherPosition)
+    {
+        if (Math.Abs(position.X - otherPosition.X) >= HalfWidth + other.HalfWidth ||
+            Math.Abs(position.Y - otherPosition.Y) >= HalfHeight + other.HalfHeight) return false;
+        foreach (var cell in Cells)
+        {
+            var a = Bounds(cell, position);
+            foreach (var otherCell in other.Cells)
+            {
+                var b = other.Bounds(otherCell, otherPosition);
+                if (a.MinX < b.MaxX && b.MinX < a.MaxX && a.MinY < b.MaxY && b.MinY < a.MaxY) return true;
+            }
+        }
+        return false;
+    }
     public bool AllowsConstruction(NavigationGrid grid, WorldPosition position, Locomotor profile)
     {
         int size = grid.CellSize;

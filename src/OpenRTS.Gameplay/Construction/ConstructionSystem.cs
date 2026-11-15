@@ -14,16 +14,19 @@ internal sealed class ConstructionSystem
     private readonly List<EntityId> _activeBuilders = [];
     private readonly List<EntityId> _idleBuilders = [];
     private readonly List<EntityId> _siteCandidates = [];
+    private readonly List<(EntityId Id, UnitDefinition Type, WorldPosition Position, long Distance)> _nearbySites = [];
     private readonly List<(WorldPosition Position, BodyShape Body)> _evacuationGoals = [];
     private readonly IConstructionWorld _world;
     private readonly IConstructionMechanic _mechanic;
+    private readonly ConstructionPaymentPolicy _payment;
     private readonly Action<Entity> _clearFoundation;
     private int _foundationCount;
 
-    internal ConstructionSystem(IConstructionWorld world, IConstructionMechanic mechanic)
+    internal ConstructionSystem(IConstructionWorld world, IConstructionMechanic mechanic, ConstructionPaymentPolicy payment)
     {
         _world = world;
         _mechanic = mechanic;
+        _payment = payment;
         _clearFoundation = ClearFoundation;
     }
 
@@ -38,7 +41,7 @@ internal sealed class ConstructionSystem
 
     internal void AddIdleBuilder(EntityId id)
     {
-        if (_foundationCount > 0) _idleBuilders.Add(id);
+        if (_foundationCount > 0 || ProjectCount > 0) _idleBuilders.Add(id);
     }
 
     internal void BeforeRemove(Entity actor)
@@ -89,7 +92,7 @@ internal sealed class ConstructionSystem
             {
                 var position = _world.GroundPosition(command.Position);
                 var targetType = _world.TypeOf(target).WithRotation(command.QuarterTurns);
-                if (!_world.SiteTerrainAllows(targetType, position) ||
+                if (!_world.SiteTerrainAllows(targetType, position) || !StaticSiteClear(targetType.Footprint!, position) ||
                     !type.Movable && ObjectGeometry.Squared(actor.Get<SpatialState>().Position, position) > (long)type.ConstructionRange * type.ConstructionRange)
                     continue;
 
@@ -97,9 +100,13 @@ internal sealed class ConstructionSystem
                     _constructionProjects.Add(owner, projects = new());
                 var replaced = projects.Values.Where(p => ConstructionGeometry.Overlaps(targetType.Footprint!, position, ProjectType(p).Footprint!, p.Position)).ToArray();
                 if (projects.Count - replaced.Length >= MaximumPlayerProjects) continue;
+                int paid = _payment == ConstructionPaymentPolicy.Blueprint ? recipe.Cost : 0;
+                long refunds = replaced.Sum(p => (long)p.Paid);
+                if (!_world.CanAfford(owner, Math.Max(0, paid - refunds))) continue;
                 var id = _world.ReserveEntityId();
                 foreach (var old in replaced) RemoveProject(old, cancelled: true);
-                plan = new(id, owner, target, position, recipe, command.QuarterTurns);
+                if (paid > 0 && !_world.Spend(owner, paid)) throw new InvalidOperationException("Validated blueprint payment failed.");
+                plan = new(id, owner, target, position, recipe, command.QuarterTurns) { Paid = paid };
                 projects.Add(id.Value, plan);
             }
             if (owner == plan.Owner && target == plan.UnitType)
@@ -109,6 +116,22 @@ internal sealed class ConstructionSystem
     }
 
     internal bool CanBuild(Entity actor, EntityId id) => TryBuildTarget(actor, id, out _, out _);
+
+    private bool StaticSiteClear(FootprintDefinition footprint, WorldPosition position)
+    {
+        _world.QuerySite(new(position.X - footprint.HalfWidth, position.Y - footprint.HalfHeight),
+            new(position.X + footprint.HalfWidth, position.Y + footprint.HalfHeight), _siteCandidates);
+        foreach (var id in _siteCandidates)
+        {
+            if (!_world.TryGetEntity(id, out var actor) || !_world.IsOnMap(actor)) continue;
+            var type = TypeOf(actor);
+            if (type.Movable) continue;
+            var at = actor.Get<SpatialState>().Position;
+            if (type.Footprint is { } existing ? ConstructionGeometry.Overlaps(footprint, position, existing, at) :
+                ConstructionGeometry.Touches(footprint, position, at, at, type.Body)) return false;
+        }
+        return true;
+    }
 
     private UnitDefinition TypeOf(Entity actor) => _world.TypeOf(actor);
     private UnitDefinition ProjectType(ConstructionProject project) => _world.TypeOf(project.UnitType).WithRotation(project.QuarterTurns);
@@ -127,10 +150,10 @@ internal sealed class ConstructionSystem
             (type.Movable || BuildInRange(actor, TypeOf(foundation), foundation.Get<SpatialState>().Position));
     }
 
-    private bool BuildInRange(Entity builder, UnitDefinition target, WorldPosition site)
+    private bool BuildInRange(Entity builder, UnitDefinition target, WorldPosition site, WorldPosition? from = null)
     {
         var type = TypeOf(builder);
-        var position = builder.Get<SpatialState>().Position;
+        var position = from ?? builder.Get<SpatialState>().Position;
         long distance = type.Movable
             ? ObjectGeometry.DistanceSquared(type, position, target, site, out _, out _)
             : ObjectGeometry.Squared(position, site);
@@ -167,8 +190,9 @@ internal sealed class ConstructionSystem
         if (type.Movable && !builder.Get<MotionState>().Moving && (state.OrderStarted == _world.Tick || (_world.Tick + order.Target.Value) % 8 == 0))
         {
             var footprint = target.Footprint!;
-            foreach (var point in ConstructionGeometry.Exits(footprint, site, position, type.Body, _world.Width, _world.Depth))
-                if (_world.CanApproach(builder, point) && _world.TrySetTarget(identity.Id, point) && builder.Get<MotionState>().Moving) break;
+            foreach (var point in ConstructionGeometry.Approaches(footprint, site, position, type.Body, type.ConstructionRange, _world.Width, _world.Depth))
+                if (BuildInRange(builder, target, site, point) && _world.CanApproach(builder, point) &&
+                    _world.TrySetTarget(identity.Id, point) && builder.Get<MotionState>().Moving) break;
         }
         state.OrderPhase = builder.Get<MotionState>().Moving ? OrderPhase.Approaching : OrderPhase.Waiting;
     }
@@ -204,7 +228,7 @@ internal sealed class ConstructionSystem
         }
         foreach (var id in _idleBuilders)
         {
-            if (_foundationCount == 0) break;
+            if (_foundationCount == 0 && ProjectCount == 0) break;
             if (!_world.TryGetEntity(id, out var actor) || !_world.IsOnMap(actor)) continue;
             var orders = actor.Get<OrderState>();
             uint owner = actor.Get<OwnershipState>().Owner;
@@ -225,7 +249,30 @@ internal sealed class ConstructionSystem
                 foundation = site;
                 bestId = candidate.Value;
             }
-            if (foundation != default) AdvanceConstruction(foundation, _world.ReadConditions(actor));
+            if (foundation != default) { AdvanceConstruction(foundation, _world.ReadConditions(actor)); continue; }
+            if (!type.Movable || (_world.Tick + id.Value) % 8 != 0) continue;
+            const int helpRange = 8 * WorldPosition.UnitsPerCell;
+            _nearbySites.Clear();
+            _world.QuerySite(new(position.X - helpRange, position.Y - helpRange),
+                new(position.X + helpRange, position.Y + helpRange), _siteCandidates);
+            foreach (var candidate in _siteCandidates)
+                if (_world.TryGetEntity(candidate, out var site) && IsFoundation(site) && site.Get<OwnershipState>().Owner == owner)
+                    AddSite(candidate, TypeOf(site), site.Get<SpatialState>().Position);
+            if (_constructionProjects.TryGetValue(owner, out var projects))
+                foreach (var project in projects.Values) AddSite(project.Id, ProjectType(project), project.Position);
+            foreach (var site in _nearbySites.OrderBy(s => s.Distance).ThenBy(s => s.Id.Value))
+            {
+                if (!BuildInRange(actor, site.Type, site.Position) && !ConstructionGeometry.Approaches(site.Type.Footprint!, site.Position,
+                    position, type.Body, type.ConstructionRange, _world.Width, _world.Depth)
+                    .Any(p => BuildInRange(actor, site.Type, site.Position, p) && _world.CanApproach(actor, p))) continue;
+                _world.IssueOrder(id, new(UnitActionKind.Build, default, site.Id), queued: false);
+                break;
+            }
+            void AddSite(EntityId target, UnitDefinition targetType, WorldPosition at)
+            {
+                long distance = ObjectGeometry.DistanceSquared(type, position, targetType, at, out _, out _);
+                if (distance <= (long)helpRange * helpRange) _nearbySites.Add((target, targetType, at, distance));
+            }
         }
     }
 
@@ -267,7 +314,7 @@ internal sealed class ConstructionSystem
         {
             if (project.ReservedAt == 0)
             {
-                if (!_world.CanAfford(project.Owner, project.Recipe.Cost)) return false;
+                if (!_world.CanAfford(project.Owner, project.Recipe.Cost - project.Paid)) return false;
                 project.ReservedAt = _world.Tick;
                 _siteReservations.Add(project);
             }
@@ -287,7 +334,7 @@ internal sealed class ConstructionSystem
             }
             return false;
         }
-        if (!_world.CanAfford(project.Owner, project.Recipe.Cost))
+        if (!_world.CanAfford(project.Owner, project.Recipe.Cost - project.Paid))
         {
             project.ReservedAt = 0;
             _siteReservations.Remove(project);
@@ -298,7 +345,7 @@ internal sealed class ConstructionSystem
             RemoveProject(project, cancelled: true);
             return false;
         }
-        if (!_world.Spend(project.Owner, project.Recipe.Cost))
+        if (!_world.Spend(project.Owner, project.Recipe.Cost - project.Paid))
         {
             if (project.ReservedAt > 0)
             {
@@ -350,6 +397,7 @@ internal sealed class ConstructionSystem
         if (project.ReservedAt > 0) _siteReservations.Remove(project);
         if (cancelled)
         {
+            _world.Refund(project.Owner, project.Paid);
             _world.ReleaseEntityId(project.Id);
             _world.Emit(new(_world.Tick, WorldEventKind.ConstructionCancelled, project.Id, project.Position, project.UnitType, Owner: project.Owner));
         }
@@ -420,7 +468,7 @@ internal sealed class ConstructionSystem
         foreach (var projects in _constructionProjects.Values)
             foreach (var project in projects.Values)
                 destination[at++] = new(project.Id, project.Owner, project.UnitType, project.Position, project.ReservedAt > 0)
-                { UnpaidCost = project.Recipe.Cost, QuarterTurns = project.QuarterTurns };
+                { UnpaidCost = project.Recipe.Cost - project.Paid, QuarterTurns = project.QuarterTurns };
     }
 
     internal static void WriteProjects(ConstructionSystem? system, BinaryWriter writer)
@@ -440,6 +488,7 @@ internal sealed class ConstructionSystem
                 writer.Write(project.ReservedAt);
                 writer.Write(project.LastAttempt);
                 writer.Write(project.QuarterTurns);
+                writer.Write(project.Paid);
             }
     }
 }

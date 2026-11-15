@@ -140,6 +140,7 @@ public partial class Sandbox : Node3D
                 LocomotionCatalog.Load([new("content/terrain.yaml", terrain.GetAsText())]),
                 WeaponCatalog.Load([new("weapons.yaml", weapons)]));
             _sensorVisibility = _catalog.Units.Any(unit => unit.Sensors is not null);
+            if (_verifySkirmish) _sensorVisibility = false; // This scripted laboratory controls and inspects both players.
             if (showSetup)
             {
                 OpenMatchSetup(_catalog);

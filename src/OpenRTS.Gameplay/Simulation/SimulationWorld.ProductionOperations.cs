@@ -29,8 +29,9 @@ public sealed partial class SimulationWorld
     GameplayConditions IProductionWorld.ReadConditions(UnitDefinition type, uint owner) => ReadConditions(type, owner);
     void IProductionWorld.RebuildMotionIndex() => RebuildMotionIndex();
 
-    bool IProductionWorld.TryFindExitPlacement(int type, WorldPosition origin, int radius, out WorldPosition exit) =>
-        TryFindExitPlacement(type, origin, radius, out exit);
+    bool IProductionWorld.TryFindExitPlacement(Entity producer, int type, WorldPosition origin, int radius, out WorldPosition exit) =>
+        TryFindExitPlacement(type, origin, radius, out exit, TypeOf(producer), producer.Get<Simulation.SpatialState>().Position);
+    void IProductionWorld.ClearExit(Entity producer, WorldPosition exit) => ClearExit(producer, exit);
 
     UnitDefinition IProductionWorld.TypeOf(Entity actor) => TypeOf(actor);
     int IProductionWorld.RotationOf(Entity actor) => RotationOf(actor);

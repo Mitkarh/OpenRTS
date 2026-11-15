@@ -67,6 +67,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
         : base(width, depth, seed, initialCapacity, tickRate)
     {
         ArgumentNullException.ThrowIfNull(mechanics);
+        if (!Enum.IsDefined(mechanics.ConstructionPayment)) throw new ArgumentException("Invalid construction payment policy.", nameof(mechanics));
         if (mechanics.FogVisibilityHoldTicks is < 0 or > 250) throw new ArgumentOutOfRangeException(nameof(mechanics.FogVisibilityHoldTicks));
         if (!Enum.IsDefined(mechanics.FogMode)) throw new ArgumentException("Invalid fog mode.", nameof(mechanics));
         if (speedPerTick < 1 || speedPerTick > 1 << 20) throw new ArgumentOutOfRangeException(nameof(speedPerTick));
@@ -119,7 +120,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
         if (mechanics.Transport is { } transport && (usesTransport || !ReferenceEquals(transport, GameplayMechanics.BuiltInTransport)))
             _transport = new(this, transport.Create());
         if (mechanics.Construction is { } construction && (usesConstruction || !ReferenceEquals(construction, GameplayMechanics.BuiltInConstruction)))
-            _construction = new(this, construction.Create());
+            _construction = new(this, construction.Create(), mechanics.ConstructionPayment);
         _combatTargetRule = mechanics.CombatTargeting?.Create();
         _endOfTick = mechanics.EndOfTick?.Create();
     }
@@ -196,6 +197,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
         AdvanceSupply();
         _economy.AdvanceIncome(ExistingStorage, Tick);
         _production.Advance(ExistingStorage, StepCancellation);
+        ClearStoppedPassages();
         SynchronizeVisibility(cancellationToken);
         ForgetHiddenTargets();
         UpdatePresentation();

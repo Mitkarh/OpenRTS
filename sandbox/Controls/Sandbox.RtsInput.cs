@@ -38,6 +38,7 @@ public partial class Sandbox
         _rtsOverlay.RegisterCursor("grenade", new Color(1, 0.55f, 0.12f), 18);
         _rtsOverlay.RegisterCursor("harvest", new Color(0.5f, 0.85f, 1), 18);
         _rtsOverlay.RegisterCursor("build", new Color(0.35f, 0.95f, 1), 20);
+        _rtsOverlay.RegisterCursor("upgrade", new Color(0.7f, 0.65f, 1), 20);
         _rtsOverlay.RegisterCursor("capture", new Color(0.95f, 0.85f, 0.2f), 20);
         _rtsOverlay.RegisterCursor("repair", new Color(0.2f, 1, 0.65f));
         if (DisplayServer.GetName() != "headless") Input.MouseMode = Input.MouseModeEnum.Hidden;
@@ -306,7 +307,7 @@ public partial class Sandbox
         { IssueRadarAttack(radar, click.ShiftPressed); return; }
         if (picked is { } airbase && Ally(airbase) && _catalog!.Units[airbase.UnitType].Airbase is not null && CanIssue(UnitActionKind.ReturnToBase))
         { IssueAction(UnitActionKind.ReturnToBase, point, airbase.Id, click.ShiftPressed); return; }
-        if (!click.CtrlPressed && picked is { } supply && (TryContextUpgrade(supply) || ContextSupply(supply))) return;
+        if (!click.CtrlPressed && picked is { } supply && (TryContextUpgrade(supply, click.ShiftPressed) || ContextSupply(supply))) return;
         if (picked is { } capturable && CapturableTarget(capturable) && ContextCapture(capturable, click.ShiftPressed)) return;
         bool enemy = picked is { } enemyPose && Enemy(enemyPose);
         bool repair = !enemy && picked is { } ally && Ally(ally) && ally.Health < _catalog!.Units[ally.UnitType].MaxHealth && _catalog.Units[ally.UnitType].Armor != ArmorKind.Living && CanIssue(UnitActionKind.Repair) && !click.CtrlPressed;
@@ -473,16 +474,28 @@ public partial class Sandbox
         {
             if (Pick(workPoint) is { } supply)
             {
-                if (ContextUpgrade(supply) is not null) _rtsOverlay.CustomCursor = "build";
+                if (ContextUpgrade(supply) is not null) _rtsOverlay.CustomCursor = "upgrade";
                 else if (ContextSupplyAction(supply) is not null) _rtsOverlay.CustomCursor = "harvest";
             }
             var ghost = PickProject(workPoint);
             var site = Pick(workPoint);
-            if (ghost is { } plan && BuildersFor(plan.Owner, plan.Position).Length > 0 ||
+            if (ghost is { Upgrade: not null } upgrade && BuildersFor(upgrade.Owner, upgrade.Position).Length > 0)
+                _rtsOverlay.CustomCursor = "upgrade";
+            else if (ghost is { } plan && BuildersFor(plan.Owner, plan.Position).Length > 0 ||
                 site is { } unfinished && unfinished.Construction.Active && BuildersFor(unfinished.Presentation.Owner, unfinished.Current).Length > 0)
                 _rtsOverlay.CustomCursor = "build";
         }
-        _rtsOverlay.Rally = ActiveRecipients().FirstOrDefault(id => _selectionPoses[id].HasRally) is var rally && rally.Value != 0 ? Screen(_selectionPoses[rally] with { Current = _selectionPoses[rally].Rally }) : null;
+        _rtsOverlay.Rally = _rtsOverlay.RallyExit = null;
+        var rally = ActiveRecipients().FirstOrDefault(id => _selectionPoses[id].HasRally);
+        if (rally.Value != 0)
+        {
+            var producer = _selectionPoses[rally];
+            _rtsOverlay.Rally = Screen(producer with { Previous = producer.Rally, Current = producer.Rally });
+            var offset = _catalog!.Units[producer.UnitType].TaskQueues.FirstOrDefault()?.Exit ?? default;
+            var (x, y) = producer.QuarterTurns switch { 1 => (-offset.Y, offset.X), 2 => (-offset.X, -offset.Y), 3 => (offset.Y, -offset.X), _ => (offset.X, offset.Y) };
+            var exit = new WorldPosition(producer.Current.X + x, producer.Current.Y + y, producer.Current.Elevation);
+            _rtsOverlay.RallyExit = Screen(producer with { Previous = exit, Current = exit });
+        }
         if (OverRtsPanel(_pointer))
         { _rtsOverlay.CustomCursor = null; cursor = _actionButtons.Values.Any(button => button.Disabled && button.GetGlobalRect().HasPoint(_pointer)) ? RtsCursor.Unavailable : RtsCursor.Default; }
         _rtsOverlay.Cursor = cursor;

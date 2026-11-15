@@ -18,6 +18,8 @@ public sealed partial class SimulationWorld
 
     private static int CompletedUpgrade(Entity actor) => actor.Has<UpgradeState>() ? actor.Get<UpgradeState>().Completed : -1;
     private static bool IsUpgrading(Entity actor) => actor.Has<UpgradeState>() && actor.Get<UpgradeState>().Work > 0;
+    private static bool OwnsUpgradeProject(Entity actor, uint owner) => actor.Has<UpgradeState>() &&
+        actor.Get<UpgradeState>() is { Project: >= 0 } project && project.Payer == owner;
     private bool UpgradeImmobilizes(Entity actor) => IsUpgrading(actor) && TypeOf(actor).Movable;
 
     private void ApplyUpgrade(WorldCommand command)
@@ -42,16 +44,24 @@ public sealed partial class SimulationWorld
         var target = _entityHandles[targetIndex];
         var type = TypeOf(target);
         int variant = type.UpgradeIndex(command.Action ?? type.DefaultUpgrade?.Id);
-        uint owner = actor.Get<OwnershipState>().Owner;
+        bool selectedTarget = actorIndex == targetIndex;
+        uint owner = selectedTarget && command.Owner != 0 ? command.Owner : actor.Get<OwnershipState>().Owner;
         uint previousOwner = target.Get<OwnershipState>().Owner;
         if (variant < 0 || owner == 0 || !IsOnMap(actor) || !IsOnMap(target) || IsConstructing(actor) ||
-            IsConstructing(target) || target.Get<UpgradeState>() is { Project: >= 0 } or { Completed: >= 0 })
+            IsConstructing(target) || target.Get<UpgradeState>().Completed >= 0)
         { RejectAction(command.TargetEntity); return; }
 
         var upgrade = type.Upgrades[variant];
+        if (target.Get<UpgradeState>() is { Project: >= 0 } existing)
+        {
+            if (existing.Payer != owner || existing.Project != variant || !upgrade.Support ||
+                !selectedTarget && !CanSupportUpgrade(actor, target)) { RejectAction(command.TargetEntity); return; }
+            if (!selectedTarget) IssueOrder(actorIndex, new(UnitActionKind.UpgradeSupport, default, command.TargetEntity), command.Queued);
+            return;
+        }
         if ((upgrade.ClaimNeutral ? previousOwner != 0 || _transport?.HasPassengers(target) == true ||
             target.Has<MineState>() && target.Get<MineState>().Remaining == 0 : owner != previousOwner) ||
-            (upgrade.Support ? actorIndex == targetIndex || !CanSupportUpgrade(actor, target) : actorIndex != targetIndex) ||
+            (upgrade.Support ? !selectedTarget && !CanSupportUpgrade(actor, target) : !selectedTarget) ||
             !_economy.Spend(owner, upgrade.Cost))
         { RejectAction(command.TargetEntity); return; }
 
@@ -59,11 +69,16 @@ public sealed partial class SimulationWorld
         ref var project = ref target.Get<UpgradeState>();
         project.Project = variant;
         project.Payer = owner;
-        project.Support = upgrade.Support ? command.Entity : default;
+        project.Support = upgrade.Support && !selectedTarget ? command.Entity : default;
         _upgradeProjects.Add(command.TargetEntity.Value);
-        if (upgrade.Support)
-            IssueOrder(actorIndex, new(UnitActionKind.UpgradeSupport, default, command.TargetEntity), queued: false);
+        if (upgrade.Support && !selectedTarget)
+            IssueOrder(actorIndex, new(UnitActionKind.UpgradeSupport, default, command.TargetEntity), command.Queued);
     }
+
+    private bool CanSupportUpgradeProject(Entity actor, EntityId id) =>
+        TryGetEntity(id, out var target) && target.Has<UpgradeState>() &&
+        target.Get<UpgradeState>() is { Project: >= 0 } project && project.Payer == actor.Get<OwnershipState>().Owner &&
+        TypeOf(target).Upgrades[project.Project].Support && CanSupportUpgrade(actor, target);
 
     private bool CanSupportUpgrade(Entity actor, Entity target)
     {
@@ -78,6 +93,21 @@ public sealed partial class SimulationWorld
         return ActorDistanceSquared(actor, target) <= range * range;
     }
 
+    private IEnumerable<WorldPosition> UpgradeApproaches(Entity actor, Entity target)
+    {
+        var type = TypeOf(actor);
+        int actorType = actor.Get<EntityIdentity>().Type;
+        var from = actor.Get<SpatialState>().Position;
+        var at = target.Get<SpatialState>().Position;
+        var targetType = TypeOf(target);
+        if (targetType.Footprint is not { } footprint) yield break;
+        foreach (var point in Construction.ConstructionGeometry.Approaches(footprint, at, from, type.Body,
+            type.ConstructionRange, Width, Depth))
+            if (ObjectGeometry.DistanceSquared(type, point, targetType, at, out _, out _) <= (long)type.ConstructionRange * type.ConstructionRange &&
+                StopAllowed(actorType, point) && (_motion ?? _combatIndex)?.ClearPlacement(point, out _, type.Body) != false &&
+                (_navigation is null || Resolver(actorType).CanReach(from, point, StepCancellation))) yield return point;
+    }
+
     private void PrepareUpgrades()
     {
         if (_upgradeProjects.Count == 0) return;
@@ -87,16 +117,36 @@ public sealed partial class SimulationWorld
         {
             if (!TryGetEntity(new(id), out var target)) continue;
             var state = target.Get<UpgradeState>();
-            if (state.Support == default)
+            if (!TypeOf(target).Upgrades[state.Project].Support)
             {
                 AdvanceUpgrade(target);
                 continue;
             }
-            if (!TryGetEntity(state.Support, out var support) || !IsOnMap(support) ||
-                support.Get<OwnershipState>().Owner != state.Payer || !CanSupportUpgrade(support, target) ||
-                support.Get<OrderState>() is not { HasOrder: true, ActiveOrder.Kind: UnitActionKind.UpgradeSupport } orders ||
-                orders.ActiveOrder.Target.Value != id)
-                CancelUpgrade(target, restoreNeutral: true);
+            if (TryGetEntity(state.Support, out var support) && IsOnMap(support) &&
+                support.Get<OwnershipState>().Owner == state.Payer && CanSupportUpgrade(support, target) &&
+                support.Get<OrderState>() is { HasOrder: true, ActiveOrder.Kind: UnitActionKind.UpgradeSupport } active &&
+                active.ActiveOrder.Target.Value == id) continue;
+            target.Get<UpgradeState>().Support = default;
+            if ((Tick + id) % 8 != 0) continue;
+            Entity best = default;
+            long distance = 8192L * 8192;
+            for (int index = 0; index < Count; index++)
+            {
+                var candidate = _entityHandles[index];
+                var orders = candidate.Get<OrderState>();
+                if (!orders.AutoBuild || orders.HasOrder || orders.PendingOrders is { Count: > 0 } ||
+                    orders.SuspendedOrder.HasValue || orders.CombatTarget != default || candidate.Get<MotionState>().Moving ||
+                    candidate.Get<OwnershipState>().Owner != state.Payer || !IsOnMap(candidate) || !CanSupportUpgrade(candidate, target)) continue;
+                long d = ActorDistanceSquared(candidate, target);
+                if (d > distance || d == distance && best != default && candidate.Get<EntityIdentity>().Id.Value > best.Get<EntityIdentity>().Id.Value) continue;
+                if (!InUpgradeRange(candidate, target) && TypeOf(target).Footprint is not null && !UpgradeApproaches(candidate, target).Any()) continue;
+                best = candidate; distance = d;
+            }
+            if (best != default)
+            {
+                target.Get<UpgradeState>().Support = best.Get<EntityIdentity>().Id;
+                IssueOrder(_indices[best.Get<EntityIdentity>().Id], new(UnitActionKind.UpgradeSupport, default, new(id)), false);
+            }
         }
     }
 
@@ -105,8 +155,7 @@ public sealed partial class SimulationWorld
         var actor = _entityHandles[index];
         ref var orders = ref actor.Get<OrderState>();
         var identity = actor.Get<EntityIdentity>();
-        if (!TryGetEntity(orders.ActiveOrder.Target, out var target) || !target.Has<UpgradeState>() ||
-            target.Get<UpgradeState>().Support != identity.Id)
+        if (!CanSupportUpgradeProject(actor, orders.ActiveOrder.Target) || !TryGetEntity(orders.ActiveOrder.Target, out var target))
         {
             orders.HasOrder = false;
             orders.OrderPhase = OrderPhase.Idle;
@@ -117,7 +166,12 @@ public sealed partial class SimulationWorld
         var position = actor.Get<SpatialState>().Position;
         if (!InUpgradeRange(actor, target) || TypeOf(actor).Movable && !StopAllowed(identity.Type, position))
         {
-            if (TypeOf(target).Footprint is not null) ApproachFootprint(index, target);
+            if (TypeOf(target).Footprint is not null)
+            {
+                if (!actor.Get<MotionState>().Moving && (Tick + identity.Id.Value) % 4 == 0)
+                    foreach (var point in UpgradeApproaches(actor, target))
+                        if (SetTarget(index, point) && actor.Get<MotionState>().Moving) break;
+            }
             else if ((Tick + identity.Id.Value) % 4 == 0 || orders.OrderStarted == Tick)
             {
                 var goal = ObjectGeometry.ClosestPoint(TypeOf(target), target.Get<SpatialState>().Position, position);
@@ -127,6 +181,7 @@ public sealed partial class SimulationWorld
             return;
         }
         Halt(index);
+        target.Get<UpgradeState>().Support = identity.Id;
         orders.OrderPhase = OrderPhase.Engaging;
         AdvanceUpgrade(target);
     }
@@ -199,7 +254,7 @@ public sealed partial class SimulationWorld
         var state = actor.Get<UpgradeState>();
         var completed = state.Completed < 0 ? null : type.Upgrades[state.Completed];
         var project = state.Project < 0 ? null : type.Upgrades[state.Project];
-        var visual = state.Work > 0 ? project : completed;
+        var visual = completed;
         if (visual is not null) visualStates |= type.StateMask(visual.Id);
         return new(completed?.Id, project?.Id, state.Payer, state.Work, project?.Ticks ?? 0);
     }
