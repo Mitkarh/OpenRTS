@@ -76,6 +76,8 @@ public sealed partial class FrameExchange
             FogStates = player < 0 ? new CellVisibility[cells] : source.FogStates.AsSpan(player * cells, cells).ToArray() };
         var visible = new HashSet<EntityId>();
         for (int i = 0; i < source.Count; i++) if ((source.Observers[i] & bit) != 0) visible.Add(source.Poses[i].Id);
+        var ownProjects = new HashSet<EntityId>();
+        for (int i = 0; i < source.ProjectCount; i++) if (source.Projects[i].Owner == viewer) ownProjects.Add(source.Projects[i].Id);
         var own = new HashSet<EntityId>(); var poses = new List<EntityPose>(); var weapons = new List<WeaponPose>();
         for (int i = 0; i < source.Count; i++)
         {
@@ -94,7 +96,7 @@ public sealed partial class FrameExchange
             }
             if ((source.PreviousObservers[i] & bit) == 0) p = p with { Previous = p.Current,
                 Presentation = p.Presentation with { PreviousBodyFacing = p.Presentation.BodyFacing, PreviousWeaponFacing = p.Presentation.WeaponFacing } };
-            p = p with { WeaponOffset = start, Order = mine ? p.Order with { Target = visible.Contains(p.Order.Target) ? p.Order.Target : default } : default,
+            p = p with { WeaponOffset = start, Order = mine ? p.Order with { Target = visible.Contains(p.Order.Target) || ownProjects.Contains(p.Order.Target) ? p.Order.Target : default } : default,
                 Health = health ? p.Health : 0, Presentation = states ? p.Presentation : p.Presentation with { States = 0 },
                 TerrainStranded = states && p.TerrainStranded, Construction = states ? p.Construction : default,
                 Carrier = visible.Contains(p.Carrier) ? p.Carrier : default,

@@ -22,7 +22,7 @@ internal interface IConstructionWorld
     bool CanQueueOrder(Entity actor);
     void IssueOrder(EntityId actor, UnitOrder order, bool queued);
     void Halt(EntityId actor);
-    bool StopAllowed(int type, WorldPosition position);
+    bool CanApproach(Entity actor, WorldPosition position);
     bool TrySetTarget(EntityId actor, WorldPosition position);
     bool TryEvacuate(EntityId actor, WorldPosition position, bool preserveOrder);
 

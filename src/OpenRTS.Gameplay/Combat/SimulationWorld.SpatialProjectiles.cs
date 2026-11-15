@@ -11,10 +11,19 @@ public sealed partial class SimulationWorld
     }
     private static WorldPosition SpatialStep(WorldPosition a, WorldPosition b, int speed)
     {
-        long length = (long)SquareRoot((ulong)ProjectileDistanceSquared(a, b, true));
-        if (length <= speed) return b;
-        return new(a.X + (int)(((long)b.X - a.X) * speed / length), a.Y + (int)(((long)b.Y - a.Y) * speed / length),
-            a.Elevation + (int)(((long)b.Elevation - a.Elevation) * speed / length));
+        long dx = (long)b.X - a.X, dy = (long)b.Y - a.Y, dz = (long)b.Elevation - a.Elevation;
+        long squared = dx * dx + dy * dy + dz * dz;
+        if (squared <= (long)speed * speed) return b;
+        long length = (long)SquareRoot((ulong)squared);
+        if (length * length < squared) length++;
+        int x = (int)(dx * speed / length), y = (int)(dy * speed / length), z = (int)(dz * speed / length);
+        if (x == 0 && y == 0 && z == 0)
+        {
+            if (Math.Abs(dx) >= Math.Abs(dy) && Math.Abs(dx) >= Math.Abs(dz)) x = Math.Sign(dx);
+            else if (Math.Abs(dy) >= Math.Abs(dz)) y = Math.Sign(dy);
+            else z = Math.Sign(dz);
+        }
+        return new(a.X + x, a.Y + y, a.Elevation + z);
     }
     private static WorldPosition SpatialInterpolate(WorldPosition a, WorldPosition b, int t) =>
         new(a.X + (int)(((long)b.X - a.X) * t / 65536), a.Y + (int)(((long)b.Y - a.Y) * t / 65536),

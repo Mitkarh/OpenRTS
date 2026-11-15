@@ -36,7 +36,12 @@ public sealed partial class SimulationWorld
     bool IConstructionWorld.CanQueueOrder(Entity actor) => (actor.Get<OrderState>().PendingOrders?.Count ?? 0) < MaximumQueuedOrders;
     void IConstructionWorld.IssueOrder(EntityId actor, UnitOrder order, bool queued) => IssueOrder(_indices[actor], order, queued);
     void IConstructionWorld.Halt(EntityId actor) => Halt(_indices[actor]);
-    bool IConstructionWorld.StopAllowed(int type, WorldPosition position) => StopAllowed(type, position);
+    bool IConstructionWorld.CanApproach(Entity actor, WorldPosition position)
+    {
+        int type = actor.Get<EntityIdentity>().Type;
+        return StopAllowed(type, position) && (_navigation is null ||
+            Resolver(type).CanReach(actor.Get<SpatialState>().Position, position, StepCancellation));
+    }
     bool IConstructionWorld.TrySetTarget(EntityId actor, WorldPosition position) => SetTarget(_indices[actor], position);
 
     bool IConstructionWorld.TryEvacuate(EntityId actor, WorldPosition position, bool preserveOrder) =>

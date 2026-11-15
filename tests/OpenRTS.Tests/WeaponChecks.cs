@@ -12,6 +12,46 @@ internal static class WeaponChecks
     private static WeaponPose[] Mounts(SimulationWorld world) { var poses = new WeaponPose[world.WeaponCount]; world.CopyWeaponPoses(poses); return poses; }
     public static void Run(Action<string, Action> test)
     {
+        test("Weapons: slow spatial projectiles advance within their budget and hit diagonal targets", () =>
+        {
+            foreach (var offset in new WorldPosition[] { new(1, 1, 1), new(256, 256, 256), new(-256, -256, 256) })
+            {
+                var weapon = new WeaponDefinition(4096, 4096, 10, 1000000, 0, projectile: ProjectileKind.Cannon,
+                    projectileSpeed: 1, spatialTrajectory: true);
+                using var world = new SimulationWorld([
+                    new("shooter", 100, ["idle", "move", "fire"], body: BodyShape.None, weapon: weapon),
+                    new("target", 100, body: BodyShape.None)], 16384, 16384);
+                var start = new WorldPosition(2048, 2048);
+                var shooter = world.AddInitialUnit(0, start, 1);
+                var target = world.AddInitialUnit(1, new(start.X + offset.X, start.Y + offset.Y, offset.Elevation), 2);
+                world.Step([new(1, 0, 1, CommandKind.AttackTarget, shooter, TargetEntity: target)]);
+                var shots = new ProjectilePose[1];
+                var previous = start;
+                bool hit = false;
+                for (int i = 0; i < 800 && !hit; i++)
+                {
+                    world.Step();
+                    WorldPosition current;
+                    if (world.ProjectileCount != 0)
+                    {
+                        world.CopyProjectilePoses(shots);
+                        current = shots[0].Current;
+                        NavigationChecks.Check(current != previous, "A spatial projectile spent fuel without moving");
+                    }
+                    else
+                    {
+                        var impact = world.Events.ToArray().Single(e => e.Kind == WorldEventKind.ProjectileImpact);
+                        current = impact.Position;
+                        hit = impact.TargetEntity == target;
+                    }
+                    long x = (long)current.X - previous.X, y = (long)current.Y - previous.Y, z = (long)current.Elevation - previous.Elevation;
+                    NavigationChecks.Check(x * x + y * y + z * z <= 1, "Rounding moved a spatial projectile beyond its one-unit budget");
+                    previous = current;
+                }
+                NavigationChecks.Check(hit && Pose(world, target.Value).Health == 90, "A slow spatial projectile failed to reach its diagonal target");
+            }
+        });
+
         test("Weapons: named YAML mounts validate references and canonical gameplay fingerprints", () =>
         {
             var catalog = LocomotionChecks.Units();

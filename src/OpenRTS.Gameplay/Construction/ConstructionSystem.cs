@@ -167,8 +167,8 @@ internal sealed class ConstructionSystem
         if (type.Movable && !builder.Get<MotionState>().Moving && (state.OrderStarted == _world.Tick || (_world.Tick + order.Target.Value) % 8 == 0))
         {
             var footprint = target.Footprint!;
-            foreach (var point in ConstructionGeometry.Exits(footprint, site, position, type.Body, _world.Width, _world.Depth).OrderBy(p => ObjectGeometry.Squared(position, p)))
-                if (_world.StopAllowed(identity.Type, point) && _world.TrySetTarget(identity.Id, point) && builder.Get<MotionState>().Moving) break;
+            foreach (var point in ConstructionGeometry.Exits(footprint, site, position, type.Body, _world.Width, _world.Depth))
+                if (_world.CanApproach(builder, point) && _world.TrySetTarget(identity.Id, point) && builder.Get<MotionState>().Moving) break;
         }
         state.OrderPhase = builder.Get<MotionState>().Moving ? OrderPhase.Approaching : OrderPhase.Waiting;
     }
@@ -270,11 +270,27 @@ internal sealed class ConstructionSystem
                 if (!_world.CanAfford(project.Owner, project.Recipe.Cost)) return false;
                 project.ReservedAt = _world.Tick;
                 _siteReservations.Add(project);
+            }
+            else if (_world.Tick - project.ReservedAt >= ClearanceTimeout)
+            {
+                RemoveProject(project, cancelled: true);
+                return false;
+            }
+            if ((_world.Tick - project.ReservedAt) % 8 == 0)
+            {
                 _siteOccupants.Sort(static (a, b) => a.Get<EntityIdentity>().Id.Value.CompareTo(b.Get<EntityIdentity>().Id.Value));
                 _evacuationGoals.Clear();
-                foreach (var actor in _siteOccupants) Evacuate(actor, project);
+                foreach (var actor in _siteOccupants)
+                    if (IsEvacuating(actor, project)) _evacuationGoals.Add((actor.Get<MotionState>().Target, TypeOf(actor).Body));
+                foreach (var actor in _siteOccupants)
+                    if (!IsEvacuating(actor, project)) Evacuate(actor, project);
             }
-            else if (_world.Tick - project.ReservedAt >= ClearanceTimeout) RemoveProject(project, cancelled: true);
+            return false;
+        }
+        if (!_world.CanAfford(project.Owner, project.Recipe.Cost))
+        {
+            project.ReservedAt = 0;
+            _siteReservations.Remove(project);
             return false;
         }
         if (!_world.PrepareFootprint(typeDefinition, project.Position, out var grid))
@@ -357,6 +373,13 @@ internal sealed class ConstructionSystem
         return true;
     }
 
+    private bool IsEvacuating(Entity actor, ConstructionProject project)
+    {
+        var motion = actor.Get<MotionState>();
+        return motion.Moving && actor.Get<NavigationAgentState>().WaitTicks < 8 &&
+            !SiteTouches(project, motion.Target, motion.Target, TypeOf(actor).Body);
+    }
+
     private void Evacuate(Entity actor, ConstructionProject project)
     {
         var identity = actor.Get<EntityIdentity>();
@@ -365,8 +388,7 @@ internal sealed class ConstructionSystem
         var footprint = ProjectType(project).Footprint!;
         var orders = actor.Get<OrderState>();
         bool preserveOrder = orders.HasOrder && orders.ActiveOrder.Kind == UnitActionKind.Build && orders.ActiveOrder.Target == project.Id;
-        foreach (var point in ConstructionGeometry.Exits(footprint, project.Position, position, type.Body, _world.Width, _world.Depth)
-            .OrderBy(p => ObjectGeometry.Squared(position, p)))
+        foreach (var point in ConstructionGeometry.Exits(footprint, project.Position, position, type.Body, _world.Width, _world.Depth))
         {
             if (_evacuationGoals.Any(goal => BodyGeometry.Overlap(point, point, type.Body, goal.Position, goal.Position, goal.Body)) ||
                 !_world.TryEvacuate(identity.Id, point, preserveOrder)) continue;

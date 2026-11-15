@@ -46,6 +46,150 @@ internal static class ConstructionChecks
 
     public static void Run(Action<string, Action> test)
     {
+        test("Construction: player frames preserve their own blueprint targets without exposing enemy projects", () =>
+        {
+            using var world = SimulationWorld.CreateWithMechanics(new() { FogCellSize = 1024 }, Types(), 24576, 16384,
+                navigationGrid: new(24, 16), players: [new(1, "Blue", 500), new(2, "Red", 500)]);
+            var blue = world.AddInitialUnit(0, new(2048, 2048), 1);
+            var red = world.AddInitialUnit(0, new(18432, 12288), 2);
+            world.Step([new(1, 0, 1, CommandKind.PlanConstruction, blue, Site, Action: "other"),
+                new(1, 0, 2, CommandKind.PlanConstruction, red, Site, Action: "other")]);
+            var projects = Projects(world);
+            var frames = new FrameExchange();
+            frames.TryPublish(world);
+            using var pinned = frames.AcquireLatest(1)!;
+            foreach (uint owner in new uint[] { 1, 2 })
+            {
+                using var frame = frames.AcquireLatest(owner)!;
+                var project = projects.Single(p => p.Owner == owner);
+                NavigationChecks.Check(frame.ConstructionProjects.Length == 1 && frame.ConstructionProjects[0] == project &&
+                    frame.Poses.ToArray().Single().Order.Target == project.Id, "The player's blueprint target was lost or an enemy project leaked");
+            }
+            world.Step([new(2, 0, 1, CommandKind.CancelConstruction, Owner: 1, TargetEntity: projects[0].Id)]);
+            frames.TryPublish(world);
+            using var latest = frames.AcquireLatest(1)!;
+            NavigationChecks.Check(latest.ConstructionProjects.IsEmpty && latest.Poses[0].Order.Target == default &&
+                pinned.Poses[0].Order.Target == projects[0].Id, "Cancellation changed a pinned target or retained it in the new frame");
+        });
+
+        test("Construction: insufficient credits wait without cloning the map and resume on income", () =>
+        {
+            using var world = new SimulationWorld(Types(), 524288, 524288, navigationGrid: new(512, 512),
+                players: [new(1, "Blue", 0)]);
+            var engineer = world.AddInitialUnit(0, new(5376, 8192), 1);
+            var grid = world.NavigationGrid;
+            world.Step([new(1, 0, 1, CommandKind.PlanConstruction, engineer, Site, Action: "other")]);
+            var project = Projects(world).Single().Id;
+            for (int i = 0; i < 8; i++) world.Step();
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 8; i++) world.Step();
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            NavigationChecks.Check(allocated < 32768 && ReferenceEquals(grid, world.NavigationGrid) &&
+                Projects(world).Single().Id == project && Player(world, 1).Credits == 0,
+                $"Waiting for credits rebuilt the map or changed the project: {allocated} bytes for eight ticks");
+            world.Step([new(world.Tick + 1, 0, 1, CommandKind.Spawn, Position: new(16384, 16384), UnitType: 1, Owner: 1)]);
+            int started = 0;
+            for (int i = 0; i < 30; i++)
+            {
+                world.Step();
+                started += world.Events.ToArray().Count(e => e.Entity == project && e.Kind == WorldEventKind.ConstructionStarted);
+            }
+            NavigationChecks.Check(started == 1 && Projects(world).Length == 0 && !Pose(world, project).Construction.Active,
+                "The waiting project did not start exactly once when income paid for it");
+        });
+
+        test("Construction: an engineer starts after a temporarily blocked evacuation exit clears", () =>
+        {
+            SimulationReport? reference = null;
+            foreach (int workers in new[] { 1, 4 })
+            {
+                var ring = from y in Enumerable.Range(6, 4) from x in Enumerable.Range(6, 4)
+                    where (x is 6 or 9 || y is 6 or 9) && (x != 6 || y != 8)
+                    select new GridCell(x, y);
+                using var world = new SimulationWorld(Types(), 24576, 16384, speedPerTick: 256,
+                    navigationGrid: new(24, 16, ring), navigationWorkers: workers,
+                    reverseNavigationJobs: workers > 1, players: [new(1, "Blue", 500)]);
+                var engineer = world.AddInitialUnit(0, new(4096, 8704), 1);
+                var occupant = world.AddInitialUnit(0, Site, 1);
+                var blocker = world.AddInitialUnit(0, new(6656, 8704), 1);
+                world.Step([new(1, 0, 1, CommandKind.PlanConstruction, engineer, Site, Action: "other")]);
+                var project = Projects(world).Single().Id;
+                for (int i = 0; i < 39; i++) world.Step();
+                NavigationChecks.Check(Projects(world).Single().Clearing && Pose(world, occupant).Current == Site &&
+                    Pose(world, engineer).Current != new WorldPosition(4096, 8704) && Player(world, 1).Credits == 500,
+                    "The engineer did not approach and wait for the occupied exit without spending");
+
+                world.Step([new(world.Tick + 1, 0, 1, CommandKind.Move, blocker, new(4096, 10752))]);
+                int started = 0, completed = 0, cancelled = 0;
+                for (int i = 0; i < 120; i++)
+                {
+                    world.Step();
+                    foreach (var value in world.Events)
+                    {
+                        if (value.Entity != project) continue;
+                        if (value.Kind == WorldEventKind.ConstructionStarted) started++;
+                        if (value.Kind == WorldEventKind.ConstructionCompleted) completed++;
+                        if (value.Kind == WorldEventKind.ConstructionCancelled) cancelled++;
+                    }
+                }
+                NavigationChecks.Check(started == 1 && completed == 1 && cancelled == 0 && Projects(world).Length == 0 &&
+                    Pose(world, occupant).Current != Site && !Pose(world, project).Construction.Active &&
+                    Player(world, 1).Credits == 475, $"Construction did not resume once after clearance: starts={started}, completed={completed}, cancelled={cancelled}, credits={Player(world, 1).Credits}");
+                var report = world.Report();
+                NavigationChecks.Check(reference is null || reference == report, "Evacuation retry differs by worker scheduling");
+                reference = report;
+            }
+        });
+
+        test("Construction: a reachable perimeter point works when all four initial approaches are blocked", () =>
+        {
+            using var world = new SimulationWorld(Types(), 24576, 16384, speedPerTick: 256,
+                navigationGrid: new(24, 16, [new(6, 8), new(9, 8), new(6, 6), new(6, 9)]),
+                players: [new(1, "Blue", 500)]);
+            var engineer = world.AddInitialUnit(0, new(2048, 8192), 1);
+            NavigationChecks.Check(world.CanAccessBuildingSite(engineer, 4, Site, 0), "Static preview missed a reachable perimeter point");
+            world.Step([new(1, 0, 1, CommandKind.PlanConstruction, engineer, Site, Action: "other")]);
+            var project = Projects(world).Single().Id;
+            for (int i = 0; i < 160; i++) world.Step();
+            NavigationChecks.Check(Projects(world).Length == 0 && !Pose(world, project).Construction.Active &&
+                Player(world, 1).Credits == 475, "The engineer did not build through the alternative approach");
+        });
+
+        test("Construction: a builder inside the project evacuates around four occupied exits", () =>
+        {
+            using var world = World();
+            var engineer = world.AddInitialUnit(0, Site, 1);
+            foreach (var point in new WorldPosition[] { new(6911, 8192), new(9473, 8192), new(8192, 6911), new(8192, 9473) })
+                world.AddInitialUnit(0, point, 1);
+            world.Step([new(1, 0, 1, CommandKind.PlanConstruction, engineer, Site, Action: "power")]);
+            var project = Projects(world).Single().Id;
+            for (int i = 0; i < 120; i++) world.Step();
+            NavigationChecks.Check(Projects(world).Length == 0 && !Pose(world, project).Construction.Active &&
+                Pose(world, engineer).Current != Site, "The builder ignored free perimeter exits or stopped its own evacuation");
+        });
+
+        test("Construction: evacuation retries preserve a healthy exit and its queued order", () =>
+        {
+            var large = new FootprintDefinition(4, 4, from y in Enumerable.Range(0, 4) from x in Enumerable.Range(0, 4)
+                select new FootprintCell(x, y, new(false)));
+            using var world = new SimulationWorld([
+                new("yard", 100, movable: false, constructionRange: 8192, products: [new("build", "site", "", OnSite: true)]),
+                new("site", 100, movable: false, footprint: large, build: new(2, kind: ProductionKind.PlaceBuilding)),
+                new("occupant", 100)], 24576, 16384, speedPerTick: 128, navigationGrid: new(24, 16));
+            var yard = world.AddInitialUnit(0, new(2048, 8192), 1);
+            var occupant = world.AddInitialUnit(2, Site, 1);
+            world.Step([new(1, 0, 1, CommandKind.PlanConstruction, yard, Site, Action: "build")]);
+            var project = Projects(world).Single().Id;
+            var exit = Pose(world, occupant).Order.Destination;
+            world.Step([new(2, 0, 1, CommandKind.Move, occupant, new(4096, 12288), Queued: true)]);
+            for (int i = 0; i < 8; i++) world.Step();
+            NavigationChecks.Check(Projects(world).Single().Clearing && Pose(world, occupant).Order.Destination == exit &&
+                Pose(world, occupant).Order.QueuedCount == 1, "A retry replaced a healthy evacuation or erased its queued order");
+            for (int i = 0; i < 80; i++) world.Step();
+            NavigationChecks.Check(Projects(world).Length == 0 && !Pose(world, project).Construction.Active &&
+                Pose(world, occupant).Current == new WorldPosition(4096, 12288), "Evacuation did not finish with the queued order intact");
+        });
+
         test("Construction: rotated blueprint, sparse foundation and removal share the same grid cells", () =>
         {
             var footprint = new FootprintDefinition(3, 2,

@@ -281,8 +281,7 @@ public sealed partial class SimulationWorld
                 _transformationExits.Add((motion.Target, body));
                 continue;
             }
-            foreach (var exit in ConstructionGeometry.Exits(footprint, plan.Position, position, body, Width, Depth)
-                .OrderBy(point => ObjectGeometry.Squared(position, point)))
+            foreach (var exit in ConstructionGeometry.Exits(footprint, plan.Position, position, body, Width, Depth))
             {
                 if (_transformationExits.Any(goal => BodyGeometry.Overlap(exit, exit, body, goal.Position, goal.Position, goal.Body)) ||
                     !TryEvacuate(id, exit, preserveOrder: false)) continue;

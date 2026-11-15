@@ -28,7 +28,28 @@ internal static class ConstructionGeometry
     }
 
     internal static IEnumerable<WorldPosition> Exits(FootprintDefinition footprint, WorldPosition site, WorldPosition from, BodyShape body, int width, int depth)
-        => Exits(footprint.HalfWidth, footprint.HalfHeight, site, from, body, width, depth);
+    {
+        var primary = Exits(footprint.HalfWidth, footprint.HalfHeight, site, from, body, width, depth).ToArray();
+        foreach (var point in primary.OrderBy(p => ObjectGeometry.Squared(from, p))) yield return point;
+
+        int left = site.X - footprint.HalfWidth - body.HalfWidth - 1;
+        int right = site.X + footprint.HalfWidth + body.HalfWidth + 1;
+        int top = site.Y - footprint.HalfHeight - body.HalfHeight - 1;
+        int bottom = site.Y + footprint.HalfHeight + body.HalfHeight + 1;
+        var perimeter = new List<WorldPosition>();
+        // shortcut: fallback samples the bounded footprint perimeter every 256 units; narrow authored entrances may need exact points.
+        for (int x = left; x < right; x += 256) { Add(new(x, top)); Add(new(x, bottom)); }
+        for (int y = top + 256; y < bottom; y += 256) { Add(new(left, y)); Add(new(right, y)); }
+        Add(new(right, top)); Add(new(right, bottom));
+        foreach (var point in perimeter.OrderBy(p => ObjectGeometry.Squared(from, p))) yield return point;
+
+        void Add(WorldPosition point)
+        {
+            if (point.X >= body.HalfWidth && point.Y >= body.HalfHeight &&
+                point.X <= width - body.HalfWidth && point.Y <= depth - body.HalfHeight && !primary.Contains(point))
+                perimeter.Add(point);
+        }
+    }
 
     internal static IEnumerable<WorldPosition> Exits(int halfWidth, int halfHeight, WorldPosition site, WorldPosition from, BodyShape body, int width, int depth)
     {
