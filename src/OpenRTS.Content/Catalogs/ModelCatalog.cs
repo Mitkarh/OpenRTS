@@ -8,7 +8,7 @@ public enum ModelFacing { Body, Weapon }
 public enum ModelDrawLayer { Surface, World, Foreground }
 public sealed record ModelPart(string Id, int Parent, string Resource, ModelFacing Facing,
     double Width, double Height, double PivotX, double PivotY, double OffsetX, double OffsetY, int Layer, string? Mount = null, ReadOnlyCollection<string>? VisibleWhen = null, ReadOnlyCollection<string>? HiddenWhen = null,
-    double Spin = 0, string? SpinWhen = null, string? LoopWhen = null, string? LoopAnimation = null, int Facings = 0, ModelDrawLayer? DrawLayer = null);
+    double Spin = 0, string? SpinWhen = null, string? LoopWhen = null, string? LoopAnimation = null, int Facings = 0, ModelDrawLayer? DrawLayer = null, bool EmitterSpin = false);
 public sealed record ModelAnimation(string Sequence, ReadOnlyCollection<string> Parts, double Bob, double Recoil, double Flash, double ScaleFrom = 1, double OpacityFrom = 1, double SlideX = 0, double SlideY = 0, ModelFacing? Facing = null);
 public sealed record ModelState(double Red, double Green, double Blue, double Scale, double Opacity, double Pulse = 0);
 public sealed record ModelDefinition(string Id, ReadOnlyCollection<ModelPart> Parts,
@@ -48,7 +48,7 @@ public sealed class ModelCatalog
                     if (part.DrawLayer is { } layer && !Enum.IsDefined(layer))
                         throw node.Error(id + ".Model.Parts." + name + ".DrawLayer", "Unknown sprite layer.");
                     ValidateVector(part.Size, 0.01, 32, "Size"); ValidateVector(part.Pivot, 0, 1, "Pivot"); ValidateVector(part.Offset, -32, 32, "Offset");
-                    ordered.Add(new(name, parent, part.Resource, part.Facing, part.Size[0], part.Size[1], part.Pivot[0], part.Pivot[1], part.Offset[0], part.Offset[1], part.Layer, part.Mount, Array.AsReadOnly(part.VisibleWhen), Array.AsReadOnly(part.HiddenWhen), part.Spin, part.SpinWhen, part.LoopWhen, part.LoopAnimation, part.Facings, part.DrawLayer));
+                    ordered.Add(new(name, parent, part.Resource, part.Facing, part.Size[0], part.Size[1], part.Pivot[0], part.Pivot[1], part.Offset[0], part.Offset[1], part.Layer, part.Mount, Array.AsReadOnly(part.VisibleWhen), Array.AsReadOnly(part.HiddenWhen), part.Spin, part.SpinWhen, part.LoopWhen, part.LoopAnimation, part.Facings, part.DrawLayer, part.EmitterSpin));
                     pending.RemoveAt(i--); progress = true;
                 }
                 if (!progress) throw node.Error(id + ".Model.Parts", "Part parent cycle.");
@@ -118,6 +118,7 @@ public sealed class ModelCatalog
         public string[] HiddenWhen { get; set; } = [];
         [Range(-720.0, 720.0)] public double Spin { get; set; }
         public string? SpinWhen { get; set; }
+        public bool EmitterSpin { get; set; }
         public string? LoopWhen { get; set; }
         public string? LoopAnimation { get; set; }
         public ModelFacing Facing { get; set; }

@@ -6,6 +6,58 @@ namespace OpenRTS.Core;
 public sealed partial class SimulationWorld
 {
     private readonly SensorState? _sensors;
+    private readonly Dictionary<EntityId, (WorldPosition Position, long StoppedAt)> _fieldDeployment = [];
+    private readonly List<(uint Owner, WorldPosition Position, int Jam, int Stealth)> _sensorFields = [];
+
+    private EmitterVisual ReadEmitterVisual(Frent.Entity entity)
+    {
+        var id = entity.Get<EntityIdentity>().Id;
+        var definition = TypeOf(entity).Sensors;
+        if (definition is null || !_fieldDeployment.TryGetValue(id, out var state) || !IsOnMap(entity) || IsConstructing(entity)) return default;
+        var spatial = entity.Get<SpatialState>();
+        return new(definition.JamRange, definition.StealthRange, state.StoppedAt, definition.DeployTicks,
+            spatial.Previous != spatial.Position, definition.StealthRange > 0);
+    }
+
+    private bool IsOpticallyConcealed(Frent.Entity entity) => _sensors is { } sensors && IsOnMap(entity) &&
+        !SignatureDetected(sensors, entity, sensors.Visual, sensors.Optical, []);
+
+    private void RefreshSensorFields()
+    {
+        _sensorFields.Clear();
+        for (int i = 0; i < Count; i++)
+        {
+            var entity = _entityHandles[i];
+            var profile = TypeOf(entity).Sensors;
+            if (profile is null || profile.JamRange == 0 && profile.StealthRange == 0) continue;
+            var id = entity.Get<EntityIdentity>().Id;
+            if (!IsOnMap(entity) || IsConstructing(entity)) { _fieldDeployment.Remove(id); continue; }
+            uint owner = entity.Get<OwnershipState>().Owner;
+            if (owner == 0) continue;
+            var position = entity.Get<SpatialState>().Position;
+            if (!_fieldDeployment.TryGetValue(id, out var prior) || prior.Position != position)
+                prior = (position, Tick);
+            _fieldDeployment[id] = prior;
+            int stealth = Tick - prior.StoppedAt >= profile.DeployTicks ? profile.StealthRange : 0;
+            _sensorFields.Add((owner, position, profile.JamRange, stealth));
+        }
+    }
+
+    private bool FieldSuppresses(Frent.Entity target, string channel, bool detectsStealth)
+    {
+        uint owner = target.Get<OwnershipState>().Owner;
+        var p = target.Get<SpatialState>().Position;
+        foreach (var field in _sensorFields)
+        {
+            if (owner != field.Owner) continue;
+            int radius = channel == "radar" ? field.Jam : channel == SensorDefinition.Optical && !detectsStealth ? field.Stealth : 0;
+            if (radius == 0) continue;
+            long dx = (long)p.X - field.Position.X, dy = (long)p.Y - field.Position.Y;
+            if (dx * dx + dy * dy <= (long)radius * radius) return true;
+        }
+        return false;
+    }
+
     internal bool UsesSensors => _sensors is not null;
     internal IReadOnlyList<uint> ObservationPlayers => _sensors?.Players ?? _fog?.Players ?? Array.Empty<uint>();
 
@@ -64,6 +116,9 @@ public sealed partial class SimulationWorld
             }
         }
         if (!present) return false;
+        bool counter = sensors.Names.TryGetValue("stealth", out int stealth) && counters.Contains(stealth);
+        if (FieldSuppresses(entity, channel == sensors.Optical ? SensorDefinition.Optical :
+            sensors.Names.TryGetValue("radar", out int radar) && channel == radar ? "radar" : "", counter)) return false;
         foreach (var gate in recipe.Concealments)
             if (gate.Channel == channel && !counters.Contains(gate.Counter) && Applies(gate, entity)) return false;
         if (grants is not null)

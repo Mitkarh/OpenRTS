@@ -297,7 +297,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
                 new(entityOwnership.Owner, entityPresentation.PreviousBodyFacing, entityPresentation.BodyFacing, entityPresentation.PreviousWeaponFacing, entityPresentation.WeaponFacing,
                     entityPresentation.BodyAnimation, entityPresentation.WeaponAnimation, states),
                 new(entityOrders.ActiveOrder.Kind, entityOrders.OrderPhase, entityMotion.Target, entityOrders.HasOrder && entityOrders.ActiveOrder.Kind is UnitActionKind.Build or UnitActionKind.UpgradeSupport ? entityOrders.ActiveOrder.Target : entityOrders.CombatTarget, entityOrders.PendingOrders?.Count ?? 0, entityCombat.WeaponReadyTick, capture.Progress, capture.Duration), health, weaponOffset, entityCombat.Weapons.Length, entityNavigation.TerrainStranded, rally.HasRally, rally.Rally, carrier, construction, entityOrders.AutoBuild, supply, upgrade, captureTarget)
-                { QuarterTurns = type.Footprint is not null ? RotationOf(entity) : 0, Transformation = transformation,
+                { Cloaked = IsOpticallyConcealed(entity), Emitter = ReadEmitterVisual(entity), QuarterTurns = type.Footprint is not null ? RotationOf(entity) : 0, Transformation = transformation,
                     Flight = IsAircraft(entity) ? new(entity.Get<FlightState>().Phase, entity.Get<FlightState>().Ammo, type.Flight!.Ammo, entity.Get<FlightState>().Base, entity.Get<FlightState>().Slot, Airborne(entity)) : default };
             weaponOffset += entityCombat.Weapons.Length;
         }
@@ -323,6 +323,12 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
             SynchronizeVisibility();
             if (_fog is not null) { writer.Write(29); _fog.WriteState(writer); }
             _sensors?.WriteState(writer);
+            if (_fieldDeployment.Count > 0)
+            {
+                writer.Write(-33); writer.Write(_fieldDeployment.Count);
+                foreach (var (id, state) in _fieldDeployment.OrderBy(p => p.Key.Value))
+                { writer.Write(id.Value); writer.Write(state.Position.X); writer.Write(state.Position.Y); writer.Write(state.Position.Elevation); writer.Write(state.StoppedAt); }
+            }
             WriteMechanics(writer);
             writer.Write(Tick); writer.Write(Width); writer.Write(Depth);
             writer.Write(TickRate); writer.Write(SpeedPerTick); writer.Write(NextEntityId); writer.Write(_random.State);
@@ -526,6 +532,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
         _economy.InvalidatePower();
         _conditionGrants?.RemoveEntity(id);
         if (!replacing) _sensors?.Grants.Remove(id);
+        _fieldDeployment.Remove(id);
         DeleteEntity(index);
         _orderDirty = true;
         if (!replacing && stamped && _baseGrid is not null) CommitGrid(ComposeFootprints(_baseGrid));

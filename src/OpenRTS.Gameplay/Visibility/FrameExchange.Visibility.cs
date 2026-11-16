@@ -96,7 +96,7 @@ public sealed partial class FrameExchange
             }
             if ((source.PreviousObservers[i] & bit) == 0) p = p with { Previous = p.Current,
                 Presentation = p.Presentation with { PreviousBodyFacing = p.Presentation.BodyFacing, PreviousWeaponFacing = p.Presentation.WeaponFacing } };
-            p = p with { WeaponOffset = start, Order = mine ? p.Order with { Target = visible.Contains(p.Order.Target) || ownProjects.Contains(p.Order.Target) ? p.Order.Target : default } : default,
+            p = p with { Emitter = mine ? p.Emitter : p.Emitter with { JamRange = 0, StealthRange = 0 }, WeaponOffset = start, Order = mine ? p.Order with { Target = visible.Contains(p.Order.Target) || ownProjects.Contains(p.Order.Target) ? p.Order.Target : default } : default,
                 Health = health ? p.Health : 0, Presentation = states ? p.Presentation : p.Presentation with { States = 0 },
                 TerrainStranded = states && p.TerrainStranded, Construction = states ? p.Construction : default,
                 Carrier = visible.Contains(p.Carrier) ? p.Carrier : default,

@@ -60,6 +60,9 @@ public sealed class DetectorDefinition
 /// <summary>Optional signatures and detectors for a spatial entity recipe.</summary>
 public sealed class SensorDefinition
 {
+    public int JamRange { get; }
+    public int StealthRange { get; }
+    public int DeployTicks { get; }
     public const string Visual = "visual";
     public const string Optical = "optical";
     public IReadOnlyList<string> Signatures { get; }
@@ -67,8 +70,11 @@ public sealed class SensorDefinition
     public IReadOnlyList<DetectorDefinition> Detectors { get; }
 
     public SensorDefinition(IEnumerable<string>? signatures = null, IEnumerable<ConcealmentDefinition>? concealments = null,
-        IEnumerable<DetectorDefinition>? detectors = null)
+        IEnumerable<DetectorDefinition>? detectors = null, int jamRange = 0, int stealthRange = 0, int deployTicks = 0)
     {
+        if (jamRange < 0 || jamRange > WorldPosition.MaximumExtent || stealthRange < 0 || stealthRange > WorldPosition.MaximumExtent || deployTicks < 0 || deployTicks > 1000000)
+            throw new ArgumentOutOfRangeException(nameof(jamRange));
+        JamRange = jamRange; StealthRange = stealthRange; DeployTicks = deployTicks;
         Signatures = Names(signatures ?? [Visual]);
         Concealments = Array.AsReadOnly((concealments ?? []).ToArray());
         Detectors = Array.AsReadOnly((detectors ?? []).ToArray());
@@ -86,6 +92,7 @@ public sealed class SensorDefinition
 
     internal void WriteState(BinaryWriter writer)
     {
+        if (JamRange != 0 || StealthRange != 0) { writer.Write(-33); writer.Write(JamRange); writer.Write(StealthRange); writer.Write(DeployTicks); }
         writer.Write(Signatures.Count);
         foreach (string name in Signatures) writer.Write(name);
         writer.Write(Concealments.Count);

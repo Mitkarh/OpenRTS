@@ -18,6 +18,7 @@ public sealed partial class SimulationWorld
     {
         ThrowIfDisposed();
         if (_failed) throw new InvalidOperationException("Incomplete world.");
+        if (_sensors is not null) RefreshSensorFields();
         if (_fog is not null) SynchronizeFog(cancellationToken);
         RefreshSensors(cancellationToken);
     }
@@ -30,6 +31,7 @@ public sealed partial class SimulationWorld
         {
             var e = _entityHandles[i]; var type = TypeOf(e);
             if (type.VisionRadius == 0 || !IsOnMap(e) || IsConstructing(e)) continue;
+            if (type.Transport is not null && !type.Movable && type.Weapons.Count == 0 && _transport?.HasPassengers(e) != true) continue;
             var p = e.Get<SpatialState>().Position;
             _nextVisionSources.Add(new(e.Get<EntityIdentity>().Id, e.Get<OwnershipState>().Owner, p.X, p.Y, type.VisionRadius));
         }

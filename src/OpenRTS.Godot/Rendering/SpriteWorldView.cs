@@ -251,7 +251,7 @@ public sealed class SpriteWorldView
             Vector2 origin = new(point.X, point.Z - lift);
             float body = Angle(view.PreviousBodyFacing, view.BodyFacing, alpha), weapon = Angle(view.PreviousWeaponFacing, view.WeaponFacing, alpha);
             int construct = pose.Upgrade.Active ? model.Unit.AnimationIndex("construct") : -1;
-            Color tint = ghost ? new(0.7f, 0.9f, 1, 0.42f) : Colors.White;
+            Color tint = ghost ? new(0.7f, 0.9f, 1, 0.42f) : pose.Cloaked ? new(0.8f, 0.95f, 1f, 0.55f) : Colors.White;
             float scale = 1, stateFlash = 0;
             for (int state = 0; state < model.States.Length; state++) if ((view.States & (1u << state)) != 0)
             {
@@ -291,7 +291,19 @@ public sealed class SpriteWorldView
                     var aim = weapons[pose.WeaponOffset + runtime.Mount];
                     angle = Angle(aim.PreviousFacing, aim.Facing, alpha);
                 }
-                if (part.Spin != 0 && (runtime.SpinWhen == 0 || (view.States & runtime.SpinWhen) != 0)) angle += (float)(time / tickRate * part.Spin * Math.PI / 180);
+                if (part.Spin != 0 && (runtime.SpinWhen == 0 || (view.States & runtime.SpinWhen) != 0))
+                {
+                    double seconds = time / tickRate;
+                    if (part.EmitterSpin)
+                    {
+                        var emitter = pose.Emitter;
+                        double elapsed = Math.Max(0, time - emitter.DeployStartTick);
+                        double delay = emitter.DeployTicks;
+                        double integrated = delay > 0 && elapsed < delay ? elapsed * elapsed / (2 * delay) : elapsed - delay / 2;
+                        seconds = !emitter.HasStealthRotor || emitter.Moving || ghost ? 0 : integrated / tickRate;
+                    }
+                    angle += (float)(seconds * part.Spin * Math.PI / 180);
+                }
                 int direction = 0;
                 if (part.Facings > 1)
                 {
@@ -311,6 +323,13 @@ public sealed class SpriteWorldView
                 pivots[p] = mount;
                 float buildScale = playback.DurationTicks > 0 ? Mathf.Lerp((float)effect.ScaleFrom, 1, progress) : 1;
                 Vector2 size = new((float)part.Width * scale * buildScale, (float)part.Height * scale * buildScale);
+                if (part.EmitterSpin)
+                {
+                    var emitter = pose.Emitter;
+                    float deploy = emitter.Moving || !emitter.HasStealthRotor ? 0 :
+                        emitter.DeployTicks == 0 ? 1 : (float)Math.Clamp((time - emitter.DeployStartTick) / emitter.DeployTicks, 0, 1);
+                    size *= Mathf.Lerp(0.6f, 1f, deploy);
+                }
                 var partTint = tint; if (playback.DurationTicks > 0) partTint.A *= Mathf.Lerp((float)effect.OpacityFrom, 1, progress);
                 Vector2 center = mount + Rotate(new((0.5f - (float)part.PivotX) * size.X, (0.5f - (float)part.PivotY) * size.Y), drawAngle);
                 var team = _ownerColor(view.Owner);
@@ -320,7 +339,7 @@ public sealed class SpriteWorldView
                 if (model.Unit.Flight is { } flight && part.Parent < 0 && height > 0.25f && !ghost)
                 {
                     float shadowOffset = flight.Mode == FlightMode.Hover ? 0 : height * 0.28f;
-                    frame.Add(new(center.X + shadowOffset, ShadowHeight, center.Y + lift + shadowOffset * 0.65f), drawAngle, size * 0.9f, new(0, 0, 0, 0.3f), Colors.Transparent);
+                    frame.Add(new(center.X + shadowOffset, ShadowHeight, center.Y + lift + shadowOffset * 0.65f), drawAngle, size * 0.9f, new(0, 0, 0, 0.3f * tint.A), Colors.Transparent);
                     SpriteCount++;
                 }
                 int layer = ghost ? PreviewLayer : pose.Flight.Airborne ? AirLayer : (int)(part.DrawLayer ?? model.DrawLayer);

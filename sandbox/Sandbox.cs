@@ -14,6 +14,7 @@ public partial class Sandbox : Node3D
     private SimulationSession? _session;
     private bool _fogScenario;
     private bool _sensorScenario;
+    private bool _jammingScenario;
     private bool _sensorVisibility;
     private ContactDisplayStyle _radarStyle = ContactDisplayStyle.BuildingModels;
     private bool _verifySensors;
@@ -61,6 +62,7 @@ public partial class Sandbox : Node3D
             string? mapPath = null, startSetPath = null, modPath = null;
             foreach (string arg in OS.GetCmdlineUserArgs())
             {
+                if (arg == "--jamming") { _jammingScenario = _fogScenario = _buildings = _showcase = true; continue; }
                 if (arg == "--verify") continue;
                 if (arg.StartsWith("--mod=", StringComparison.Ordinal) && arg.Length > 6) { modPath = arg[6..]; continue; }
                 if (arg.StartsWith("--fog-hold=", StringComparison.Ordinal) && int.TryParse(arg[11..], out int hold) && hold is >= 0 and <= 250) { _fogHoldTicks = hold; continue; }
@@ -126,7 +128,7 @@ public partial class Sandbox : Node3D
             {
                 string text = source.Text;
                 if (_sensorScenario) text = FogScenario.AddSensorProfiles(text);
-                if (_fogScenario) text = FogScenario.AddVision(text);
+                if (_fogScenario && !_jammingScenario) text = FogScenario.AddVision(text);
                 return source with { Text = text };
             });
             _catalog = _manifest.LoadUnits(unitSources, _sensorScenario ?
@@ -212,7 +214,7 @@ public partial class Sandbox : Node3D
         _rtsOverlay?.RadarContacts.Clear();
         var map = _mapMatch;
         var opponent = _opponent = _opponentProfile is { } profile ? SkirmishAiScenario.Create(catalog, profile, map!.Map, 2, _opponentStarts) : null;
-        _session = new SimulationSession(() => _fogScenario && (!_sensorScenario || map is null) ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, workers: _workers, restrictPlayerCommands: opponent is not null, tickRate: _manifest.Settings.Simulation.TickRate) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
+        _session = new SimulationSession(() => _jammingScenario ? JammingScenario.Create(catalog) : _fogScenario && (!_sensorScenario || map is null) ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, workers: _workers, restrictPlayerCommands: opponent is not null, tickRate: _manifest.Settings.Simulation.TickRate) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
             _verifySensors ? FogScenario.RadarCommands : _verifyFog ? FogScenario.Commands : _verifyAviation ? AviationScenario.Commands.Where(c => c.Tick <= _ticks).ToArray() : map is not null ? [] : _productionScenario ? ProductionScenario.Commands(catalog) : _buildings ? BuildingScenario.Commands(catalog) : _showcase ? (_verifyPresentation ? ShowcaseScenario.VerificationCommands(catalog) : []) : _navigation ? (_verifySimulation ? NavigationScenario.Commands(_count, _ticks) : [])
                 : DiagnosticScenario.Commands(_count, _verifySimulation ? _ticks : long.MaxValue),
             _verifySimulation ? _ticks : null, realtime: !_verifySimulation || _pacedVerification,
@@ -304,6 +306,11 @@ public partial class Sandbox : Node3D
             _sprites?.Apply(frame.Poses, alpha, frame.Tick, frame.TickRate, frame.Weapons, _visibleProjects, BuildingPreview() ?? UpgradePreview(), frame.Contacts, _radarStyle);
             _combatEffects?.Apply(frame.Projectiles, alpha, frame.Tick, _sprites?.FlightSurface ?? 0, PlayerFog ? frame : null);
             UpdateTerminal(frame, alpha);
+            if (_jammingScenario && _verifySimulation && completed)
+            {
+                VerifyJammingVisuals(frame);
+                return;
+            }
             if (_verifySensors) { VerifySensors(frame); return; }
             if (_verifyFog) { VerifyFog(frame); return; }
             if (_verifyAiMatch) { VerifyAiMatch(frame); return; }

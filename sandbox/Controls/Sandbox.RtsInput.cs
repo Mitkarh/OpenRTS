@@ -48,6 +48,30 @@ public partial class Sandbox
     {
         var overlay = _rtsOverlay!;
         overlay.RadarContacts.Clear();
+        overlay.FieldRingCount = 0;
+        overlay.FieldBounds = Playfield();
+        foreach (var pose in frame.Poses)
+        {
+            if (!Controls(pose.Presentation.Owner)) continue;
+            void Ring(int radius, Color color)
+            {
+                if (radius <= 0) return;
+                int at = overlay.FieldRingCount++;
+                if (at == overlay.FieldRings.Count) overlay.FieldRings.Add((new Vector2[97], color));
+                var points = overlay.FieldRings[at].Points;
+                var center = _sprites!.DisplayPosition(pose, _displayAlpha);
+                for (int i = 0; i < points.Length; i++)
+                {
+                    double angle = i * Math.Tau / 96;
+                    points[i] = _camera!.UnprojectPosition(center + new Vector3(
+                        (float)Math.Cos(angle) * radius / 1024, 0, (float)Math.Sin(angle) * radius / 1024));
+                }
+                overlay.FieldRings[at] = (points, color);
+            }
+            Ring(pose.Emitter.JamRange, new Color(1f, 0.72f, 0.25f, 0.6f));
+            bool deployed = !pose.Emitter.Moving && frame.Tick - pose.Emitter.DeployStartTick >= pose.Emitter.DeployTicks;
+            Ring(pose.Emitter.StealthRange, deployed ? new Color(0.2f, 0.95f, 1f, 0.75f) : new Color(0.2f, 0.95f, 1f, 0.25f));
+        }
         _radarWeapons.Clear();
         if (frame.Contacts.IsEmpty) return;
         var field = Playfield();

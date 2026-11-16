@@ -30,6 +30,9 @@ public partial class RtsOverlay : Control
         if (radius < 1 || radius > 128 || frames is not null && (!frames.HasAnimation(sequence) || frames.GetFrameCount(sequence) == 0)) throw new ArgumentException("Invalid custom cursor.");
         _custom[id] = new(color, radius, frames, sequence, hotspot);
     }
+    public List<(Vector2[] Points, Color Color)> FieldRings { get; } = [];
+    public int FieldRingCount { get; set; }
+    public Rect2 FieldBounds { get; set; }
     private float _time;
     public override void _Ready() { MouseFilter = MouseFilterEnum.Ignore; SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect); }
     public override void _Process(double delta) { _time += (float)delta; QueueRedraw(); }
@@ -43,6 +46,10 @@ public partial class RtsOverlay : Control
 
     public override void _Draw()
     {
+        for (int i = 0; i < FieldRingCount; i++)
+            for (int segment = 1; segment < FieldRings[i].Points.Length; segment++)
+                if (FieldBounds.HasPoint(FieldRings[i].Points[segment - 1]) && FieldBounds.HasPoint(FieldRings[i].Points[segment]))
+                    DrawLine(FieldRings[i].Points[segment - 1], FieldRings[i].Points[segment], FieldRings[i].Color, 1.5f, true);
         if (RadarAtlas is { } atlas)
         {
             float tile = atlas.GetWidth() / 5f;

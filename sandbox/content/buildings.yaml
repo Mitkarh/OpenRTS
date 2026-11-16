@@ -64,6 +64,8 @@ factory:
       apc: { Unit: apc-mg }
       engineer: { Unit: construction-engineer }
       tank: { Unit: tank, Cost: 180, Ticks: 150 }
+      stealth-truck: {Unit: stealth-truck, Cost: 600, Ticks: 175}
+      radar-buggy: {Unit: radar-buggy, Cost: 300, Ticks: 100}
       mixed-tank: { Unit: tank-mixed, Cost: 260, Ticks: 175 }
       repair: { Mount: repair, AutoCast: true }
   ActionPanel:
@@ -71,7 +73,9 @@ factory:
       apc: { Label: БТР, Order: 0 }
       engineer: { Label: Инженер, Order: 1 }
       tank: { Label: Танк, Order: 2 }
-      mixed-tank: { Label: Пушечно-ракетный танк, Order: 3 }
+      stealth-truck: {Label: Стелс-генератор, Order: 6}
+      radar-buggy: {Label: Разведчик, Order: 7}
+      mixed-tank: { Label: Мобильный радар, Order: 3 }
       repair: { Label: Ремонт, Cursor: repair, Order: 4 }
   Footprint: { Rows: ["#####", "###++", "###++", "###++"] }
   Armaments:
@@ -93,6 +97,7 @@ headquarters:
       Detectors:
         [
           { Channel: radar, Signature: radar.ground, Range: 32768 },
+          {Channel: optical, Signature: visual, Range: 4096, Display: Model, Counters: [stealth]},
           {
             Channel: radar,
             Signature: radar.ground,
@@ -162,6 +167,7 @@ supply-truck:
       site-airfield: { Unit: airfield, OnSite: true }
       site-helipad: { Unit: helipad, OnSite: true }
       site-radar: { Unit: headquarters, OnSite: true }
+      site-stealth: {Unit: stealth-generator, OnSite: true}
   ActionPanel:
     Buttons:
       site-power: { Label: Электростанция, Hotkey: E, Order: 2 }
@@ -172,6 +178,7 @@ supply-truck:
       site-airfield: { Label: Аэродром, Order: 10 }
       site-helipad: { Label: Вертолётная площадка, Order: 11 }
       site-radar: { Label: HQ · Радар, Order: 12 }
+      site-stealth: {Label: Стелс-генератор, Order: 13}
 
 crane:
   Inherits: ^building
@@ -218,6 +225,8 @@ mine:
     }
 
 bunker:
+  Vision: {Radius: 7168}
+  Sensors: {Signatures: [visual, radar.ground], Detectors: [{Channel: optical, Signature: visual, Range: 3072, Display: Model, Counters: [stealth]}]}
   Inherits: ^building
   Buildable: { Ticks: 100, Cost: 400 }
   Economy: { Energy: 0 }
@@ -314,6 +323,8 @@ box-vehicle:
   Presentation: { Name: Техника · прямоугольное тело }
 
 civilian-house:
+  Vision: {Radius: 7168}
+  Sensors: {Signatures: [visual, radar.ground], Detectors: [{Channel: optical, Signature: visual, Range: 3072, Display: Model, Counters: [stealth]}]}
   Transport: { Accepts: [infantry], Slots: 6, FireFromInside: true }
   Health: { HP: 1000, Armor: Building }
   Movement: { Enabled: false }
@@ -428,3 +439,9 @@ helipad:
       tiltrotor:
         { Label: Конвертоплан, Icon: "res://assets/units/tiltrotor.png" }
   Presentation: { Model: helipad, Name: Вертолётная площадка }
+
+stealth-generator:
+  Inherits: ^building
+  Sensors: {JamRange: 12288, StealthRange: 8192, DeployTicks: 50}
+  Footprint: {Rows: ["####", "####", "####", "####"]}
+  Presentation: {Model: stealth-generator, Name: Стелс-генератор}

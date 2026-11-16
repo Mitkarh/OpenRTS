@@ -1,0 +1,11 @@
+{
+  "generator": "Built-in image_gen",
+  "date": "2026-11-16",
+  "file": "sandbox/assets/units/electronic-warfare.png",
+  "sha256": "f90f12a09c2e78a3df446d4c04ac381701978b0c2d47d0759cbb4e17bd36eefe",
+  "prompt": "Production RTS sprite atlas, exactly three isolated vehicles/buildings equally spaced in a single horizontal row on truly transparent background. Strict 90 degree overhead orthographic view, front toward TOP. Left: small olive four-wheel reconnaissance buggy with machinegun and tiny radar dish. Center: olive tracked mobile stealth generator with a large folded electronic antenna coil. Right: square stationary stealth generator building with four electromagnetic pylons and central dish. Same detailed hand painted military RTS style, dark outlines, gray olive metal, flat vivid MAGENTA team-color panels, no other magenta. Each subject contained in its equal third of canvas, generous transparent padding, no text, no ground, no shadows outside subjects.",
+  "atlas": [
+    2172,
+    724
+  ]
+}

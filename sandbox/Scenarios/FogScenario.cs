@@ -10,11 +10,11 @@ public static class FogScenario
     public static OpenRTS.Core.Orders.WorldCommand[] Commands => [new(1, 0, 1, OpenRTS.Core.Orders.CommandKind.Move, new(1), new(30 * 1024, 12 * 1024))];
     public static OpenRTS.Core.Orders.WorldCommand[] RadarCommands =>
         [new OpenRTS.Core.Orders.WorldCommand(1, 0, 1, OpenRTS.Core.Orders.CommandKind.AttackContact, new(2), Owner: 1) { ContactId = 1 }];
-    public static string AddVision(string yaml) => Regex.Replace(yaml, @"(?m)^([\w-]+):\s*$", "$0\n  Vision: {Radius: 6144}");
+    public static string AddVision(string yaml) => Regex.Replace(Regex.Replace(yaml, @"(?m)^  Vision:.*\r?\n", ""), @"(?m)^([\w-]+):\s*$", "$0\n  Vision: {Radius: 6144}");
     public static string AddRadarWeapons(string yaml) =>
         Regex.Replace(yaml, @"(?m)^cannon:\r?\n  Weapon:$", "$0\n    MinimumContact: Contact");
 
-    public static string AddSensorProfiles(string yaml) => Regex.Replace(yaml, @"(?m)^(rifleman|tank|fighter|tiltrotor|bunker-cannon|crane|bunker):$", match =>
+    public static string AddSensorProfiles(string yaml) => Regex.Replace(Regex.Replace(yaml, @"(?m)^(rifleman|tank|fighter|tiltrotor|bunker-cannon|crane|bunker):\r?\n  Sensors:.*\r?\n", "$1:\n"), @"(?m)^(rifleman|tank|fighter|tiltrotor|bunker-cannon|crane|bunker):$", match =>
         match.Value + "\n  Sensors:\n" + (match.Groups[1].Value switch
         {
             "rifleman" => """

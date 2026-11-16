@@ -16,6 +16,65 @@ internal static class SensorChecks
 
     internal static void Run(Action<string, Action> test)
     {
+        test("Sensors: an occupied civilian building gives vision until unloading", () =>
+        {
+            using var world = SimulationWorld.CreateWithMechanics(new() {FogCellSize = 1024},
+                [
+                    new("infantry", 100, body: BodyShape.None, visionRadius: 1024, passenger: new("infantry")),
+                    new("house", 100, movable: false, body: BodyShape.None, visionRadius: 4096,
+                        transport: new(["infantry"], 4)),
+                    new("enemy", 100, body: BodyShape.None)
+                ], 16384, 16384, players: Players);
+            var house = world.AddInitialUnit(1, new(4096, 4096));
+            var infantry = world.AddInitialUnit(0, new(4096, 4096), 1);
+            var enemy = world.AddInitialUnit(2, new(6144, 4096), 2);
+            world.SynchronizeVisibility();
+            Check(!world.IsVisible(1, enemy), "empty civilian building supplied vision");
+            world.Step([new(1, 1, 1, CommandKind.Enter, infantry, TargetEntity: house)]);
+            Check(world.IsVisible(1, enemy), "garrison did not supply vision");
+            world.Step([new(2, 1, 1, CommandKind.Unload, house)]);
+            Check(!world.IsVisible(1, enemy), "empty house kept player vision");
+        });
+
+        test("Sensors: jammer protects its owner and stealth deploys again after movement", () =>
+        {
+            using var world = SimulationWorld.CreateWithMechanics(new() { FogCellSize = 1024 },
+                [
+                    new("radar", 100, body: BodyShape.None, visionRadius: 12000, sensors: new(detectors: [new("radar", "radar.ground", 12000)])),
+                    new("field", 100, body: BodyShape.None, sensors: new(jamRange: 4096, stealthRange: 4096, deployTicks: 3)),
+                    new("target", 100, body: BodyShape.None, sensors: new(["visual", "radar.ground"])),
+                    new("counter", 100, body: BodyShape.None, sensors: new(detectors: [new("optical", "visual", 12000, SensorDisplay.Model, ["stealth"])]))
+                ], 20000, 16000, players: Players);
+            world.AddInitialUnit(0, new(2048, 4096), 1);
+            var field = world.AddInitialUnit(1, new(8192, 4096), 2);
+            var target = world.AddInitialUnit(2, new(8192, 5120), 2);
+            var friendly = world.AddInitialUnit(2, new(8192, 6144), 1);
+            world.SynchronizeVisibility();
+            Check(world.IsVisible(1, target), "stealth deployed immediately");
+            for (int i = 0; i < 3; i++) world.Step();
+            Check(!world.IsVisible(1, target) && world.IsVisible(1, friendly), "aura did not respect owner/deploy");
+            var frames = new FrameExchange(); frames.TryPublish(world);
+            using (var frame = frames.AcquireLatest(1)!) Check(frame.Contacts.Length == 0, "jammed target leaked a radar contact");
+            using (var own = frames.AcquireLatest(2)!)
+            {
+                Check(own.Poses.ToArray().Single(p => p.Id == target).Cloaked, "own cloaked unit lost its visual flag");
+                var emitter = own.Poses.ToArray().Single(p => p.Id == field).Emitter;
+                Check(emitter.JamRange == 4096 && emitter.StealthRange == 4096 && emitter.HasStealthRotor && !emitter.Moving,
+                    "deployed emitter was not projected for its owner");
+            }
+            world.Step([new(4, 2, 1, CommandKind.Move, field, new(9216, 4096))]);
+            Check(world.IsVisible(1, target), "moving generator retained optical stealth");
+            for (int i = 0; i < 16; i++) world.Step();
+            Check(!world.IsVisible(1, target), "generator did not redeploy");
+            world.Step([new(world.Tick + 1, 0, 1, CommandKind.Spawn, Position: new(2048, 5120), UnitType: 3, Owner: 1)]);
+            Check(world.IsVisible(1, target), "counter detector did not bypass stealth");
+            frames.TryPublish(world);
+            using var detected = frames.AcquireLatest(1)!;
+            Check(detected.Poses.ToArray().Single(p => p.Id == target).Cloaked &&
+                detected.Poses.ToArray().Single(p => p.Id == field).Emitter is { JamRange: 0, StealthRange: 0 },
+                "detected cloak was lost or enemy field radii were disclosed");
+        });
+
         test("Sensors: building memory survives hidden destruction until the whole footprint is observed", () =>
         {
             using var world = SimulationWorld.CreateWithMechanics(new() { FogCellSize = 1024 },

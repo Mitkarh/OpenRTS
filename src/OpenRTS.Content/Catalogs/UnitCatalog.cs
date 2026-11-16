@@ -235,6 +235,9 @@ public sealed partial class UnitCatalog
 
     private sealed class SensorOptions
     {
+        public int JamRange { get; set; }
+        public int StealthRange { get; set; }
+        public int DeployTicks { get; set; }
         public string[]? Signatures { get; set; }
         public ConcealmentOptions[] Concealments { get; set; } = [];
         public DetectorOptions[] Detectors { get; set; } = [];
@@ -244,7 +247,7 @@ public sealed partial class UnitCatalog
                 (locomotion ?? throw new ArgumentException("Terrain concealment requires a terrain catalog.")).TerrainIndex(c.Terrain))),
             Detectors.Select(d => new DetectorDefinition(d.Channel, d.Signature, d.Range, d.Display, d.Counters,
                 (d.Health ? LiveObservationFields.Health : LiveObservationFields.None) |
-                (d.States ? LiveObservationFields.States : LiveObservationFields.None))));
+                (d.States ? LiveObservationFields.States : LiveObservationFields.None))), JamRange, StealthRange, DeployTicks);
     }
 
     private sealed class ConcealmentOptions

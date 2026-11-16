@@ -1,0 +1,7 @@
+{
+  "generator": "Built-in image_gen",
+  "destination": "sandbox/assets/units/stealth-rotor.png",
+  "sha256": "cb27c8322f13c6ec4558814dbcd9b3dac136b1a55f2de5d5f7c097a4dfb7705c",
+  "date": "2026-11-16",
+  "prompt": "Single isolated RTS sprite asset, strict orthographic 90-degree top-down view, transparent background. A rotating electronic stealth-generator rotor for mounting on a tank or rooftop. Compact circular dark olive metal hub with three broad curved electromagnetic vanes, pale cyan energized coil strips, a few flat saturated MAGENTA team-color panels on vanes. Industrial military hand-painted RTS game sprite matching olive vehicles, sharp dark outlines, readable silhouette at 64 pixels. The entire rotor is centered exactly, symmetrical radial footprint, generous transparent margins. No vehicle hull, no building, no pole, no ground, no text, no shadow outside the object. Stationary crisp blades, no motion blur."
+}

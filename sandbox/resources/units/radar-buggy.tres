@@ -1,0 +1,7 @@
+[gd_resource type="SpriteFrames" load_steps=3 format=3]
+[ext_resource type="Texture2D" path="res://assets/units/electronic-warfare.png" id="1"]
+[sub_resource type="AtlasTexture" id="Tile"]
+atlas = ExtResource("1")
+region = Rect2(0, 0, 724, 724)
+[resource]
+animations = [{"frames": [{"duration": 1.0, "texture": SubResource("Tile")}], "loop": true, "name": &"stand", "speed": 1.0}, {"frames": [{"duration": 1.0, "texture": SubResource("Tile")}], "loop": true, "name": &"travel", "speed": 1.0}, {"frames": [{"duration": 1.0, "texture": SubResource("Tile")}], "loop": false, "name": &"shoot", "speed": 1.0}]

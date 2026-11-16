@@ -63,10 +63,12 @@ internal static class EcsMigrationChecks
             if (skippedIndent >= 0 && (content.Length == 0 || indent > skippedIndent)) continue;
             skippedIndent = -1;
             if (indent == 2 && (content.StartsWith("Vision:") || content.StartsWith("Sensors:")) ||
-                indent == 6 && content.StartsWith("site-radar:")) { skippedIndent = indent; continue; }
+                indent == 6 && (content.StartsWith("site-radar:") || content.StartsWith("site-stealth:") || content.StartsWith("stealth-truck:") || content.StartsWith("radar-buggy:"))) { skippedIndent = indent; continue; }
             result.AppendLine(line);
         }
-        return result.ToString();
+        var text = System.Text.RegularExpressions.Regex.Replace(result.ToString(),
+            @"(?ms)^(stealth-truck|radar-buggy|stealth-generator):\n.*?(?=^[a-zA-Z^]|\z)", "");
+        return text.Replace("main: { Weapon: rifle, Animation: fire }", "main: { Weapon: cannon, Animation: fire }");
     }
 
     // Mechanics format 33: paid projects and suspended clearance orders; producer exit lanes forbid stopping.

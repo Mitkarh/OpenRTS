@@ -105,7 +105,6 @@ headquarters:
         Offset: [1.18, -0.55]
         Layer: 3
         Spin: 65
-        SpinWhen: working
         HiddenWhen: [destroyed]
     Animations:
       idle: { Sequence: stand, Parts: [body, ruins, workfx, radar] }
