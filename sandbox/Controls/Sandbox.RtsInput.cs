@@ -166,7 +166,8 @@ public partial class Sandbox
             {
                 var click = _camera!.UnprojectPosition(new(point.X / 1024f, 0, point.Y / 1024f));
                 float pixels = Screen(pose).DistanceSquaredTo(click);
-                if (pixels <= 24 * 24 && (selected is null || !selectedAircraft || pixels < best))
+                float radius = _sprites!.PickRadius(pose, _camera, _displayAlpha);
+                if (pixels <= radius * radius && (selected is null || !selectedAircraft || pixels < best))
                 { selected = pose; best = (long)pixels; selectedFootprint = false; selectedAircraft = true; }
                 continue;
             }

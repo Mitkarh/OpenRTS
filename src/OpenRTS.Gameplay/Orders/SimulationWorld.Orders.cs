@@ -39,7 +39,7 @@ public sealed partial class SimulationWorld
         if (StartOrder(index, order) && !queued) entityOrders.PendingOrders?.Clear();
     }
 
-    private bool StartOrder(int index, UnitOrder order)
+    private bool StartOrder(int index, UnitOrder order, bool resumed = false)
     {
         if (_fog is not null && order.Target.Value != 0 && !IsVisible(_entityHandles[index].Get<OwnershipState>().Owner, order.Target)) return false;
         ref var entity = ref _entityHandles[index];
@@ -62,6 +62,12 @@ public sealed partial class SimulationWorld
         { EmitEvent(new(Tick, WorldEventKind.InvalidOrder, entityIdentity.Id)); return false; }
         if (order.Kind is UnitActionKind.Enter or UnitActionKind.UnloadAt && _transport?.CanStartOrder(entity, order) != true)
         { EmitEvent(new(Tick, WorldEventKind.InvalidOrder, entityIdentity.Id)); return false; }
+        if (order.Kind == UnitActionKind.Enter && TryGetEntity(order.Target, out var carrier) && IsAircraft(carrier))
+        {
+            uint revision = carrier.Get<FlightState>().BoardingRevision;
+            if (resumed && order.BoardingRevision != revision) return false;
+            order = order with { BoardingRevision = revision };
+        }
         if (order.Kind is UnitActionKind.Land or UnitActionKind.ReturnToBase)
         {
             if (!StartFlightOrder(entity, order)) { EmitEvent(new(Tick, WorldEventKind.InvalidOrder, entityIdentity.Id)); return false; }
@@ -139,7 +145,7 @@ public sealed partial class SimulationWorld
             if (!entityOrders.HasOrder && entityOrders.SuspendedOrder is { } suspended)
             {
                 entityOrders.SuspendedOrder = null;
-                StartOrder(i, suspended);
+                StartOrder(i, suspended, resumed: true);
             }
             while (!entityOrders.HasOrder && entityOrders.PendingOrders is { Count: > 0 }) StartOrder(i, entityOrders.PendingOrders.Dequeue());
             if (!entityOrders.HasOrder && entityOrders.CombatTarget.Value == 0)
@@ -213,6 +219,6 @@ public sealed partial class SimulationWorld
             writer.Write(entityOrders.AutoBuild);
         writer.Write(entityOrders.PendingOrders?.Count ?? 0);
         if (entityOrders.PendingOrders is not null) foreach (var order in entityOrders.PendingOrders) Write(order);
-        void Write(UnitOrder order) { writer.Write((int)order.Kind); writer.Write(order.Position.X); writer.Write(order.Position.Y); writer.Write(order.Position.Elevation); writer.Write(order.Target.Value); writer.Write(order.Group); writer.Write(order.Cohort); writer.Write(order.Ability); if (order.Kind == UnitActionKind.AttackContact) writer.Write(order.ContactId); }
+        void Write(UnitOrder order) { writer.Write((int)order.Kind); writer.Write(order.Position.X); writer.Write(order.Position.Y); writer.Write(order.Position.Elevation); writer.Write(order.Target.Value); writer.Write(order.Group); writer.Write(order.Cohort); writer.Write(order.Ability); if (order.Kind == UnitActionKind.AttackContact) writer.Write(order.ContactId); if (order.Kind == UnitActionKind.Enter) writer.Write(order.BoardingRevision); }
     }
 }

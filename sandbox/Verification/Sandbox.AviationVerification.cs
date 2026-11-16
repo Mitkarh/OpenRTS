@@ -16,6 +16,7 @@ public partial class Sandbox
         {
             _verificationDone = true;
             VerifyAirWorkVisuals();
+            VerifyAirTransportInput();
             var poses = frame.Poses.ToArray();
             var report = _session!.Completion.GetAwaiter().GetResult();
             if (frame.Tick != report.Tick || !poses.Any(p => _catalog!.Units[p.UnitType].Airbase is not null) ||
@@ -67,9 +68,50 @@ public partial class Sandbox
             var held = roaming.Offset(actor, 80);
             if (held != roaming.Offset(actor, 85)) throw new InvalidOperationException("The worker did not pause between roof flights.");
             if (held == roaming.Offset(actor, 136)) throw new InvalidOperationException("Consecutive roof work cells did not change.");
+            float heading = roaming.Heading(actor, 80, 0);
+            if (heading != roaming.Heading(actor, 85, 0) || heading == roaming.Heading(actor, 136, 0) ||
+                fixedHover.Heading(actor, 80, 0.7f) != 0.7f || MathF.Abs(roaming.Heading(actor, 10, 0)) > 0.0001f)
+                throw new InvalidOperationException($"Roof heading failed: hold={heading}/{roaming.Heading(actor, 85, 0)}, next={roaming.Heading(actor, 136, 0)}, disabled={fixedHover.Heading(actor, 80, 0.7f)}, start={roaming.Heading(actor, 10, 0)}.");
             var repair = actor with { Order = actor.Order with { Kind = UnitActionKind.Repair } };
-            roaming.Update([repair, building], 110);
-            if (roaming.Offset(repair, 122) != Vector2.Zero) throw new InvalidOperationException("Repair kept roaming after its transition.");
+            roaming.Update([repair, building], 150);
+            if (roaming.Offset(repair, 162) != Vector2.Zero || MathF.Abs(Mathf.Wrap(roaming.Heading(repair, 162, 0), -MathF.PI, MathF.PI)) > 0.0001f)
+                throw new InvalidOperationException("Repair kept roaming after its transition.");
         }
+    }
+
+    private void VerifyAirTransportInput()
+    {
+        var savedSelection = _selection.Ids.ToArray();
+        var savedPointer = _pointer;
+        float savedSize = _camera!.Size;
+        var savedPosition = _camera.Position;
+        foreach (var (carrierId, passengerId) in new[] { (15u, 18u), (5u, 7u) })
+        {
+            int index = Array.FindIndex(_displayPoses, 0, _displayCount, p => p.Id.Value == carrierId);
+            var original = _displayPoses[index];
+            var at = original.Current with { Elevation = 3584 };
+            var flying = original with { Previous = at, Current = at, Flight = original.Flight with { Phase = FlightPhase.Hovering, Airborne = true } };
+            _displayPoses[index] = flying;
+            _selection.Change([new(passengerId)], OpenRTS.Godot.Controls.SelectionChange.Replace);
+            RefreshSelection();
+            foreach (float zoom in new[] { 24f, 48f })
+            {
+                _camera.Size = zoom;
+                CenterCamera(new(at.X / 1024f, at.Y / 1024f));
+                var center = _sprites!.DisplayPosition(flying, 1);
+                float extent = carrierId == 15 ? 1.6f : 0.9f;
+                _pointer = _camera.UnprojectPosition(center + new Vector3(extent, 0, 0));
+                var point = CommandPoint(_pointer);
+                if (point is null || Pick(point.Value)?.Id != flying.Id || !CanBoardSelected(flying))
+                    throw new InvalidOperationException("Aircraft model bounds or airborne boarding selection failed at this zoom.");
+                UpdateRtsCursor();
+                if (_rtsOverlay!.Cursor != OpenRTS.Godot.Controls.RtsCursor.Enter)
+                    throw new InvalidOperationException("Hovering transport did not offer its Enter cursor.");
+            }
+            _displayPoses[index] = original;
+        }
+        _selection.Change(savedSelection, OpenRTS.Godot.Controls.SelectionChange.Replace);
+        _pointer = savedPointer; _camera.Size = savedSize; _camera.Position = savedPosition;
+        RefreshSelection();
     }
 }

@@ -13,6 +13,9 @@ internal interface ITransportWorld
     TransportDefinition? TransportOf(Entity entity);
     bool IsUnderConstruction(Entity entity);
     bool CanBoardTransport(Entity carrier);
+    bool CanRequestBoarding(Entity carrier);
+    bool BoardingRequestCurrent(Entity passenger, Entity carrier);
+    bool PrepareBoardingLanding(Entity passenger, Entity carrier, int range, out WorldPosition approach);
     bool PrepareUnloadLanding(Entity carrier, WorldPosition destination);
 
     void IssueOrder(EntityId actor, UnitOrder order, bool queued);

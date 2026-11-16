@@ -71,15 +71,15 @@ internal static class EcsMigrationChecks
         return text.Replace("main: { Weapon: rifle, Animation: fire }", "main: { Weapon: cannon, Animation: fire }");
     }
 
-    // Mechanics format 33, extended air support definitions and 6-slot vehicle passengers.
-    // Ground mechanics are unchanged; catalog recipes, type ordinals and passenger components change the traces.
+    // Mechanics format 34 includes carrier/order revisions for automatic air boarding.
+    // Cancellation state is canonical; root-sprite picking and work headings remain adapter-only.
     private static readonly Dictionary<string, string> Expected = new()
     {
-        ["direct"] = "B09FDD6CD85DCBFA45B8B6198C61E18E25A2D769C0F741928F7CB01022CC9732",
-        ["navigation"] = "1B7CED67EE3FA1B9ADCC8FBCE1618C33A8E4C83AA3C6310B3B3251B639074578",
-        ["combat"] = "DBFD2F7236195A4E89E09E5F30DB2D1DB6935F453323A0D23676EBCE862BFF59",
-        ["buildings"] = "62E44FE29F62091FD28600DCA103C6009F9A80F3B0FC12974D9054C023A78833",
-        ["production"] = "B875D7E99DDBE1E1BA883BE8A3ED75F7CD4F67AA1034AEB3AE1083C67B6C1DF9"
+        ["direct"] = "A01C791FC0A327F7B768878B71F988B4C7ACC73F598FD6DD99EB7A001C2A9094",
+        ["navigation"] = "A357B233A187257A8F805023D87E11CDBFB237B9BFC891E6A90236765362E16C",
+        ["combat"] = "2C91518D2024CB854E07870BA280888B606DF73EAB123331659B4CF2114B0305",
+        ["buildings"] = "8027C0EBEDBB02237285AEBDE3CAF35BC4FD4E2A7D838F2128A4E44D2874DA73",
+        ["production"] = "8066499158EDD8BCC59A879FFCB73F49E945AA7FBB404CAD9F0C59BC4CB59857"
     };
 
     internal static readonly JsonSerializerOptions TraceOptions = new() { Converters = { new EntitySetWriter() } };

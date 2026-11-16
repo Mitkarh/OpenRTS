@@ -8,6 +8,7 @@ internal sealed class FlightState
     internal int Slot = -1;
     internal bool ReturnRequested, LandRequested, MovementRequested;
     internal bool RunwayReserved, TaxiToParking;
+    internal uint BoardingRevision;
     internal long WorkingTick = -1; // Derived within the current tick, like MovementRequested; never used on later ticks.
     internal WorldPosition LandingPoint, ExitPoint;
     internal long RequestTick, RetryTick;
@@ -18,6 +19,7 @@ internal sealed class FlightState
         w.Write(LandingPoint.X); w.Write(LandingPoint.Y); w.Write(LandingPoint.Elevation);
         w.Write(ExitPoint.X); w.Write(ExitPoint.Y); w.Write(ExitPoint.Elevation);
         w.Write(RequestTick); w.Write(RetryTick); w.Write(RunwayReserved); w.Write(TaxiToParking);
+        w.Write(BoardingRevision);
     }
 }
 

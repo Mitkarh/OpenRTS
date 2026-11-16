@@ -163,9 +163,10 @@ public sealed partial class SimulationWorld
         f.Base = default; f.Slot = -1;
     }
 
-    private void BeforeFlightOrder(Entity actor)
+    private void BeforeFlightOrder(Entity actor, bool preserveBoarding = false)
     {
         if (!IsAircraft(actor)) return;
+        if (!preserveBoarding) CancelBoardingRequests(actor);
         var f = actor.Get<FlightState>();
         ReleaseAirAssignment(actor.Get<EntityIdentity>().Id, f);
         f.ReturnRequested = f.LandRequested = false; f.ReloadWork = 0; f.ExitPoint = default;
@@ -180,11 +181,12 @@ public sealed partial class SimulationWorld
         if (!IsAircraft(actor)) return false;
         var f = actor.Get<FlightState>(); var definition = TypeOf(actor).Flight!;
         if (order.Kind == UnitActionKind.Land && definition.NeedsRunway) return false;
+        if (order.Kind == UnitActionKind.Land && order.Target != default && !IsBoardingPassenger(order.Target, actor)) return false;
         if (order.Kind == UnitActionKind.Land && _navigation is not null &&
             !TerrainGeometry.CanStop(_navigation.Grid, order.Position, TypeOf(actor).Body, TypeOf(actor).Locomotor)) return false;
         if (order.Kind == UnitActionKind.ReturnToBase && order.Target.Value != 0 &&
             (!TryGetEntity(order.Target, out var provider) || !CompatibleAirbase(actor, provider))) return false;
-        BeforeFlightOrder(actor);
+        BeforeFlightOrder(actor, preserveBoarding: order.Kind == UnitActionKind.Land && order.Target != default);
         f.RequestTick = Tick; f.RetryTick = 0;
         f.ReturnRequested = order.Kind == UnitActionKind.ReturnToBase;
         f.LandRequested = order.Kind == UnitActionKind.Land;
@@ -325,6 +327,13 @@ public sealed partial class SimulationWorld
                 if (f.Phase == FlightPhase.Servicing) f.Phase = FlightPhase.Landed;
             }
             ref var orders = ref actor.Get<OrderState>();
+            if (f.LandRequested && orders.ActiveOrder.Kind == UnitActionKind.Land && orders.ActiveOrder.Target != default &&
+                !IsBoardingPassenger(orders.ActiveOrder.Target, actor))
+            {
+                BeforeFlightOrder(actor, preserveBoarding: true);
+                orders.HasOrder = false;
+                Halt(_indices[id]);
+            }
             if (definition.Ammo > 0 && f.Ammo == 0 && !f.ReturnRequested && orders.HasOrder &&
                 orders.ActiveOrder.Kind is UnitActionKind.Attack or UnitActionKind.AttackMove or UnitActionKind.AttackContact)
             { f.ReturnRequested = true; f.RequestTick = Tick; }

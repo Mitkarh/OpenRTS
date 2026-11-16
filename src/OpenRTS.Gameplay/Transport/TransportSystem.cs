@@ -58,7 +58,7 @@ internal sealed class TransportSystem(ITransportWorld world, ITransportMechanic 
         carrier = default;
         if (_world.TypeOf(actor).Passenger is null || HasPassengers(actor) ||
             !_world.TryGetEntity(id, out carrier) || actor.Get<EntityIdentity>().Id == id) return false;
-        if (IsStored(carrier) || _world.IsUnderConstruction(carrier) || !_world.CanBoardTransport(carrier) || _world.TypeOf(carrier).Transport is null) return false;
+        if (IsStored(carrier) || _world.IsUnderConstruction(carrier) || !_world.CanRequestBoarding(carrier) || _world.TypeOf(carrier).Transport is null) return false;
         var passenger = ParticipantOf(actor);
         var host = ParticipantOf(carrier);
         return passenger.Owner != 0 && (passenger.Owner == host.Owner || host.Owner == 0 && !host.Type.Movable) &&
@@ -76,12 +76,28 @@ internal sealed class TransportSystem(ITransportWorld world, ITransportMechanic 
         }
 
         var carrierPosition = carrier.Get<SpatialState>().Position;
+        if (!_world.BoardingRequestCurrent(actor, carrier)) { FinishTransportOrder(actor); return; }
         var position = actor.Get<SpatialState>().Position;
         var passenger = ParticipantOf(actor);
         var host = ParticipantOf(carrier);
         int range = _mechanic.BoardingRange(passenger, host);
         if (range < 0) throw new InvalidOperationException("Transport boarding range cannot be negative.");
         ref var orders = ref actor.Get<OrderState>();
+        if (!_world.CanBoardTransport(carrier))
+        {
+            if (!_mechanic.HasRoom(passenger, host))
+            {
+                FinishTransportOrder(actor);
+                _world.Emit(new(_world.Tick, WorldEventKind.TransportFull, identity.Id, TargetEntity: order.Target));
+                return;
+            }
+            if (!_world.PrepareBoardingLanding(actor, carrier, range, out var approach))
+            { _world.Halt(identity.Id); orders.OrderPhase = OrderPhase.Waiting; return; }
+            if (!actor.Get<MotionState>().Moving || actor.Get<MotionState>().Target != approach)
+                _world.TrySetTarget(identity.Id, approach);
+            orders.OrderPhase = actor.Get<MotionState>().Moving ? OrderPhase.Approaching : OrderPhase.Waiting;
+            return; // Boarding is possible only after touchdown, even if already within horizontal range.
+        }
         if (ObjectGeometry.DistanceSquared(passenger.Type, position, host.Type, carrierPosition, out _, out _) > (long)range * range)
         {
             bool newGoal = orders.OrderPhase != OrderPhase.Approaching ||

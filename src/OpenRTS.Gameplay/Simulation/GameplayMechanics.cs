@@ -89,7 +89,7 @@ public sealed partial class SimulationWorld
 {
     private void WriteMechanics(BinaryWriter writer)
     {
-        writer.Write(33); // Paid blueprints and suspended orders during clearance.
+        writer.Write(34); // Includes revisions for cancelling automatic air boarding.
         writer.Write((int)_mechanics.ConstructionPayment);
         WriteTransformations(writer);
         writer.Write(28); // Includes named target categories, spatial weapons and flight state.

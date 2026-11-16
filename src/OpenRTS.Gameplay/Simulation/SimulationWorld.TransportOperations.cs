@@ -16,6 +16,12 @@ public sealed partial class SimulationWorld
     TransportDefinition? ITransportWorld.TransportOf(Entity entity) => TypeOf(entity).TransportFor(CompletedUpgrade(entity));
     bool ITransportWorld.IsUnderConstruction(Entity entity) => (ReadLocalConditions(entity) & GameplayConditions.Constructing) != 0;
     bool ITransportWorld.CanBoardTransport(Entity carrier) => !IsAircraft(carrier) || carrier.Get<FlightState>().Phase == FlightPhase.Landed;
+    bool ITransportWorld.CanRequestBoarding(Entity carrier) => !IsAircraft(carrier) || carrier.Get<FlightState>().Phase == FlightPhase.Landed ||
+        TypeOf(carrier).Flight!.Mode == FlightMode.Hover;
+    bool ITransportWorld.BoardingRequestCurrent(Entity passenger, Entity carrier) => !IsAircraft(carrier) ||
+        passenger.Get<OrderState>().ActiveOrder.BoardingRevision == carrier.Get<FlightState>().BoardingRevision;
+    bool ITransportWorld.PrepareBoardingLanding(Entity passenger, Entity carrier, int range, out WorldPosition approach) =>
+        PrepareBoardingLanding(passenger, carrier, range, out approach);
     bool ITransportWorld.PrepareUnloadLanding(Entity carrier, WorldPosition destination)
     {
         if (!IsAircraft(carrier) || carrier.Get<FlightState>().Phase == FlightPhase.Landed) return true;

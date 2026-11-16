@@ -82,6 +82,27 @@ public sealed class SpriteWorldView
         return point;
     }
 
+    /// <summary>Screen-space selection extent of the root sprite, independent of the physical body and camera zoom.</summary>
+    public float PickRadius(in EntityPose pose, Camera3D camera, float alpha = 1)
+    {
+        var position = DisplayPosition(pose, alpha);
+        var center = camera.UnprojectPosition(position);
+        float angle = _workFlights.Heading(pose, _workTime, Angle(pose.Presentation.PreviousBodyFacing, pose.Presentation.BodyFacing, alpha));
+        float squared = 24 * 24;
+        foreach (var part in _models[pose.UnitType].Parts)
+        {
+            var root = part.Definition;
+            if (root.Parent >= 0) continue;
+            for (int y = 0; y <= 1; y++) for (int x = 0; x <= 1; x++)
+            {
+                var corner = Rotate(new((float)((x - root.PivotX) * root.Width + root.OffsetX),
+                    (float)((y - root.PivotY) * root.Height + root.OffsetY)), angle);
+                squared = Math.Max(squared, center.DistanceSquaredTo(camera.UnprojectPosition(position + new Vector3(corner.X, 0, corner.Y))));
+            }
+        }
+        return MathF.Sqrt(squared) + 4;
+    }
+
     public SpriteWorldView(UnitCatalog units, ModelCatalog models, Func<uint, Color>? ownerColor = null)
     {
         _ownerColor = ownerColor ?? (_ => Colors.White);
@@ -268,7 +289,7 @@ public sealed class SpriteWorldView
             float height = Math.Max(0, elevation - _flightSurface);
             float lift = HoverLift(model.Unit, elevation);
             Vector2 origin = new(point.X, point.Z - lift);
-            float body = Angle(view.PreviousBodyFacing, view.BodyFacing, alpha), weapon = Angle(view.PreviousWeaponFacing, view.WeaponFacing, alpha);
+            float body = _workFlights.Heading(pose, time, Angle(view.PreviousBodyFacing, view.BodyFacing, alpha)), weapon = Angle(view.PreviousWeaponFacing, view.WeaponFacing, alpha);
             int construct = pose.Upgrade.Active ? model.Unit.AnimationIndex("construct") : -1;
             Color tint = ghost ? new(0.7f, 0.9f, 1, 0.42f) : pose.Cloaked ? new(0.62f, 0.7f, 0.76f, 0.42f) : Colors.White;
             float scale = 1, stateFlash = 0;
