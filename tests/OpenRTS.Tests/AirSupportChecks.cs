@@ -19,13 +19,13 @@ internal static class AirSupportChecks
 
     public static void Run(Action<string, Action> test)
     {
-        test("Air support: hover workers load from YAML, reject forward workers and keep roaming out of gameplay", () =>
+        test("Air support: hover workers load from YAML, reject forward workers and compile physical work roaming", () =>
         {
-            const string yaml = "u: {Health: {HP: 100}, Aircraft: {Mode: Hover}, Builder: {Range: 1536, WorkInterval: 2}, Presentation: {Model: air, WorkRoaming: true}}";
+            const string yaml = "u: {Health: {HP: 100}, Aircraft: {Mode: Hover, WorkRoaming: true}, Builder: {Range: 1536, WorkInterval: 2}, Presentation: {Model: air}}";
             var on = UnitCatalog.Load([new("air", yaml)]);
             var off = UnitCatalog.Load([new("air", yaml.Replace("WorkRoaming: true", "WorkRoaming: false"))]);
-            NavigationChecks.Check(on.Units[0].WorkInterval == 2 && on.Presentations[0].WorkRoaming && !off.Presentations[0].WorkRoaming &&
-                on.Summary == off.Summary, "Visual work flights affected gameplay or the interval was lost");
+            NavigationChecks.Check(on.Units[0].WorkInterval == 2 &&
+                on.Units[0].Flight!.WorkRoaming && !off.Units[0].Flight!.WorkRoaming && on.Summary != off.Summary, "Physical work flights or the interval were lost");
             NavigationChecks.Reject<ArgumentException>(() => new UnitDefinition("plane", 100, constructionRange: 1536, flight: new(FlightMode.ForwardFlight)));
             NavigationChecks.Reject<ArgumentException>(() => new UnitDefinition("plane", 100, supply: new(SupplyRole.Truck, 10), flight: new(FlightMode.ForwardFlight)));
             NavigationChecks.Reject<ArgumentOutOfRangeException>(() => new UnitDefinition("worker", 100, workInterval: 0));
@@ -52,6 +52,46 @@ internal static class AirSupportChecks
                 Step(w, 100);
                 NavigationChecks.Check(!Pose(w, foundation).Construction.Active && w.ConstructionProjectCount == 0, "Aerial construction never finished");
                 var report = w.Report(); NavigationChecks.Check(reference is null || report == reference, "Air construction differs by worker count"); reference = report;
+            }
+        });
+
+        test("Air support: roof flights publish real positions and AA missiles pass above the foundation", () =>
+        {
+            SimulationReport? reference = null;
+            foreach (int workers in new[] { 1, 4 })
+            {
+                var worker = new UnitDefinition("worker", 1000, constructionRange: 1536,
+                    flight: new(cruiseAltitude: 3584, workRoaming: true),
+                    products: [new("build", "site", "", OnSite: true)]);
+                var missile = new WeaponDefinition(8192, 8192, 1, 4, 0, projectile: ProjectileKind.Missile,
+                    projectileSpeed: 1024, targets: new(["air", "ground"]), spatialTrajectory: true);
+                using var w = new SimulationWorld([worker, Site(1000), new("aa", 100, ["idle", "move", "fire"], weapon: missile)], 32768, 32768,
+                    navigationGrid: new(32, 32), navigationWorkers: workers, players: [new(1, "Blue", 500)]);
+                var center = new WorldPosition(16384, 16384, 3584);
+                var engineer = w.AddInitialUnit(0, center, 1);
+                var aa = w.AddInitialUnit(2, new(11264, 16384, 3584), 2);
+                w.Step([new(1, 0, 1, CommandKind.PlanConstruction, engineer, center with { Elevation = 0 }, Action: "build"),
+                    new(1, 0, 2, CommandKind.AttackTarget, aa, TargetEntity: engineer)]);
+                bool moved = false, hit = false, aimed = false;
+                int work = 0;
+                for (int tick = 0; tick < 180; tick++)
+                {
+                    w.Step();
+                    var pose = Pose(w, engineer);
+                    moved |= pose.Current.X != center.X || pose.Current.Y != center.Y;
+                    NavigationChecks.Check(((long)pose.Current.X - pose.Previous.X) * (pose.Current.X - pose.Previous.X) + ((long)pose.Current.Y - pose.Previous.Y) * (pose.Current.Y - pose.Previous.Y) <= 160L * 160, "Roof flight teleported");
+                    foreach (var e in w.Events.ToArray())
+                    {
+                        if (e.Kind == WorldEventKind.WeaponFired && e.Entity == aa)
+                        { NavigationChecks.Check(e.Position == ObjectGeometry.ClosestPoint(worker, pose.Current, e.SourcePosition) with { Elevation = pose.Current.Elevation }, "AA aimed at an old worker position"); aimed |= pose.Current != center; }
+                        if (e.Kind == WorldEventKind.ProjectileImpact && e.TargetEntity == engineer) hit = true;
+                    }
+                    var site = Poses(w).Single(p => p.UnitType == 1);
+                    NavigationChecks.Check(site.Construction.Work > work, "Roof movement interrupted construction"); work = site.Construction.Work;
+                    NavigationChecks.Check(!w.Events.ToArray().Any(e => e.Kind == WorldEventKind.ProjectileImpact && e.TargetEntity == site.Id), "An elevated missile struck the building underneath");
+                }
+                NavigationChecks.Check(moved && hit && aimed, "Worker stayed anchored or AA failed to track/hit it");
+                var report = w.Report(); NavigationChecks.Check(reference is null || report == reference, "Roof flight differs by worker count"); reference = report;
             }
         });
 

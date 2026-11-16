@@ -20,9 +20,10 @@ public sealed record FlightDefinition
     public string ServiceType { get; }
     public TargetCategories Categories { get; }
     public bool NeedsRunway { get; }
+    public bool WorkRoaming { get; }
     public FlightDefinition(FlightMode mode = FlightMode.Hover, int speed = 160, int minimumSpeed = 80,
         int acceleration = 16, int turnRate = 16, int cruiseAltitude = 1536, int verticalSpeed = 96,
-        int halfHeight = 192, int ammo = 0, string serviceType = "aircraft", TargetCategories? categories = null, bool needsRunway = false)
+        int halfHeight = 192, int ammo = 0, string serviceType = "aircraft", TargetCategories? categories = null, bool needsRunway = false, bool workRoaming = false)
     {
         if (!Enum.IsDefined(mode) || speed is < 1 or > 1024 || minimumSpeed < 1 || minimumSpeed > speed ||
             acceleration is < 1 or > 1024 || turnRate is < 1 or > 128 || cruiseAltitude is < 512 or > 16384 ||
@@ -31,13 +32,13 @@ public sealed record FlightDefinition
             throw new ArgumentException("Invalid aircraft speed, altitude, turn rate, ammunition or service settings.");
         Mode = mode; Speed = speed; MinimumSpeed = minimumSpeed; Acceleration = acceleration; TurnRate = turnRate;
         CruiseAltitude = cruiseAltitude; VerticalSpeed = verticalSpeed; HalfHeight = halfHeight; Ammo = ammo;
-        ServiceType = serviceType; Categories = categories ?? new(["air"]); NeedsRunway = needsRunway;
+        ServiceType = serviceType; Categories = categories ?? new(["air"]); NeedsRunway = needsRunway; WorkRoaming = workRoaming;
     }
     internal void Write(BinaryWriter w)
     {
         w.Write((int)Mode); w.Write(Speed); w.Write(MinimumSpeed); w.Write(Acceleration); w.Write(TurnRate);
         w.Write(CruiseAltitude); w.Write(VerticalSpeed); w.Write(HalfHeight); w.Write(Ammo); w.Write(ServiceType);
-        Categories.Write(w); w.Write(NeedsRunway);
+        Categories.Write(w); w.Write(NeedsRunway); w.Write(WorkRoaming);
     }
 }
 

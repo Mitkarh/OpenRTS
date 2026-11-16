@@ -55,26 +55,26 @@ public partial class Sandbox
         var building = new EntityPose(new(90002), target, at with { Elevation = 0 }, at with { Elevation = 0 });
         foreach (var kind in new[] { UnitActionKind.Build, UnitActionKind.Capture, UnitActionKind.UpgradeSupport })
         {
-            var roaming = new WorkFlightVisual(_catalog.Presentations.Select(p => p.WorkRoaming).ToArray(), units);
-            var fixedHover = new WorkFlightVisual(new bool[units.Count], units);
+            var roaming = new WorkFlightVisual(units.Select(p => p.Flight?.WorkRoaming ?? false).ToArray());
+            var fixedHover = new WorkFlightVisual(new bool[units.Count]);
             var actor = new EntityPose(new(90001), worker, at, at,
                 Order: new(kind, OrderPhase.Engaging, at, building.Id, 0, 0))
                 { Flight = new(FlightPhase.Hovering, 0, 0, default, -1, true) };
+            var moving = actor with { Current = at with { X = at.X + 1024 } };
+            var effects = _combatEffects!;
+            var source0 = effects.WorkSource(moving, at with { Y = at.Y + 4096 }, 0);
+            var source1 = effects.WorkSource(moving, at with { Y = at.Y + 4096 }, 1);
+            if (source0 == source1 || source1.Elevation != moving.Current.Elevation)
+                throw new InvalidOperationException("The work beam did not follow the moving aircraft at flight height.");
             EntityPose[] poses = [actor, building];
             roaming.Update(poses, 10); fixedHover.Update(poses, 10);
-            if (roaming.Offset(actor, 10) != Vector2.Zero || fixedHover.Offset(actor, 80) != Vector2.Zero ||
-                roaming.Offset(actor, 80) == Vector2.Zero || roaming.Offset(actor, 80) != roaming.Offset(actor, 80))
-                throw new InvalidOperationException("Work roaming moved the initial pose, ignored its flag or was not repeatable.");
-            var held = roaming.Offset(actor, 80);
-            if (held != roaming.Offset(actor, 85)) throw new InvalidOperationException("The worker did not pause between roof flights.");
-            if (held == roaming.Offset(actor, 136)) throw new InvalidOperationException("Consecutive roof work cells did not change.");
             float heading = roaming.Heading(actor, 80, 0);
             if (heading != roaming.Heading(actor, 85, 0) || heading == roaming.Heading(actor, 136, 0) ||
                 fixedHover.Heading(actor, 80, 0.7f) != 0.7f || MathF.Abs(roaming.Heading(actor, 10, 0)) > 0.0001f)
                 throw new InvalidOperationException($"Roof heading failed: hold={heading}/{roaming.Heading(actor, 85, 0)}, next={roaming.Heading(actor, 136, 0)}, disabled={fixedHover.Heading(actor, 80, 0.7f)}, start={roaming.Heading(actor, 10, 0)}.");
             var repair = actor with { Order = actor.Order with { Kind = UnitActionKind.Repair } };
             roaming.Update([repair, building], 150);
-            if (roaming.Offset(repair, 162) != Vector2.Zero || MathF.Abs(Mathf.Wrap(roaming.Heading(repair, 162, 0), -MathF.PI, MathF.PI)) > 0.0001f)
+            if (MathF.Abs(Mathf.Wrap(roaming.Heading(repair, 162, 0), -MathF.PI, MathF.PI)) > 0.0001f)
                 throw new InvalidOperationException("Repair kept roaming after its transition.");
         }
     }

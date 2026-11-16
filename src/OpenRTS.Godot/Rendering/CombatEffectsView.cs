@@ -10,6 +10,7 @@ public sealed class CombatEffectsView
     private readonly UnitCatalog _units;
     private readonly EffectCatalog _effects;
     private readonly List<WorldEvent> _events = [];
+    private readonly Dictionary<EntityId, EntityPose> _workSources = [];
     private readonly ColoredMeshBatch _rounds = new(new SphereMesh { Radius = 0.5f, Height = 1, RadialSegments = 8, Rings = 4 }, "Projectiles");
     private readonly ColoredMeshBatch _beams = new(new BoxMesh { Size = Vector3.One }, "Tracers");
     private readonly ColoredMeshBatch _impacts = new(new SphereMesh { Radius = 0.5f, Height = 1, RadialSegments = 12, Rings = 4 }, "Impacts");
@@ -56,6 +57,8 @@ public sealed class CombatEffectsView
             _rounds.Add(point, new(size, size, size * 1.7f), heading, Color(style.Color));
             Beam(previous, point, (float)style.BeamWidth, Color(style.Color, 0.5f));
         }
+        _workSources.Clear();
+        bool sourcesLoaded = false;
         int write = 0;
         for (int read = 0; read < _events.Count; read++)
         {
@@ -72,8 +75,19 @@ public sealed class CombatEffectsView
             float phase = (float)(age / style.DurationTicks); var weapon = _units.Units[value.UnitType].Weapons[value.Mount].Weapon;
             if (value.Kind == WorldEventKind.WeaponFired)
             {
-                var source = Position(value.SourcePosition);
-                source.Z -= Lift(value.SourcePosition.Elevation, HoverEndpoints.Source, value.Hover, flightSurface);
+                var sourcePoint = value.SourcePosition;
+                if (weapon.Effect == WeaponEffect.Repair && observation is not null)
+                {
+                    if (!sourcesLoaded)
+                    {
+                        foreach (var pose in observation.Poses) _workSources[pose.Id] = pose;
+                        sourcesLoaded = true;
+                    }
+                    if (_workSources.TryGetValue(value.Entity, out var actor) && actor.Flight.Airborne)
+                        sourcePoint = WorkSource(actor, value.Position, alpha);
+                }
+                var source = Position(sourcePoint);
+                source.Z -= Lift(sourcePoint.Elevation, HoverEndpoints.Source, value.Hover, flightSurface);
                 if (weapon.Projectile == ProjectileKind.Hitscan)
                 {
                     var target = Position(value.Position);
@@ -92,6 +106,13 @@ public sealed class CombatEffectsView
         }
         if (write < _events.Count) _events.RemoveRange(write, _events.Count - write);
         _rounds.Publish(); _beams.Publish(); _impacts.Publish();
+    }
+    internal WorldPosition WorkSource(in EntityPose actor, WorldPosition target, float alpha)
+    {
+        var previous = actor.Previous; var current = actor.Current;
+        var point = new WorldPosition((int)Mathf.Lerp(previous.X, current.X, alpha), (int)Mathf.Lerp(previous.Y, current.Y, alpha),
+            (int)Mathf.Lerp(previous.Elevation, current.Elevation, alpha));
+        return ObjectGeometry.ClosestPoint(_units.Units[actor.UnitType], point, target) with { Elevation = point.Elevation };
     }
     private EffectStyle Style(int unit, int mount) => _effects.Weapons[_units.Units[unit].Weapons[mount].Weapon.Id];
     private void Beam(Vector3 from, Vector3 to, float width, Color color)

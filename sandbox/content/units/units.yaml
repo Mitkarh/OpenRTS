@@ -77,7 +77,7 @@ apc-mg:
     Variants:
       rockets:
         {
-          Cost: 200,
+          Cost: 300,
           Ticks: 90,
           Support: true,
           ReplaceWeapons: true,
@@ -85,7 +85,7 @@ apc-mg:
         }
       cannon:
         {
-          Cost: 250,
+          Cost: 450,
           Ticks: 110,
           Support: true,
           ReplaceWeapons: true,
@@ -257,7 +257,7 @@ fighter:
   Movement: { Locomotor: tracked }
   Health: { HP: 280, Armor: Mechanical }
   Body: { Radius: 320 }
-  Buildable: { Ticks: 150, Cost: 1200 }
+  Buildable: { Ticks: 450, Cost: 1200 }
   Aircraft:
     Mode: ForwardFlight
     Speed: 256
@@ -279,7 +279,7 @@ tiltrotor:
   Movement: { Locomotor: tracked }
   Health: { HP: 350, Armor: Mechanical }
   Body: { Radius: 320 }
-  Buildable: { Ticks: 125, Cost: 1000 }
+  Buildable: { Ticks: 325, Cost: 1000 }
   Aircraft:
     Mode: Hover
     Speed: 192

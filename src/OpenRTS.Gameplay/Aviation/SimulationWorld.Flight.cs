@@ -167,6 +167,7 @@ public sealed partial class SimulationWorld
     {
         if (!IsAircraft(actor)) return;
         if (!preserveBoarding) CancelBoardingRequests(actor);
+        actor.Get<FlightState>().WorkTarget = default;
         var f = actor.Get<FlightState>();
         ReleaseAirAssignment(actor.Get<EntityIdentity>().Id, f);
         f.ReturnRequested = f.LandRequested = false; f.ReloadWork = 0; f.ExitPoint = default;
@@ -421,7 +422,7 @@ public sealed partial class SimulationWorld
                 }
                 continue;
             }
-            FlyAircraft(actor, motion.Target, go);
+            if (!UpdateAirWork(actor)) FlyAircraft(actor, motion.Target, go);
         }
         RebuildMotionIndex();
     }

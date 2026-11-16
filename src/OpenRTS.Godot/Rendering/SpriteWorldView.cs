@@ -76,8 +76,6 @@ public sealed class SpriteWorldView
     public Vector3 DisplayPosition(in EntityPose pose, float alpha = 1)
     {
         var point = Interpolate(pose, alpha);
-        var offset = _workFlights.Offset(pose, _workTime);
-        point.X += offset.X; point.Z += offset.Y;
         point.Z -= HoverLift(_models[pose.UnitType].Unit, point.Y);
         return point;
     }
@@ -106,7 +104,7 @@ public sealed class SpriteWorldView
     public SpriteWorldView(UnitCatalog units, ModelCatalog models, Func<uint, Color>? ownerColor = null)
     {
         _ownerColor = ownerColor ?? (_ => Colors.White);
-        _workFlights = new(units.Presentations.Select(p => p.WorkRoaming).ToArray(), units.Units);
+        _workFlights = new(units.Units.Select(p => p.Flight?.WorkRoaming ?? false).ToArray());
         models.ValidateUnits(units);
         _models = new Model[units.Units.Count];
         for (int i = 0; i < _models.Length; i++)
@@ -283,8 +281,6 @@ public sealed class SpriteWorldView
             if (model.NearlyDestroyed != 0 && pose.Health > 0 && (long)pose.Health * 4 <= model.Unit.MaxHealth) view = view with { States = view.States | model.NearlyDestroyed };
             bool ghost = _ghostIds.Contains(pose.Id);
             var point = Interpolate(pose, alpha);
-            var offset = _workFlights.Offset(pose, time);
-            point.X += offset.X; point.Z += offset.Y;
             float elevation = point.Y;
             float height = Math.Max(0, elevation - _flightSurface);
             float lift = HoverLift(model.Unit, elevation);

@@ -71,15 +71,15 @@ internal static class EcsMigrationChecks
         return text.Replace("main: { Weapon: rifle, Animation: fire }", "main: { Weapon: cannon, Animation: fire }");
     }
 
-    // Mechanics format 34 includes carrier/order revisions for automatic air boarding.
+    // Mechanics format 35 includes canonical work flight state.
     // Cancellation state is canonical; root-sprite picking and work headings remain adapter-only.
     private static readonly Dictionary<string, string> Expected = new()
     {
-        ["direct"] = "A01C791FC0A327F7B768878B71F988B4C7ACC73F598FD6DD99EB7A001C2A9094",
-        ["navigation"] = "A357B233A187257A8F805023D87E11CDBFB237B9BFC891E6A90236765362E16C",
-        ["combat"] = "2C91518D2024CB854E07870BA280888B606DF73EAB123331659B4CF2114B0305",
-        ["buildings"] = "8027C0EBEDBB02237285AEBDE3CAF35BC4FD4E2A7D838F2128A4E44D2874DA73",
-        ["production"] = "8066499158EDD8BCC59A879FFCB73F49E945AA7FBB404CAD9F0C59BC4CB59857"
+        ["direct"] = "6DC4AEA0C7FCA10A2E455924B88F020F936165D2D9FA8ACC818459F0269077BD",
+        ["navigation"] = "C86BCFA878DB1AD80D74DF09BFFF2081F20F72C0DB604529CBA2E05EA49B5A68",
+        ["combat"] = "F65A0E4EDB6CB3EE9C39F2107164CCEC813F6B9ACFECF60591B81D562D58C25F",
+        ["buildings"] = "D871A5246CDCD5E50E6FD4F90A02C8D358A97E7D6165B070F3EFA111E0585E5A",
+        ["production"] = "DA8D7AC48346CFC17F631E44C0414913A5FDD38D9550C2080C5FFCEC0C7A817E"
     };
 
     internal static readonly JsonSerializerOptions TraceOptions = new() { Converters = { new EntitySetWriter() } };

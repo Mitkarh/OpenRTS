@@ -18,7 +18,7 @@
 
 power-plant:
   Inherits: ^building
-  Economy: { Energy: 100 }
+  Economy: { Energy: 50 }
   Footprint: { Rows: ["###", "###"] }
   Presentation: { Model: power-plant, Name: Электростанция }
 
@@ -61,13 +61,13 @@ factory:
         }
   Actions:
     Definitions:
-      apc: { Unit: apc-mg }
+      apc: { Unit: apc-mg, Cost: 500, Ticks: 250 }
       engineer: { Unit: construction-engineer }
-      tank: { Unit: tank, Cost: 180, Ticks: 150 }
-      stealth-truck: { Unit: stealth-truck, Cost: 600, Ticks: 175 }
-      radar-buggy: { Unit: radar-buggy, Cost: 300, Ticks: 100 }
-      mixed-tank: { Unit: tank-mixed, Cost: 260, Ticks: 175 }
-      repair: { Mount: repair, AutoCast: true }
+      tank: { Unit: tank, Cost: 800, Ticks: 350 }
+      stealth-truck: { Unit: stealth-truck, Cost: 1500, Ticks: 450 }
+      radar-buggy: { Unit: radar-buggy, Cost: 300, Ticks: 150 }
+      mixed-tank: { Unit: tank-mixed, Cost: 850, Ticks: 350 }
+      # repair: { Mount: repair, AutoCast: true }
   ActionPanel:
     Buttons:
       apc: { Label: БТР, Order: 0 }
@@ -76,7 +76,7 @@ factory:
       stealth-truck: { Label: Стелс-генератор, Order: 6 }
       radar-buggy: { Label: Разведчик, Order: 7 }
       mixed-tank: { Label: Мобильный радар, Order: 3 }
-      repair: { Label: Ремонт, Cursor: repair, Order: 4 }
+      # repair: { Label: Ремонт, Cursor: repair, Order: 4 }
   Footprint: { Rows: ["#####", "###++", "###++", "###++"] }
   Armaments:
     Mounts:
@@ -141,8 +141,8 @@ supply-center:
 
 supply-truck:
   Inherits: ^unit
-  Supply: { Role: Truck, Capacity: 100 }
-  Buildable: { Ticks: 100, Cost: 350 }
+  Supply: { Role: Truck, Capacity: 800 }
+  Buildable: { Ticks: 250, Cost: 450 }
   Movement: { Locomotor: tracked }
   Health: { HP: 280, Armor: Mechanical }
   Body: { Kind: Box, HalfSize: [320, 384] }
@@ -210,8 +210,8 @@ mine:
     Variants:
       owned:
         {
-          Cost: 900,
-          Ticks: 150,
+          Cost: 1200,
+          Ticks: 350,
           Support: true,
           Default: true,
           ClaimNeutral: true,
@@ -276,7 +276,7 @@ oil-derrick:
   Inherits: ^building
   -Buildable:
   Health: { Destruction: Neutralize }
-  Economy: { Energy: 0, Income: 30, Interval: 100 }
+  Economy: { Energy: 0, Income: 50, Interval: 100 }
   Footprint: { Rows: ["###", "###", "###"] }
   Presentation: { Model: oil-derrick, Name: Нефтяная вышка }
 
@@ -403,8 +403,9 @@ engineering-tiltrotor:
   Inherits: construction-engineer
   Builder: { Range: 1536, WorkInterval: 2 }
   Body: { Radius: 320 }
-  Buildable: { Ticks: 150, Cost: 1300 }
+  Buildable: { Ticks: 550, Cost: 1300 }
   Aircraft:
+    WorkRoaming: true
     Mode: Hover
     Speed: 192
     CruiseAltitude: 3584
@@ -414,13 +415,13 @@ engineering-tiltrotor:
   Presentation:
     Model: engineering-tiltrotor
     Name: Воздушный инженер
-    WorkRoaming: true
     States: [damaged, airborne]
 
 supply-tiltrotor:
   Inherits: supply-truck
   Body: { Radius: 320 }
-  Buildable: { Ticks: 125, Cost: 1100 }
+  Buildable: { Ticks: 425, Cost: 1100 }
+  Supply: { Role: Truck, Capacity: 400 }
   Aircraft:
     Mode: Hover
     Speed: 192
@@ -438,7 +439,7 @@ heavy-air-transport:
   -Armaments:
   Body: { Radius: 480 }
   Health: { HP: 800 }
-  Buildable: { Ticks: 175, Cost: 1800 }
+  Buildable: { Ticks: 375, Cost: 1800 }
   Aircraft: { Ammo: 0, Speed: 144 }
   Transport: { Accepts: [infantry, vehicle], Slots: 12, UnloadDistance: 1024 }
   Presentation:
@@ -486,7 +487,7 @@ airfield:
 helipad:
   Inherits: ^building
   Health: { HP: 900 }
-  Buildable: { Ticks: 125, Cost: 800 }
+  Buildable: { Ticks: 425, Cost: 800 }
   Economy: { Energy: -10 }
   Footprint: { Rows: ["####", "####", "####", "####"] }
   Airbase:
@@ -507,13 +508,26 @@ helipad:
     Buttons:
       tiltrotor:
         { Label: Конвертоплан, Icon: "res://assets/units/tiltrotor.png" }
-      engineer-air: { Label: Воздушный инженер, Icon: "res://assets/units/engineering-tiltrotor.png" }
-      supply-air: { Label: Воздушное снабжение, Icon: "res://assets/units/supply-tiltrotor.png" }
-      heavy-transport: { Label: Тяжёлый транспорт, Icon: "res://assets/units/heavy-air-transport.png" }
+      engineer-air:
+        {
+          Label: Воздушный инженер,
+          Icon: "res://assets/units/engineering-tiltrotor.png",
+        }
+      supply-air:
+        {
+          Label: Воздушное снабжение,
+          Icon: "res://assets/units/supply-tiltrotor.png",
+        }
+      heavy-transport:
+        {
+          Label: Тяжёлый транспорт,
+          Icon: "res://assets/units/heavy-air-transport.png",
+        }
   Presentation: { Model: helipad, Name: Вертолётная площадка }
 
 stealth-generator:
   Inherits: ^building
+  Buildable: { Ticks: 425, Cost: 1800 }
   Sensors: { JamRange: 12288, StealthRange: 8192, DeployTicks: 50 }
   Footprint: { Rows: ["####", "####", "####", "####"] }
   Presentation: { Model: stealth-generator, Name: Стелс-генератор }
