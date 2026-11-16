@@ -1,6 +1,6 @@
 # Сетевые контракты и алгоритмы
 
-**Статус:** проект, не реализованный протокол. **Текущий этап:** NET0 — каркас сборки. Основания: [поручение и текущее состояние](README.md), [референсы](references.md), [этапы и проверки](roadmap.md), [граница Core/Gameplay](../../decisions/023-core-and-gameplay.md), [сенсоры и знания](../fog-visibility/signatures-and-knowledge.md).
+**Статус:** целевой проект; NET1 реализован с уточнениями в [решении037](../../decisions/037-net1-direct-lockstep.md). **Текущий этап:** NET1 — конечный headless-прототип; последующие этапы остаются предложениями. Основания: [поручение и текущее состояние](README.md), [референсы](references.md), [этапы и проверки](roadmap.md), [граница Core/Gameplay](../../decisions/023-core-and-gameplay.md), [сенсоры и знания](../fog-visibility/signatures-and-knowledge.md).
 
 ## Область и владение
 

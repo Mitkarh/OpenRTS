@@ -34,6 +34,7 @@ case "$action" in
   build) build ;;
   test)
     build
+    dotnet run --project tests/OpenRTS.Network.Tests --no-build --no-launch-profile
     dotnet run --project tests/DeclarativeContent.Tests --no-build --no-launch-profile
     dotnet run --project tests/OpenRTS.Tests --no-build --no-launch-profile -- "$@"
     ;;
