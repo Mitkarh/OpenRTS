@@ -3,7 +3,7 @@ using OpenRTS.Core.Orders;
 namespace OpenRTS.Network;
 
 /// <summary>Bounded sealed batches. Single consumer; I/O admission completes before the owner takes a batch.</summary>
-internal sealed class TickInbox(Guid match, uint player, int delay)
+internal sealed class TickInbox(Guid match, uint player, int delay, int? futureWindow = null)
 {
     private readonly SortedDictionary<long, byte[]> _pending = [];
     private readonly Dictionary<long, byte[]> _recent = [];
@@ -11,7 +11,7 @@ internal sealed class TickInbox(Guid match, uint player, int delay)
     internal void Add(byte[] bytes, long completed)
     {
         var b = Wire.ReadBatch(bytes);
-        if (b.Match != match || b.Player != player || b.Tick > completed + delay + 1)
+        if (b.Match != match || b.Player != player || b.Tick > completed + (futureWindow ?? delay + 1))
             throw new InvalidDataException("Batch identity/future window mismatch.");
         if (_pending.TryGetValue(b.Tick, out var old) || _recent.TryGetValue(b.Tick, out old))
         {
@@ -21,6 +21,7 @@ internal sealed class TickInbox(Guid match, uint player, int delay)
         if (b.Tick <= completed) throw new InvalidDataException("Expired batch.");
         _pending.Add(b.Tick, bytes.ToArray());
     }
+    internal bool Contains(long tick) => _pending.ContainsKey(tick);
     internal WorldCommand[] Take(long tick)
     {
         if (!_pending.Remove(tick, out var bytes)) throw new InvalidOperationException("Tick is not ready.");

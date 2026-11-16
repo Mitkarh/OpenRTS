@@ -1,6 +1,6 @@
 # 038. NET2: live direct match в Godot
 
-**Дата:** 16 ноября 2026. **Статус:** реализован LAN/UI срез NET2; WAN-профиль ещё не завершён. [План](../research/networking/roadmap.md) · [проверки](../verification/038-net2.md).
+**Дата:** 16 ноября 2026. **Статус:** исторический LAN/UI срез NET2; строгий barrier и format2 заменены [WAN-решением039](039-net2-wan-pipeline.md). Действующий protocol/journal —3. [План](../research/networking/roadmap.md) · [проверки](../verification/038-net2.md).
 
 ## Основной режим
 

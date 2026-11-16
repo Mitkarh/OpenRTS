@@ -1,0 +1,258 @@
+{
+  "image": "sha256:f0deeb2e611da16af62c90587ee2a92dfe57241765df513f060790cec01a488c",
+  "profiles": [
+    {
+      "rtt": 0,
+      "jitter": 0,
+      "loss": 0,
+      "inputDelay": 2,
+      "steadyHz": 24.99,
+      "meanSimulationHz": 25.0,
+      "simulationElapsedMs": 4120.4,
+      "maxWaitMs": 4.674,
+      "maxUnverifiedTicks": 8,
+      "waitP95": 0.143,
+      "sealedToAppliedP95": 80.736,
+      "submitToObservedFrameMs": 135.96130000000016,
+      "sendHighWater": 2,
+      "receiveHighWater": 2,
+      "final": {
+        "Tick": 103,
+        "EntityCount": 2,
+        "StateHash": "F24ECD92169DEA13FCD342D81B3152ADBB6B2AF737D6627E161996E86AE1D1D5"
+      },
+      "netem": {
+        "kind": "netem",
+        "handle": "8010:",
+        "root": true,
+        "refcnt": 15,
+        "options": {
+          "limit": 256,
+          "ecn": false,
+          "gap": 0
+        },
+        "bytes": 43675,
+        "packets": 279,
+        "drops": 0,
+        "overlimits": 0,
+        "requeues": 0,
+        "backlog": 0,
+        "qlen": 0
+      },
+      "kernel": "7.2.12-orbstack-00394-gbecdd6130068",
+      "environment": {
+        "os": "macOS 27.2.1",
+        "architecture": "Arm64",
+        "runtime": "10.0.5"
+      }
+    },
+    {
+      "rtt": 50,
+      "jitter": 20,
+      "loss": 0,
+      "inputDelay": 4,
+      "steadyHz": 25.01,
+      "meanSimulationHz": 25.0,
+      "simulationElapsedMs": 4200.1,
+      "maxWaitMs": 3.667,
+      "maxUnverifiedTicks": 9,
+      "waitP95": 0.153,
+      "sealedToAppliedP95": 160.783,
+      "submitToObservedFrameMs": 212.51800000000003,
+      "sendHighWater": 2,
+      "receiveHighWater": 3,
+      "final": {
+        "Tick": 105,
+        "EntityCount": 2,
+        "StateHash": "81C051DB472B3219FED98BEA535397764D6939BA1224E715D5C33C25A7D022B5"
+      },
+      "netem": {
+        "kind": "netem",
+        "handle": "8011:",
+        "root": true,
+        "refcnt": 15,
+        "options": {
+          "limit": 256,
+          "delay": {
+            "delay": 0.025,
+            "jitter": 0.02,
+            "correlation": 0
+          },
+          "ecn": false,
+          "gap": 0
+        },
+        "bytes": 41769,
+        "packets": 246,
+        "drops": 0,
+        "overlimits": 0,
+        "requeues": 0,
+        "backlog": 132,
+        "qlen": 2
+      },
+      "kernel": "7.2.12-orbstack-00394-gbecdd6130068",
+      "environment": {
+        "os": "macOS 27.2.1",
+        "architecture": "Arm64",
+        "runtime": "10.0.5"
+      }
+    },
+    {
+      "rtt": 150,
+      "jitter": 20,
+      "loss": 1,
+      "inputDelay": 8,
+      "steadyHz": 23.9,
+      "meanSimulationHz": 24.67,
+      "simulationElapsedMs": 8470.3,
+      "maxWaitMs": 57.055,
+      "maxUnverifiedTicks": 15,
+      "waitP95": 0.099,
+      "sealedToAppliedP95": 373.732,
+      "submitToObservedFrameMs": 366.6594,
+      "sendHighWater": 2,
+      "receiveHighWater": 8,
+      "final": {
+        "Tick": 209,
+        "EntityCount": 2,
+        "StateHash": "77C5365AB448253351029B9DBC6C1639C7C9A5E1F35994A20893A105378922F2"
+      },
+      "netem": {
+        "kind": "netem",
+        "handle": "8012:",
+        "root": true,
+        "refcnt": 15,
+        "options": {
+          "limit": 256,
+          "delay": {
+            "delay": 0.075,
+            "jitter": 0.02,
+            "correlation": 0
+          },
+          "loss-random": {
+            "loss": 0.01,
+            "correlation": 0
+          },
+          "ecn": false,
+          "gap": 0
+        },
+        "bytes": 81769,
+        "packets": 480,
+        "drops": 5,
+        "overlimits": 0,
+        "requeues": 0,
+        "backlog": 264,
+        "qlen": 4
+      },
+      "kernel": "7.2.12-orbstack-00394-gbecdd6130068",
+      "environment": {
+        "os": "macOS 27.2.1",
+        "architecture": "Arm64",
+        "runtime": "10.0.5"
+      }
+    },
+    {
+      "rtt": 300,
+      "jitter": 0,
+      "loss": 0,
+      "inputDelay": 12,
+      "steadyHz": 25.0,
+      "meanSimulationHz": 24.99,
+      "simulationElapsedMs": 4521.4,
+      "maxWaitMs": 2.318,
+      "maxUnverifiedTicks": 15,
+      "waitP95": 0.203,
+      "sealedToAppliedP95": 480.731,
+      "submitToObservedFrameMs": 524.7556999999997,
+      "sendHighWater": 2,
+      "receiveHighWater": 2,
+      "final": {
+        "Tick": 113,
+        "EntityCount": 2,
+        "StateHash": "E76E52A9BA2CC3E442204B60E56D2F4C464D5B898271E68FFDE375762FAD8103"
+      },
+      "netem": {
+        "kind": "netem",
+        "handle": "8013:",
+        "root": true,
+        "refcnt": 15,
+        "options": {
+          "limit": 256,
+          "delay": {
+            "delay": 0.15,
+            "jitter": 0,
+            "correlation": 0
+          },
+          "ecn": false,
+          "gap": 0
+        },
+        "bytes": 43418,
+        "packets": 267,
+        "drops": 0,
+        "overlimits": 0,
+        "requeues": 0,
+        "backlog": 198,
+        "qlen": 3
+      },
+      "kernel": "7.2.12-orbstack-00394-gbecdd6130068",
+      "environment": {
+        "os": "macOS 27.2.1",
+        "architecture": "Arm64",
+        "runtime": "10.0.5"
+      }
+    },
+    {
+      "rtt": 300,
+      "jitter": 80,
+      "loss": 5,
+      "inputDelay": 12,
+      "steadyHz": 25.0,
+      "meanSimulationHz": 21.23,
+      "simulationElapsedMs": 5322.3,
+      "maxWaitMs": 16.422,
+      "maxUnverifiedTicks": 18,
+      "waitP95": 0.289,
+      "sealedToAppliedP95": 1280.892,
+      "submitToObservedFrameMs": 527.7197999999999,
+      "sendHighWater": 2,
+      "receiveHighWater": 13,
+      "final": {
+        "Tick": 113,
+        "EntityCount": 2,
+        "StateHash": "E76E52A9BA2CC3E442204B60E56D2F4C464D5B898271E68FFDE375762FAD8103"
+      },
+      "netem": {
+        "kind": "netem",
+        "handle": "8014:",
+        "root": true,
+        "refcnt": 15,
+        "options": {
+          "limit": 256,
+          "delay": {
+            "delay": 0.15,
+            "jitter": 0.08,
+            "correlation": 0
+          },
+          "loss-random": {
+            "loss": 0.05,
+            "correlation": 0
+          },
+          "ecn": false,
+          "gap": 0
+        },
+        "bytes": 46442,
+        "packets": 247,
+        "drops": 13,
+        "overlimits": 0,
+        "requeues": 0,
+        "backlog": 264,
+        "qlen": 4
+      },
+      "kernel": "7.2.12-orbstack-00394-gbecdd6130068",
+      "environment": {
+        "os": "macOS 27.2.1",
+        "architecture": "Arm64",
+        "runtime": "10.0.5"
+      }
+    }
+  ]
+}

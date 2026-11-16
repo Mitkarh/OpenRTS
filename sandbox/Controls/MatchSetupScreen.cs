@@ -10,6 +10,10 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     private readonly OptionButton _network = new() { Name = "NetworkMode" };
     private readonly LineEdit _address = new() { Name = "NetworkAddress", Text = "127.0.0.1", PlaceholderText = "IP / имя хоста" };
     private readonly SpinBox _port = new() { Name = "NetworkPort", MinValue = 1, MaxValue = 65535, Value = 17771 };
+    private readonly SpinBox _delay = new() { Name = "NetworkDelay", MinValue = 1, MaxValue = 16, Value = 6,
+        TooltipText = "Буфер ввода в тиках: больше — устойчивее к задержкам и jitter, меньше — быстрее реакция. Настройка должна совпадать у обоих игроков." };
+    private readonly Label _delayLabel = new() { Text = "Буфер ввода · тики" };
+    public int NetworkInputDelay => (int)_delay.Value;
     private readonly LineEdit _pin = new() { Name = "NetworkPin", PlaceholderText = "SHA-256 отпечаток хоста · для подключения" };
     public int NetworkMode => _network.Selected;
     public string NetworkAddress => _address.Text.Trim();
@@ -87,8 +91,8 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         body.AddChild(setup);
         _network.AddItem("Локальный матч"); _network.AddItem("Создать прямую игру · игрок 1"); _network.AddItem("Подключиться · игрок 2");
         AddField(setup, "Подключение", _network);
-        setup.AddChild(_address); setup.AddChild(_port); setup.AddChild(_pin);
-        _network.ItemSelected += _ => { if (NetworkMode != 0 && _count.ItemCount >= 2) { _count.Select(1); UpdatePlayers(); } UpdateNetworkControls(false); UpdateOpponent(); _status.Text = "На обоих клиентах выберите одинаковые карту, режим, туман и стартовые точки. Нажатие «Начать» подтверждает готовность."; };
+        setup.AddChild(_address); setup.AddChild(_port); setup.AddChild(_pin); setup.AddChild(_delayLabel); setup.AddChild(_delay);
+        _network.ItemSelected += _ => { if (NetworkMode != 0 && _count.ItemCount >= 2) { _count.Select(1); UpdatePlayers(); } UpdateNetworkControls(false); UpdateOpponent(); _status.Text = "На обоих клиентах выберите одинаковые карту, режим, туман, стартовые точки и буфер ввода. Нажатие «Начать» подтверждает готовность."; };
         AddField(setup, "Карта", _maps);
         AddField(setup, "Режим игры", _modes);
         AddField(setup, "Количество игроков", _count);
@@ -211,7 +215,8 @@ public sealed partial class MatchSetupScreen : CanvasLayer
 
     private void UpdateNetworkControls(bool busy)
     {
-        _address.Visible = _port.Visible = _pin.Visible = NetworkMode != 0;
+        _address.Visible = _port.Visible = _pin.Visible = _delay.Visible = _delayLabel.Visible = NetworkMode != 0;
+        _delay.Editable = !busy;
         _address.Editable = _port.Editable = !busy;
         _pin.Editable = !busy && NetworkMode == 2;
         _count.Disabled = busy || NetworkMode != 0;

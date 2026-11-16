@@ -12,7 +12,7 @@ public sealed class MatchJournal : IDisposable
     internal MatchJournal(Stream output, byte[] descriptor, string initialHash)
     {
         _writer = new(output, Encoding.UTF8, true);
-        Write(Wire.Pack(w => { w.Write((byte)6); w.Write(2); w.Write(descriptor.Length); w.Write(descriptor); Wire.Text(w, initialHash); }));
+        Write(Wire.Pack(w => { w.Write((byte)6); w.Write(3); w.Write(descriptor.Length); w.Write(descriptor); Wire.Text(w, initialHash); }));
     }
     private void Write(byte[] record)
     {
@@ -48,7 +48,7 @@ public sealed class MatchJournal : IDisposable
         }
         Wire.Unpack(Read(), h => {
             var expected = DirectMatch.Descriptor(descriptor);
-            if (h.ReadByte() != 6 || h.ReadInt32() != 2 || h.ReadInt32() != expected.Length ||
+            if (h.ReadByte() != 6 || h.ReadInt32() != 3 || h.ReadInt32() != expected.Length ||
                 !h.ReadBytes(expected.Length).AsSpan().SequenceEqual(expected) || Wire.Text(h) != world.Report().StateHash || world.Tick != 0)
                 throw new InvalidDataException("Journal initial state/descriptor mismatch.");
             return true;

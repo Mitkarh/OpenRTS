@@ -21,6 +21,8 @@ public sealed class DirectSession : IDisposable
     private readonly TaskCompletionSource<SimulationReport> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _pending, _eventCount, _leave, _disposed;
     private long _sequence, _timestamp, _tick;
+    private NetworkTickSample? _statistics;
+    public NetworkTickSample? Statistics => Volatile.Read(ref _statistics);
     private string _status = "Подключение…";
     public uint Player { get; }
     public FrameExchange Frames { get; } = new();
@@ -88,7 +90,7 @@ public sealed class DirectSession : IDisposable
                 // Socket/TLS/world lifetime stays on this owner. The connect deadline does not limit the match.
                 report = DirectMatch.Run(peer, Player, descriptor, createWorld, Collect, journal, _stop.Token,
                     afterTick: Publish, realtime: true, status: text => Volatile.Write(ref _status, text), transport: tls,
-                    leaveRequested: () => Volatile.Read(ref _leave) != 0);
+                    leaveRequested: () => Volatile.Read(ref _leave) != 0, observe: sample => Volatile.Write(ref _statistics, sample));
             }
             Volatile.Write(ref _status, "Матч завершён"); _completion.TrySetResult(report);
         }

@@ -46,7 +46,7 @@ public partial class Sandbox
             if (_networkMode != 0 && (slots.Length != 2 || aiOpponent))
                 throw new ArgumentException("Прямая игра требует двух игроков без ИИ.");
             _networkAddress = _matchSetup.NetworkAddress; _networkPort = _matchSetup.NetworkPort;
-            _networkPin = _matchSetup.NetworkPin;
+            _networkPin = _matchSetup.NetworkPin; _networkDelay = _matchSetup.NetworkInputDelay;
             _fogViewer = _networkMode == 2 ? 2u : 1u;
             _matchFogMode = _matchSetup!.SelectedFog;
             _fogStyle = _matchSetup.SelectedFogStyle;

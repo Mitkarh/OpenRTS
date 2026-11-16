@@ -11,12 +11,12 @@ public partial class Sandbox
 {
     private int _networkMode;
     private string _networkAddress = "127.0.0.1", _networkPin = "";
-    private int _networkPort = 17771;
+    private int _networkPort = 17771, _networkDelay = 6;
     private Label? _networkLabel;
     private void StartNetworkSession(MapMatch map, UnitCatalog catalog)
     {
         var descriptor = new MatchDescriptor("openrts-net2-v2", catalog.Summary.Fingerprint,
-            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{map.Map.Id}|{map.Seed}|{_manifest.Settings.Simulation.SpeedPerTick}|{_matchFogMode}|{_fogHoldTicks}"))), map.Seed, TickRate: _manifest.Settings.Simulation.TickRate, EndTick: 0);
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{map.Map.Id}|{map.Seed}|{_manifest.Settings.Simulation.SpeedPerTick}|{_matchFogMode}|{_fogHoldTicks}"))), map.Seed, TickRate: _manifest.Settings.Simulation.TickRate, InputDelay: _networkDelay, EndTick: 0);
         // The handshake also compares the complete initialized world hash, including map/seed/settings.
         var directory = ProjectSettings.GlobalizePath("user://network"); Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.journal");

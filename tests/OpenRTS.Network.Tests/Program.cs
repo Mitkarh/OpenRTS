@@ -19,6 +19,57 @@ IReadOnlyList<WorldCommand> Input(uint player, long tick) => tick == 2
     ? [new(0, 0, 0, CommandKind.MoveSelected, new(player), new(12000, (int)player * 2048), Recipients: new EntitySet([new(player)]))]
     : [];
 string? Value(string prefix) => args.FirstOrDefault(a => a.StartsWith(prefix))?[prefix.Length..];
+if (args.Contains("--tls-peer"))
+{
+    bool hosting = Value("--host=") is not null;
+    int port = int.Parse(Value("--port=") ?? "17771");
+    int delay = int.Parse(Value("--delay=") ?? "8"), ticks = int.Parse(Value("--ticks=") ?? "100");
+    string journal = Value("--journal=")!, pinFile = Value("--pin-file=")!;
+    var d = descriptor with { EndTick=0, InputDelay=delay };
+    using var session = new DirectSession(hosting, Value("--host=") ?? Value("--join=")!, port,
+        hosting ? null : File.ReadAllText(pinFile).Trim(), d, () => World(workers:hosting?1:2), journal);
+    if (hosting)
+    {
+        File.WriteAllText(pinFile,session.Fingerprint);
+        var readyClock=Stopwatch.StartNew();
+        while (!session.Status.StartsWith("Ожидание подключения",StringComparison.Ordinal) && readyClock.Elapsed < TimeSpan.FromSeconds(5))
+        { if (session.Completion.IsFaulted) session.Completion.GetAwaiter().GetResult(); Thread.Sleep(5); }
+        Console.WriteLine("LISTEN " + port);
+    }
+    var records=new List<NetworkTickSample>(); long last=0; bool issued=false, leaving=false;
+    double? submitted=null, observed=null; var clock=Stopwatch.StartNew();
+    while (!session.Completion.IsCompleted && clock.Elapsed < TimeSpan.FromSeconds(45))
+    {
+        if (session.Statistics is { } sample && sample.Tick>last) { records.Add(sample);last=sample.Tick; }
+        using var frame=session.Frames.AcquireLatest();
+        if (frame is not null)
+        {
+            if (!issued && frame.Tick>=20)
+            {
+                session.Submit(new(0,0,0,CommandKind.Move,new(session.Player),new(12000,(int)session.Player*2048)));
+                issued=true; submitted=clock.Elapsed.TotalMilliseconds;
+            }
+            if (issued && observed is null)
+                foreach(var pose in frame.Poses)
+                    if (pose.Id.Value==session.Player && pose.Current.X!=(hosting?2048:4096)) observed=clock.Elapsed.TotalMilliseconds;
+            if (hosting && !leaving && frame.Tick>=ticks) {session.Leave();leaving=true;}
+        }
+        Thread.Sleep(2);
+    }
+    if (!session.Completion.IsCompleted) throw new TimeoutException("TLS WAN peer exceeded completion budget");
+    var result=session.Completion.GetAwaiter().GetResult();
+    if (session.Statistics is { } final && final.Tick>last) records.Add(final);
+    using var replay=File.OpenRead(journal);
+    if (MatchJournal.Replay(replay,d,()=>World())!=result) throw new Exception("TLS WAN replay differs");
+    if (observed is null || submitted is null) throw new Exception("Input did not reach published frame");
+    File.WriteAllText(Value("--metrics=")!,System.Text.Json.JsonSerializer.Serialize(new {
+        result,descriptor=d, samples=records,submitToObservedFrameMs=observed-submitted,
+        environment=new {os=System.Runtime.InteropServices.RuntimeInformation.OSDescription,architecture=System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),runtime=Environment.Version.ToString()}
+    },new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));
+    Console.WriteLine($"RESULT {result.Tick} {result.StateHash}");
+    return;
+}
+if (args.Contains("--wan")) { WanChecks.Profiles(Value("--output=") ?? "/tmp/openrts-wan-results.json"); return; }
 if (Value("--host=") is { } host || Value("--join=") is not null)
 {
     bool hosting = Value("--host=") is not null;
@@ -131,7 +182,7 @@ Test("foreign actor input is denied by gameplay on the agreed tick", () => {
     }, input: (player, tick) => tick == 2 ? [new(0, 0, 0, CommandKind.MoveSelected, new(3 - player), new(10000, 10000))] : []);
     Task.WaitAll(tasks); Check(denied && tasks[0].Result == tasks[1].Result);
 });
-Test("missing closed batch never advances the world, cancel and EOF stop promptly", () => {
+Test("missing input stops after the agreed bootstrap, cancel and EOF stop promptly", () => {
     foreach (bool disconnect in new[] { false, true })
     {
         var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
@@ -146,11 +197,11 @@ Test("missing closed batch never advances the world, cancel and EOF stop promptl
         Wire.Send(stream, response, stop.Token).GetAwaiter().GetResult();
         var ready = Wire.Receive(stream, stop.Token).GetAwaiter().GetResult(); Wire.Send(stream, ready, stop.Token).GetAwaiter().GetResult();
         _ = Wire.Receive(stream, stop.Token).GetAwaiter().GetResult();
-        Check(!task.Wait(100) && Volatile.Read(ref publications) == 0);
+        Check(!task.Wait(100) && Volatile.Read(ref publications) <= descriptor.InputDelay - 1);
         if (disconnect) fake.Dispose(); else stop.Cancel();
         try { task.GetAwaiter().GetResult(); throw new Exception("Expected interrupted match"); }
         catch (Exception e) when (e is OperationCanceledException or IOException) { }
-        Check(owned!.Tick == 0);
+        Check(owned!.Tick == descriptor.InputDelay - 1);
         try { owned.Step(); throw new Exception("World was not disposed"); } catch (ObjectDisposedException) { }
     }
 });
@@ -169,7 +220,7 @@ Test("first divergent tick stops the match and records failure", () => {
     using var fake = new TcpClient(); fake.Connect(IPAddress.Loopback, ((IPEndPoint)listener.LocalEndpoint).Port);
     var host = listener.AcceptTcpClient(); listener.Stop();
     using var journal = new MemoryStream(); using var stop = new CancellationTokenSource(3000);
-    var task = Task.Run(() => DirectMatch.Run(host, 1, descriptor, () => World(), _ => [], journal, stop.Token));
+    var task = Task.Run(() => DirectMatch.Run(host, 1, descriptor with { HashInterval=1 }, () => World(), _ => [], journal, stop.Token));
     using var stream = fake.GetStream();
     var hello = Wire.Receive(stream, stop.Token).GetAwaiter().GetResult();
     var response = hello.ToArray(); response[5] = 2; Array.Clear(response, 9, 16);
@@ -275,6 +326,7 @@ Test("extended wire fields survive production, ability and transform intents", (
         Check(Wire.ReadBatch(b).Commands[0] == c);
     }
 });
+WanChecks.Run(Test);
 Console.WriteLine($"{passed} Network checks passed.");
 
 sealed class SplitStream(Stream inner) : Stream
