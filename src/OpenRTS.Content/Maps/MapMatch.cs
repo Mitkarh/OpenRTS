@@ -11,6 +11,7 @@ public sealed class MapMatch
     private readonly Placement[] _placements;
     private readonly ulong _seed;
     public GameMap Map { get; }
+    public ulong Seed => _seed;
     public int UnitCount => _placements.Length;
 
     internal MapMatch(GameMap map, UnitCatalog catalog, PlayerDefinition[] players, Placement[] placements, ulong seed)

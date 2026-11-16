@@ -6,6 +6,15 @@ using OpenRTS.Core;
 
 public sealed partial class MatchSetupScreen : CanvasLayer
 {
+    public event Action? CancelNetwork;
+    private readonly OptionButton _network = new() { Name = "NetworkMode" };
+    private readonly LineEdit _address = new() { Name = "NetworkAddress", Text = "127.0.0.1", PlaceholderText = "IP / имя хоста" };
+    private readonly SpinBox _port = new() { Name = "NetworkPort", MinValue = 1, MaxValue = 65535, Value = 17771 };
+    private readonly LineEdit _pin = new() { Name = "NetworkPin", PlaceholderText = "SHA-256 отпечаток хоста · для подключения" };
+    public int NetworkMode => _network.Selected;
+    public string NetworkAddress => _address.Text.Trim();
+    public int NetworkPort => (int)_port.Value;
+    public string NetworkPin => _pin.Text;
     private readonly OptionButton _maps = new() { Name = "Maps" };
     private readonly OptionButton _fog = new() { Name = "Fog", TooltipText = "Скрыта: требуется разведка. Разведана: известна вся местность, объекты только в обзоре. Видима: все объекты видны." };
     private readonly OptionButton _fogStyle = new() { Name = "FogStyle" };
@@ -59,7 +68,7 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         var layout = new VBoxContainer();
         layout.AddThemeConstantOverride("separation", 14);
         panel.AddChild(layout);
-        layout.AddChild(Sandbox.TerminalHeading("OPENRTS   /   ЛОКАЛЬНАЯ ИГРА"));
+        layout.AddChild(Sandbox.TerminalHeading("OPENRTS   /   НАСТРОЙКА ИГРЫ"));
         var title = new Label { Text = "Настройка матча" };
         title.AddThemeFontSizeOverride("font_size", 28);
         layout.AddChild(title);
@@ -76,6 +85,10 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         var setup = new VBoxContainer { CustomMinimumSize = new(284, 0) };
         setup.AddThemeConstantOverride("separation", 9);
         body.AddChild(setup);
+        _network.AddItem("Локальный матч"); _network.AddItem("Создать прямую игру · игрок 1"); _network.AddItem("Подключиться · игрок 2");
+        AddField(setup, "Подключение", _network);
+        setup.AddChild(_address); setup.AddChild(_port); setup.AddChild(_pin);
+        _network.ItemSelected += _ => { if (NetworkMode != 0 && _count.ItemCount >= 2) { _count.Select(1); UpdatePlayers(); } UpdateNetworkControls(false); UpdateOpponent(); _status.Text = "На обоих клиентах выберите одинаковые карту, режим, туман и стартовые точки. Нажатие «Начать» подтверждает готовность."; };
         AddField(setup, "Карта", _maps);
         AddField(setup, "Режим игры", _modes);
         AddField(setup, "Количество игроков", _count);
@@ -99,6 +112,8 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         layout.AddChild(_status);
         var buttons = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
         layout.AddChild(buttons);
+        var cancel = new Button { Text = "Отменить подключение" };
+        cancel.Pressed += () => CancelNetwork?.Invoke(); buttons.AddChild(cancel);
         var quit = new Button { Text = "Выход" };
         quit.Pressed += () => GetTree().Quit();
         buttons.AddChild(quit);
@@ -115,6 +130,7 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         _count.ItemSelected += _ => UpdatePlayers();
         _launch.Pressed += () => Launch?.Invoke(CurrentMap, _modeChoices[_modes.Selected].Set, AssignedSlots(), _opponent.ButtonPressed && !_opponent.Disabled);
         SelectMap(2);
+        UpdateNetworkControls(false);
         _maps.GrabFocus();
     }
 
@@ -185,7 +201,7 @@ public sealed partial class MatchSetupScreen : CanvasLayer
 
     private string[] AssignedSlots() => _starts.Select(row => CurrentMap.Slots[row.Selected]).ToArray();
 
-    private bool CanUseOpponent => CurrentMap.IsSkirmish && _modeChoices[_modes.Selected].Set.Id == "supply" && PlayerCount == 2;
+    private bool CanUseOpponent => NetworkMode == 0 && CurrentMap.IsSkirmish && _modeChoices[_modes.Selected].Set.Id == "supply" && PlayerCount == 2;
 
     private void UpdateOpponent()
     {
@@ -193,13 +209,29 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         if (_opponent.Disabled) _opponent.SetPressedNoSignal(false);
     }
 
+    private void UpdateNetworkControls(bool busy)
+    {
+        _address.Visible = _port.Visible = _pin.Visible = NetworkMode != 0;
+        _address.Editable = _port.Editable = !busy;
+        _pin.Editable = !busy && NetworkMode == 2;
+        _count.Disabled = busy || NetworkMode != 0;
+    }
+
+    public void SetNetworkStatus(string status, string fingerprint)
+    {
+        if (NetworkMode == 1) _pin.Text = fingerprint;
+        _status.Text = status + "\nСверьте отпечаток хоста по отдельному каналу. Параметры матча должны совпадать.";
+    }
+
     public void SetLaunching(bool busy, string message)
     {
+        _address.Editable = _pin.Editable = !busy; _network.Disabled = busy; _port.Editable = !busy;
         _maps.Disabled = _modes.Disabled = _count.Disabled = _fog.Disabled = _launch.Disabled = busy;
         _fogStyle.Disabled = busy || SelectedFog == OpenRTS.Core.Visibility.FogMode.Visible;
         _radarStyle.Disabled = busy;
         _opponent.Disabled = busy || !CanUseOpponent;
         foreach (var start in _starts) start.Disabled = busy;
         _status.Text = message;
+        UpdateNetworkControls(busy);
     }
 }

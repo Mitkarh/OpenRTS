@@ -236,9 +236,10 @@ public partial class Sandbox
         menu.AddChild(health);
         AddRangeSettings(menu);
         menu.AddChild(TerminalButton("Консоль разработчика", "F12", () => { ToggleMatchMenu(); _diagnostics!.Visible = !_diagnostics.Visible; }));
-        menu.AddChild(TerminalButton("Перезапустить матч", "Сбросить текущий матч", () => { ToggleMatchMenu(); StartSession(); }));
+        if (_networkMode == 0) menu.AddChild(TerminalButton("Перезапустить матч", "Сбросить текущий матч", () => { ToggleMatchMenu(); StartSession(); }));
         if (_startedFromSetup)
             menu.AddChild(TerminalButton("Новый матч", "Вернуться к выбору карты и игроков", () => GetTree().CallDeferred(SceneTree.MethodName.ReloadCurrentScene)));
+        if (_networkMode != 0) menu.AddChild(TerminalButton("Покинуть матч", "Завершить прямую игру для обоих участников", () => _session?.Network?.Leave()));
         menu.AddChild(TerminalButton("Выйти", "Закрыть OpenRTS", () => GetTree().Quit()));
     }
 
@@ -248,7 +249,7 @@ public partial class Sandbox
         if (!_matchMenu!.Visible)
         {
             _pauseBeforeMenu = _paused;
-            _paused = true;
+            if (_networkMode == 0) _paused = true;
             _pointerDown = false;
             _rtsOverlay!.Marquee = null;
         }
@@ -257,7 +258,7 @@ public partial class Sandbox
         _rtsOverlay!.ShowCursor = !_matchMenu.Visible;
         if (DisplayServer.GetName() != "headless")
             Input.MouseMode = _matchMenu.Visible ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Hidden;
-        _session.SetPlayback(_playbackSpeed, _paused);
+        if (_networkMode == 0) _session.SetPlayback(_playbackSpeed, _paused);
     }
 
     private Rect2 Playfield()

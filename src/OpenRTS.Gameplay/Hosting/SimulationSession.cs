@@ -41,7 +41,9 @@ public sealed class SimulationSession : SimulationSession<SimulationWorld, World
         if (!Enum.IsDefined(command.Kind)) throw new ArgumentOutOfRangeException("kind");
     }
 
-    public long Issue(UnitAction action)
+    public long Issue(UnitAction action) => Submit(ToCommand(action));
+
+    public static WorldCommand ToCommand(UnitAction action)
     {
         ArgumentNullException.ThrowIfNull(action.Recipients);
         CommandKind kind = action.Kind switch
@@ -63,6 +65,6 @@ public sealed class SimulationSession : SimulationSession<SimulationWorld, World
             _ => throw new ArgumentOutOfRangeException(nameof(action))
         };
         if (kind == CommandKind.UseAbility && string.IsNullOrWhiteSpace(action.Action)) throw new ArgumentException("An ability action requires its registered ID.", nameof(action));
-        return Submit(kind, action.Position, action.Recipients.Ids[0], targetEntity: action.Target, recipients: action.Recipients, queued: action.Queued, action: action.Action);
+        return new(0, 0, 0, kind, action.Recipients.Ids[0], action.Position, TargetEntity: action.Target, Recipients: action.Recipients, Queued: action.Queued, Action: action.Action);
     }
 }

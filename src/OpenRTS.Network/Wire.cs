@@ -6,12 +6,18 @@ using OpenRTS.Core.Orders;
 
 namespace OpenRTS.Network;
 
-// NET1 uses one bounded batch frame; control frames have a separate smaller limit.
+// Direct protocol uses one bounded batch frame; control frames have a separate smaller limit.
 internal static class Wire
 {
     internal const int MaximumFrame = 256 * 1024;
     internal static readonly CommandKind[] Kinds = [CommandKind.MoveSelected, CommandKind.MoveGroup,
-        CommandKind.AttackMove, CommandKind.AttackTarget, CommandKind.Stop, CommandKind.HoldPosition];
+        CommandKind.AttackMove, CommandKind.AttackTarget, CommandKind.Stop, CommandKind.HoldPosition,
+        CommandKind.Move, CommandKind.RepairTarget, CommandKind.CaptureTarget, CommandKind.UseAbility,
+        CommandKind.SetAutoCast, CommandKind.EnqueueTask, CommandKind.CancelTasks, CommandKind.PlaceProduced,
+        CommandKind.SetRally, CommandKind.Enter, CommandKind.Unload, CommandKind.UnloadAt,
+        CommandKind.PlanConstruction, CommandKind.BuildSite, CommandKind.CancelConstruction,
+        CommandKind.StartUpgrade, CommandKind.CancelUpgrade, CommandKind.Transform, CommandKind.Land,
+        CommandKind.ReturnToBase, CommandKind.AttackContact, CommandKind.Aim, CommandKind.ClearAim];
     internal static byte[] Pack(Action<BinaryWriter> write)
     {
         using var s = new MemoryStream();
@@ -55,7 +61,12 @@ internal static class Wire
                 int kind = Array.IndexOf(Kinds, c.Kind);
                 // Reject unsupported fields rather than silently changing an input's meaning.
                 var supported = new WorldCommand(c.Tick, c.Issuer, c.Sequence, c.Kind, c.Entity, c.Position,
-                    TargetEntity: c.TargetEntity, Recipients: c.Recipients, Queued: c.Queued);
+                    Owner: c.Owner, TargetEntity: c.TargetEntity, Recipients: c.Recipients, Queued: c.Queued,
+                    Action: c.Action, Queue: c.Queue, Amount: c.Amount, Repeat: c.Repeat, Enabled: c.Enabled, TaskId: c.TaskId)
+                    { QuarterTurns = c.QuarterTurns, TransformHere = c.TransformHere, ContactId = c.ContactId };
+                if (c.Owner != 0 && (c.Owner != player || c.Kind is not (CommandKind.CancelConstruction or
+                    CommandKind.CancelUpgrade or CommandKind.StartUpgrade or CommandKind.AttackContact)))
+                    throw new InvalidDataException("Invalid player field.");
                 if (kind < 0 || c != supported || c.Tick != tick || c.Issuer != player || c.Sequence <= 0)
                     throw new InvalidDataException("Unsupported player intent or stamp.");
                 w.Write((byte)(kind + 1)); w.Write(c.Sequence); w.Write(c.Entity.Value);
@@ -65,6 +76,9 @@ internal static class Wire
                 if (count > 16384 || recipients > 32768) throw new InvalidDataException("Recipient limit.");
                 w.Write(count);
                 if (c.Recipients is { } set) foreach (var id in set.Ids) w.Write(id.Value);
+                w.Write(c.Owner); OptionalText(w, c.Action); OptionalText(w, c.Queue);
+                w.Write(c.Amount); w.Write(c.Repeat); w.Write(c.Enabled); w.Write(c.TaskId);
+                w.Write(c.QuarterTurns); w.Write(c.TransformHere); w.Write(c.ContactId);
             }
         });
     internal static (Guid Match, uint Player, long Tick, WorldCommand[] Commands) ReadBatch(byte[] bytes)
@@ -91,11 +105,34 @@ internal static class Wire
                     if (id <= previous) throw new InvalidDataException("Noncanonical recipients.");
                     ids[j] = new(id); previous = id;
                 }
-                commands[i] = new(tick, player, sequence, Kinds[kind], entity, p,
-                    TargetEntity: target, Recipients: n == 0 ? null : new EntitySet(ids), Queued: queued == 1);
+                uint owner = r.ReadUInt32(); string? action = OptionalText(r), queue = OptionalText(r);
+                int amount = r.ReadInt32(); bool repeat = Flag(r), enabled = Flag(r); long task = r.ReadInt64();
+                int turns = r.ReadInt32(); bool here = Flag(r); long contact = r.ReadInt64();
+                commands[i] = new(tick, player, sequence, Kinds[kind], entity, p, Owner: owner,
+                    TargetEntity: target, Recipients: n == 0 ? null : new EntitySet(ids), Queued: queued == 1,
+                    Action: action, Queue: queue, Amount: amount, Repeat: repeat, Enabled: enabled, TaskId: task)
+                    { QuarterTurns = turns, TransformHere = here, ContactId = contact };
+                // The encoder is also the canonical field-policy check for received commands.
+                _ = Batch(match, player, tick, [commands[i]]);
             }
             return (match, player, tick, commands);
         });
+    private static bool Flag(BinaryReader r) => r.ReadByte() switch
+    { 0 => false, 1 => true, _ => throw new InvalidDataException("Invalid boolean.") };
+    private static void OptionalText(BinaryWriter w, string? text)
+    {
+        w.Write(text is not null);
+        if (text is null) return;
+        if (Encoding.UTF8.GetByteCount(text) > 128) throw new InvalidDataException("Action/queue limit.");
+        Text(w, text);
+    }
+    private static string? OptionalText(BinaryReader r)
+    {
+        if (!Flag(r)) return null;
+        var text = Text(r);
+        if (Encoding.UTF8.GetByteCount(text) > 128) throw new InvalidDataException("Action/queue limit.");
+        return text;
+    }
     internal static async Task Send(Stream s, byte[] payload, CancellationToken ct)
     {
         if (payload.Length is < 1 or > MaximumFrame) throw new InvalidDataException("Frame limit.");

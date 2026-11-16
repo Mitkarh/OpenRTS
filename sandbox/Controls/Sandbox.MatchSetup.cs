@@ -31,7 +31,9 @@ public partial class Sandbox
             Array.FindIndex(mapChoices, choice => choice.Path == settings.DefaultMap),
             Array.FindIndex(setChoices, choice => choice.Path == settings.DefaultStartSet));
         _matchSetup.Launch += BeginMatchFromSetup;
-        if (_verifyAiMatch) SelectAiVerificationMatch();
+        _matchSetup.CancelNetwork += () => { if (_session?.Network is not null) MatchSetupFailed(new OperationCanceledException("Подключение отменено."), true); };
+        if (_verifyNetwork) SelectNetworkVerificationMatch();
+        else if (_verifyAiMatch) SelectAiVerificationMatch();
         else if (_verifyMatchSetup) SelectVerificationMatch();
     }
 
@@ -40,6 +42,12 @@ public partial class Sandbox
         if (_session is not null) return;
         try
         {
+            _networkMode = _matchSetup!.NetworkMode;
+            if (_networkMode != 0 && (slots.Length != 2 || aiOpponent))
+                throw new ArgumentException("Прямая игра требует двух игроков без ИИ.");
+            _networkAddress = _matchSetup.NetworkAddress; _networkPort = _matchSetup.NetworkPort;
+            _networkPin = _matchSetup.NetworkPin;
+            _fogViewer = _networkMode == 2 ? 2u : 1u;
             _matchFogMode = _matchSetup!.SelectedFog;
             _fogStyle = _matchSetup.SelectedFogStyle;
             _radarStyle = _matchSetup.SelectedRadarStyle;
@@ -51,7 +59,7 @@ public partial class Sandbox
             _matchSetup!.SetLaunching(true, "Подготовка поля боя…");
             StartSession();
         }
-        catch (Exception error) when (error is ContentException or ArgumentException or System.IO.IOException)
+        catch (Exception error) when (error is ContentException or ArgumentException or System.IO.IOException or System.Security.Cryptography.CryptographicException)
         {
             MatchSetupFailed(error, canRetry: true);
         }
@@ -70,12 +78,15 @@ public partial class Sandbox
             }
         }
 
+        if (_session.Network is { } network)
+            _matchSetup!.SetNetworkStatus(network.Status, network.Fingerprint);
         using var frame = _session.Frames.AcquireLatest();
         if (frame is null) return;
         try
         {
             _startedFromSetup = true;
             BuildBattleScene(_catalog!);
+            AddNetworkStatus();
             _focusStartingBase = true;
             _matchSetup!.Hide();
             _matchSetup.QueueFree();
@@ -92,6 +103,7 @@ public partial class Sandbox
     {
         _session?.Dispose();
         _session = null;
+        _networkMode = 0;
         _mapMatch = null;
         _opponentProfile = null;
         _opponent = null;

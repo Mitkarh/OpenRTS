@@ -12,7 +12,7 @@ public sealed class MatchJournal : IDisposable
     internal MatchJournal(Stream output, byte[] descriptor, string initialHash)
     {
         _writer = new(output, Encoding.UTF8, true);
-        Write(Wire.Pack(w => { w.Write((byte)6); w.Write(1); w.Write(descriptor.Length); w.Write(descriptor); Wire.Text(w, initialHash); }));
+        Write(Wire.Pack(w => { w.Write((byte)6); w.Write(2); w.Write(descriptor.Length); w.Write(descriptor); Wire.Text(w, initialHash); }));
     }
     private void Write(byte[] record)
     {
@@ -48,18 +48,25 @@ public sealed class MatchJournal : IDisposable
         }
         Wire.Unpack(Read(), h => {
             var expected = DirectMatch.Descriptor(descriptor);
-            if (h.ReadByte() != 6 || h.ReadInt32() != 1 || h.ReadInt32() != expected.Length ||
+            if (h.ReadByte() != 6 || h.ReadInt32() != 2 || h.ReadInt32() != expected.Length ||
                 !h.ReadBytes(expected.Length).AsSpan().SequenceEqual(expected) || Wire.Text(h) != world.Report().StateHash || world.Tick != 0)
                 throw new InvalidDataException("Journal initial state/descriptor mismatch.");
             return true;
         });
         long[] sequences = [0, 0]; Guid? match = null;
-        for (long tick = 1; tick <= descriptor.EndTick; tick++)
+        for (long tick = 1; ; tick++)
         {
+            byte[] first = Read();
+            if (first.AsSpan().SequenceEqual(new byte[] { 8 }))
+            {
+                if (input.ReadByte() != -1) throw new InvalidDataException("Trailing journal data.");
+                return world.Report();
+            }
+            if (descriptor.EndTick != 0 && tick > descriptor.EndTick) throw new InvalidDataException("Journal exceeds end tick.");
             var commands = new List<WorldCommand>();
             for (uint player = 1; player <= 2; player++)
             {
-                var b = Wire.ReadBatch(Read()); match ??= b.Match;
+                var b = Wire.ReadBatch(player == 1 ? first : Read()); match ??= b.Match;
                 if (b.Tick != tick || b.Player != player || b.Match != match) throw new InvalidDataException("Journal order mismatch.");
                 foreach (var c in b.Commands)
                 {
@@ -75,8 +82,5 @@ public sealed class MatchJournal : IDisposable
                 return true;
             });
         }
-        if (!Read().AsSpan().SequenceEqual(new byte[] { 8 }) || input.ReadByte() != -1)
-            throw new InvalidDataException("Journal did not complete cleanly.");
-        return world.Report();
     }
 }

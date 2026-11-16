@@ -45,6 +45,7 @@ case "$action" in
     ;;
   run) build; import_assets; exec "$godot_bin" --path "$PWD/sandbox" -- "$@" ;;
   editor) build; exec "$godot_bin" --path "$PWD/sandbox" --editor ;;
+  verify-network) build; import_assets; python3 tools/verify_network.py "$godot_bin" "$@" ;;
   verify) "$0" test; import_assets; python3 tools/verify.py "$godot_bin" ;;
-  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|verify]' >&2; exit 2 ;;
+  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|verify|verify-network]' >&2; exit 2 ;;
 esac

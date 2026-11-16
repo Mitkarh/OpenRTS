@@ -11,7 +11,8 @@ using OpenRTS.Godot.Controls;
 
 public partial class Sandbox : Node3D
 {
-    private SimulationSession? _session;
+    private SandboxSession? _session;
+    private bool _networkEnded;
     private bool _fogScenario;
     private bool _sensorScenario;
     private bool _jammingScenario;
@@ -64,6 +65,9 @@ public partial class Sandbox : Node3D
             {
                 if (arg == "--jamming") { _jammingScenario = _fogScenario = _buildings = _showcase = true; continue; }
                 if (arg == "--verify") continue;
+                if (arg.StartsWith("--verify-network=", StringComparison.Ordinal)) { _verifyNetwork = true; _networkVerifyRole = arg[17..]; continue; }
+                if (arg.StartsWith("--network-port=", StringComparison.Ordinal)) { _networkVerifyPort = int.Parse(arg[15..]); continue; }
+                if (arg.StartsWith("--network-pin-file=", StringComparison.Ordinal)) { _networkVerifyPinFile = arg[19..]; continue; }
                 if (arg.StartsWith("--mod=", StringComparison.Ordinal) && arg.Length > 6) { modPath = arg[6..]; continue; }
                 if (arg.StartsWith("--fog-hold=", StringComparison.Ordinal) && int.TryParse(arg[11..], out int hold) && hold is >= 0 and <= 250) { _fogHoldTicks = hold; continue; }
                 if (arg == "--verify-fog-match") { _verifyFogMatch = _verifyMatchSetup = true; continue; }
@@ -166,7 +170,7 @@ public partial class Sandbox : Node3D
         catch (Exception error)
         {
             GD.PushError(error.ToString());
-            if (verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
+            if (_verifyNetwork || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
             else AddOverlay("Ошибка загрузки контента\n" + error.Message);
         }
     }
@@ -204,24 +208,25 @@ public partial class Sandbox : Node3D
     {
         _session?.Dispose();
         _session = null;
-        _leftGoal = false;
+        _leftGoal = false; _networkEnded = false;
         if (_showcase) { _selection.Reset(); _selected = _skirmish ? default : new(1); _armedAction = null; _armedCustom = null; _productionPlacement = null; _placing = false; _panelRevision = -1; _panelTick = -1; _panelDirty = true; _pointerDown = false; }
         _notice = "";
         _focusStartingBase = _terminal is not null;
         ResetPlacementRotation();
-        _sitePlacement = null; _selectedProject = default; _visibleProjects = []; _visibleProjectsTick = -1; _constructionViewer = 1;
+        _sitePlacement = null; _selectedProject = default; _visibleProjects = []; _visibleProjectsTick = -1; _constructionViewer = _networkMode != 0 ? _fogViewer : 1;
         var catalog = _catalog ?? throw new InvalidOperationException("Контент не загружен.");
         _combatEffects?.Clear(); _sprites?.ClearWrecks();
         _rtsOverlay?.RadarContacts.Clear();
         var map = _mapMatch;
         var opponent = _opponent = _opponentProfile is { } profile ? SkirmishAiScenario.Create(catalog, profile, map!.Map, 2, _opponentStarts) : null;
-        _session = new SimulationSession(() => _jammingScenario ? JammingScenario.Create(catalog) : _fogScenario && (!_sensorScenario || map is null) ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, workers: _workers, restrictPlayerCommands: opponent is not null, tickRate: _manifest.Settings.Simulation.TickRate) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
+        if (_networkMode != 0) { StartNetworkSession(map!, catalog); return; }
+        _session = new SandboxSession(new SimulationSession(() => _jammingScenario ? JammingScenario.Create(catalog) : _fogScenario && (!_sensorScenario || map is null) ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, workers: _workers, restrictPlayerCommands: opponent is not null, tickRate: _manifest.Settings.Simulation.TickRate) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
             _verifySensors ? FogScenario.RadarCommands : _verifyFog ? FogScenario.Commands : _verifyAviation ? AviationScenario.Commands.Where(c => c.Tick <= _ticks).ToArray() : map is not null ? [] : _productionScenario ? ProductionScenario.Commands(catalog) : _buildings ? BuildingScenario.Commands(catalog) : _showcase ? (_verifyPresentation ? ShowcaseScenario.VerificationCommands(catalog) : []) : _navigation ? (_verifySimulation ? NavigationScenario.Commands(_count, _ticks) : [])
                 : DiagnosticScenario.Commands(_count, _verifySimulation ? _ticks : long.MaxValue),
             _verifySimulation ? _ticks : null, realtime: !_verifySimulation || _pacedVerification,
             maximumEventBacklog: Math.Max(65536, _count + 1024),
             playbackSpeed: _verifySimulation ? 1 : _playbackSpeed, startPaused: !_verifySimulation && (_paused || _matchSetup is not null),
-            collectCommands: opponent is null ? null : opponent.Plan);
+            collectCommands: opponent is null ? null : opponent.Plan));
     }
 
     private static Color TeamColor(uint owner) => owner switch
@@ -242,14 +247,19 @@ public partial class Sandbox : Node3D
             UpdateMatchSetup();
             return;
         }
+        if (_verifyNetwork && (_networkVerifyElapsed += delta) > 40) { GD.PushError("Network verification timed out."); GetTree().Quit(1); return; }
         if (!_verifySimulation) PanCamera(delta);
         if (_session is null || _view is null && _sprites is null || _verificationDone) return;
         try
         {
+            if (_session.Network is { } network && _networkLabel is not null)
+                _networkLabel.Text = $"Игрок {network.Player} · {network.Status}";
             bool completed = _session.Completion.IsCompleted;
+            if (_networkMode != 0 && completed && !_networkEnded) { _networkEnded = true; _panelDirty = true; }
             if (_session.Completion.IsFaulted) _session.Completion.GetAwaiter().GetResult();
             using var frame = _session.Frames.AcquireLatest(PlayerFog ? _fogViewer : 0);
             if (frame is null) return;
+            VerifyNetworkFrame(frame);
             float alpha = completed ? 1 : _session.GetInterpolationAlpha(frame.Tick);
             _view?.Apply(frame.Poses, alpha);
             _displayGrid = frame.Grid;
@@ -269,7 +279,7 @@ public partial class Sandbox : Node3D
                 }
                 if (_focusStartingBase && _selected.Value == 0)
                     for (int i = 0; i < _displayCount; i++)
-                        if (_displayPoses[i].Presentation.Owner == (PlayerFog ? _fogViewer : 1))
+                        if (_displayPoses[i].Presentation.Owner == (PlayerFog || _networkMode != 0 ? _fogViewer : 1))
                         {
                             _selected = _displayPoses[i].Id;
                             break;
@@ -291,7 +301,7 @@ public partial class Sandbox : Node3D
                     WorldEventKind.TaskAdded when _selection.Contains(value.Entity) => "Заказ добавлен в очередь.",
                     WorldEventKind.TaskCancelled when _selection.Contains(value.Entity) => "Задача отменена.",
                     WorldEventKind.InvalidOrder => "Действие недоступно выбранному юниту.",
-                    WorldEventKind.CommandDenied when value.Owner == 1 => "Команда отклонена: проверьте владельца юнитов.",
+                    WorldEventKind.CommandDenied when value.Owner == CommandOwner => "Команда отклонена: проверьте владельца юнитов.",
                     WorldEventKind.TransportFull => "В транспорте нет свободных слотов.",
                     WorldEventKind.UnloadBlocked => "Рядом с транспортом нет места для выгрузки.",
                     WorldEventKind.ConstructionCancelled when value.Owner == _constructionViewer => "Проект отменён.",
@@ -397,7 +407,8 @@ public partial class Sandbox : Node3D
             GD.PushError(error.ToString());
             _session.Dispose();
             _session = null;
-            if (_verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
+            if (_verifyNetwork || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
+            else if (_networkMode != 0) ShowNetworkFailure(error.Message);
             else if (_label is not null)
             {
                 if (_diagnostics is not null) _diagnostics.Show();
@@ -414,7 +425,8 @@ public partial class Sandbox : Node3D
             if (input is InputEventKey { Pressed: true, Echo: false } key)
             {
                 Key code = key.PhysicalKeycode == Key.None ? key.Keycode : key.PhysicalKeycode;
-                if (PlayerFog && code == Key.F8 && _opponentProfile is null) SwitchFogViewer();
+                if (_networkMode != 0 && code is Key.R or Key.P or Key.N or Key.Period or Key.Comma or Key.Bracketleft or Key.Bracketright or Key.Equal or Key.Plus or Key.KpAdd or Key.Minus or Key.KpSubtract) return;
+                if (PlayerFog && code == Key.F8 && _opponentProfile is null && _networkMode == 0) SwitchFogViewer();
                 else if (PlayerFog && code == Key.F9) _fogStyle = (FogDisplayStyle)(((int)_fogStyle + 1) % 3);
                 else if (PlayerFog && code == Key.F7) _radarStyle = (ContactDisplayStyle)(((int)_radarStyle + 1) % 3);
                 else if (_terminal is not null && code == Key.F10) ToggleTerminalLayout();

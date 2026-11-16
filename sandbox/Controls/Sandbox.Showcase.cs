@@ -8,6 +8,7 @@ public partial class Sandbox
 {
     private bool HandleShowcaseKey(Key key)
     {
+        if (_networkMode != 0) return false;
         if (key is not (Key.F or Key.K or Key.V)) return false;
         if (Selected() is not { } unit) return true;
         if (unit.Presentation.Owner != 1) { _notice = "Чужим юнитам нельзя отдавать приказы."; return true; }

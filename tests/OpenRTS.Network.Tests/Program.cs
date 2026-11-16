@@ -223,6 +223,58 @@ Test("two operating-system processes connect and independently replay", () => {
     }
     finally { if (!host.HasExited) host.Kill(true); if (join is { HasExited: false }) join.Kill(true); join?.Dispose(); Directory.Delete(dir, true); }
 });
+Test("TLS live peers pace ticks, submit complete player intents, leave and replay", () => {
+    var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
+    int port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
+    string dir = Path.Combine(Path.GetTempPath(), "openrts-net2-" + Guid.NewGuid()); Directory.CreateDirectory(dir);
+    var d = descriptor with { EndTick = 0 };
+    try
+    {
+        using var host = new DirectSession(true, "127.0.0.1", port, null, d, () => World(), Path.Combine(dir,"host.log"));
+        Thread.Sleep(100);
+        using var join = new DirectSession(false, "127.0.0.1", port, host.Fingerprint, d, () => World(workers: 2), Path.Combine(dir,"join.log"));
+        var watch = Stopwatch.StartNew();
+        while (watch.Elapsed < TimeSpan.FromSeconds(8))
+        {
+            if (host.Completion.IsFaulted || join.Completion.IsFaulted) throw new Exception($"HOST {host.Completion.Exception} JOIN {join.Completion.Exception}");
+            if (join.Completion.IsFaulted) join.Completion.GetAwaiter().GetResult();
+            using var frame = host.Frames.AcquireLatest();
+            if (frame?.Tick >= 5) break;
+            Thread.Sleep(10);
+        }
+        Check(watch.Elapsed >= TimeSpan.FromMilliseconds(150) && watch.Elapsed < TimeSpan.FromSeconds(8));
+        host.Submit(new(0,0,0,CommandKind.Move, new(1), new(10000,2000)));
+        join.Submit(new(0,0,0,CommandKind.SetRally, new(2), new(4000,4000)));
+        Thread.Sleep(300); host.Leave();
+        Check(Task.WaitAll([host.Completion, join.Completion], 5000));
+        Check(host.Completion.Result == join.Completion.Result);
+        using var file = File.OpenRead(host.JournalPath);
+        Check(MatchJournal.Replay(file, d, () => World()) == host.Completion.Result);
+    }
+    finally { Directory.Delete(dir, true); }
+});
+Test("TLS rejects a wrong host fingerprint and disposing a listener is bounded", () => {
+    var listener = new TcpListener(IPAddress.Loopback, 0); listener.Start();
+    int port = ((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
+    using var host = new DirectSession(true, "127.0.0.1", port, null, descriptor with { EndTick=0 }, () => World(), Path.GetTempFileName());
+    Thread.Sleep(100);
+    using var join = new DirectSession(false, "127.0.0.1", port, new string('0',64), descriptor with { EndTick=0 }, () => World(), Path.GetTempFileName());
+    try { join.Completion.Wait(TimeSpan.FromSeconds(5)); throw new Exception("Expected TLS failure"); }
+    catch (AggregateException e) { Check(e.Flatten().InnerExceptions.Any(x => x is System.Security.Authentication.AuthenticationException)); }
+});
+Test("extended wire fields survive production, ability and transform intents", () => {
+    foreach (var c in new WorldCommand[] {
+        new(2,1,1,CommandKind.EnqueueTask,new(1),Action:"rifleman",Queue:"infantry",Amount:5,Repeat:true),
+        new WorldCommand(2,1,1,CommandKind.Transform,new(1),Action:"deploy") { TransformHere=true,QuarterTurns=3 },
+        new WorldCommand(2,1,1,CommandKind.AttackContact,new(1),Owner:1) {ContactId=123},
+        new(2,1,1,CommandKind.CancelConstruction,Owner:1,TargetEntity:new(2)),
+        new(2,1,1,CommandKind.PlaceProduced,new(1),new(1000,1000),Action:"building",TaskId:55)
+    })
+    {
+        var id=Guid.NewGuid(); var b=Wire.Batch(id,1,2,[c]);
+        Check(Wire.ReadBatch(b).Commands[0] == c);
+    }
+});
 Console.WriteLine($"{passed} Network checks passed.");
 
 sealed class SplitStream(Stream inner) : Stream
