@@ -9,7 +9,17 @@
     States: [damaged]
 
 rifleman:
-  Sensors: {Detectors: [{Channel: optical, Signature: visual, Range: 3072, Display: Model, Counters: [stealth]}]}
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
   Inherits: ^unit
   Passenger: { Type: infantry }
   Armaments:
@@ -30,7 +40,17 @@ rifleman:
   Presentation: { Model: infantry-rifle, Name: Пехотинец с автоматом }
 
 rocketeer:
-  Sensors: {Detectors: [{Channel: optical, Signature: visual, Range: 3072, Display: Model, Counters: [stealth]}]}
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
   Inherits: ^unit
   Passenger: { Type: infantry }
   Armaments:
@@ -96,7 +116,23 @@ tank:
   Presentation: { Model: tank, Name: Танк }
 
 tank-mixed:
-  Sensors: {Detectors: [{Channel: radar, Signature: radar.ground, Range: 16384, Display: Classified}, {Channel: optical, Signature: visual, Range: 5120, Display: Model, Counters: [stealth]}]}
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: radar,
+          Signature: radar.ground,
+          Range: 16384,
+          Display: Classified,
+        },
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 5120,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
   Inherits: tank
   Armaments:
     Mounts:
@@ -108,7 +144,17 @@ tank-mixed:
     Name: Мобильный радар · пулемёт и ракеты
 
 engineer:
-  Sensors: {Detectors: [{Channel: optical, Signature: visual, Range: 3072, Display: Model, Counters: [stealth]}]}
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
   Inherits: ^unit
   Builder: { Range: 1536 }
   Actions:
@@ -133,7 +179,17 @@ engineer:
     Name: Инженерная машина
 
 bunker-cannon:
-  Sensors: {Detectors: [{Channel: optical, Signature: visual, Range: 3072, Display: Model, Counters: [stealth]}]}
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
   Inherits: tank
   Buildable: { Ticks: 100, Cost: 550, Kind: PlaceBuilding }
   Capturable: {}
@@ -144,14 +200,22 @@ bunker-cannon:
   Movement: { Enabled: false }
   Health: { HP: 700, Armor: Building }
   Presentation:
-    {
-      Model: bunker-cannon,
-      Name: ДОТ · пушка,
-      States: [damaged, working, destroyed, lowpower, constructing],
-    }
+    Model: bunker-cannon
+    Name: ДОТ · пушка
+    States: [damaged, working, destroyed, lowpower, constructing]
 
 bunker-mixed:
-  Sensors: {Detectors: [{Channel: optical, Signature: visual, Range: 3072, Display: Model, Counters: [stealth]}]}
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
   Inherits: tank-mixed
   Buildable: { Ticks: 100, Cost: 750, Kind: PlaceBuilding }
   Capturable: {}
@@ -162,14 +226,22 @@ bunker-mixed:
   Movement: { Enabled: false }
   Health: { HP: 700, Armor: Building }
   Presentation:
-    {
-      Model: bunker-mixed,
-      Name: ДОТ · пушка и ракеты,
-      States: [damaged, working, destroyed, lowpower, constructing],
-    }
+    Model: bunker-mixed
+    Name: ДОТ · пушка и ракеты
+    States: [damaged, working, destroyed, lowpower, constructing]
 
 sniper:
-  Sensors: {Detectors: [{Channel: optical, Signature: visual, Range: 3072, Display: Model, Counters: [stealth]}]}
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
   Inherits: ^unit
   Passenger: { Type: infantry }
   Armaments:
@@ -217,18 +289,36 @@ tiltrotor:
     Mounts:
       main: { Weapon: tiltrotor-missile, FireWhileMoving: true }
   Transport: { Accepts: [infantry], Slots: 4, UnloadDistance: 768 }
-  Presentation: { Model: tiltrotor, Name: Конвертоплан, States: [damaged, airborne] }
+  Presentation:
+    { Model: tiltrotor, Name: Конвертоплан, States: [damaged, airborne] }
 
 stealth-truck:
   Inherits: tank
   -Armaments:
-  Health: {HP: 350, Armor: Mechanical}
-  Sensors: {JamRange: 8192, StealthRange: 6144, DeployTicks: 75}
-  Presentation: {Model: stealth-truck, Name: Мобильный стелс-генератор}
+  Health: { HP: 350, Armor: Mechanical }
+  Sensors: { JamRange: 8192, StealthRange: 6144, DeployTicks: 75 }
+  Presentation: { Model: stealth-truck, Name: Мобильный стелс-генератор }
 
 radar-buggy:
   Inherits: ^unit
-  Armaments: {Mounts: {main: {Weapon: rifle, FireWhileMoving: true}}}
-  Health: {HP: 180, Armor: Mechanical}
-  Sensors: {JamRange: 4096, Detectors: [{Channel: radar, Signature: radar.ground, Range: 18432, Display: Classified}, {Channel: optical, Signature: visual, Range: 4096, Display: Model, Counters: [stealth]}]}
-  Presentation: {Model: radar-buggy, Name: Багги · разведчик}
+  Armaments: { Mounts: { main: { Weapon: rifle, FireWhileMoving: true } } }
+  Health: { HP: 180, Armor: Mechanical }
+  Sensors:
+    JamRange: 4096
+    Detectors:
+      [
+        {
+          Channel: radar,
+          Signature: radar.ground,
+          Range: 18432,
+          Display: Classified,
+        },
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 5120,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
+  Presentation: { Model: radar-buggy, Name: Багги · разведчик }
