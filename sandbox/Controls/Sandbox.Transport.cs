@@ -11,6 +11,7 @@ public partial class Sandbox
     private ScrollContainer? _storedScroll;
     private HBoxContainer? _storedRow;
     private EntityPose[] _shownCargo = [];
+    private int _shownCapacity;
 
     private void AddStoredPanel(VBoxContainer column)
     {
@@ -46,15 +47,18 @@ public partial class Sandbox
     {
         if (_storedRow is null || _catalog is null) return;
         var carriers = SelectedTransports();
+        int capacity = carriers.Sum(id => _catalog.Units[_selectionPoses[id].UnitType].TransportFor(_selectionPoses[id].Upgrade.Completed)!.Slots);
         var cargo = _storedPoses.Where(pose => carriers.Contains(pose.Carrier)).OrderBy(pose => pose.Carrier.Value).ThenBy(pose => pose.Id.Value).ToArray();
-        if (cargo.Length == _shownCargo.Length && cargo.Zip(_shownCargo).All(pair => pair.First.Id == pair.Second.Id &&
+        if (capacity == _shownCapacity && cargo.Length == _shownCargo.Length && cargo.Zip(_shownCargo).All(pair => pair.First.Id == pair.Second.Id &&
             pair.First.Carrier == pair.Second.Carrier && pair.First.Health == pair.Second.Health)) return;
         _shownCargo = cargo;
+        _shownCapacity = capacity;
         _storedScroll!.Visible = cargo.Length > 0;
         ClearChildren(_storedRow);
         if (cargo.Length == 0) return;
 
-        _storedRow.AddChild(new Label { Text = "Внутри" });
+        int used = cargo.Sum(pose => _catalog.Units[pose.UnitType].Passenger!.Slots);
+        _storedRow.AddChild(new Label { Text = $"Груз · {used}/{capacity}" });
         var unload = IconButton("Вывести всех", null, 120);
         unload.TooltipText = "Клик: выбрать точку. Двойной клик: выгрузить на месте.";
         unload.GuiInput += input =>
@@ -72,7 +76,7 @@ public partial class Sandbox
         {
             var type = _catalog.Units[pose.UnitType];
             var button = IconButton($"{pose.Health}/{type.MaxHealth}", UnitIcon(pose.UnitType));
-            button.TooltipText = $"Вывести: {_catalog.Presentations[pose.UnitType].Name}";
+            button.TooltipText = $"Вывести: {_catalog.Presentations[pose.UnitType].Name}\nЗанимает {type.Passenger!.Slots} ед. вместимости";
             button.Pressed += () => _session!.Submit(CommandKind.Unload, entity: pose.Carrier, targetEntity: pose.Id);
             _storedRow.AddChild(button);
         }

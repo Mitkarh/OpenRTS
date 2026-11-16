@@ -12,6 +12,7 @@ internal interface ICaptureWorld
     void IssueOrder(EntityId actor, UnitOrder order, bool queued);
     void SetMovementTarget(EntityId actor, WorldPosition position);
     void Halt(EntityId actor);
+    bool PrepareWork(Entity actor, WorldPosition target);
     void ChangeOwner(EntityId target, uint owner);
 }
 
@@ -63,6 +64,7 @@ internal sealed class CaptureSystem(ICaptureWorld world, ICaptureMechanic mechan
 
         var position = entity.Get<SpatialState>().Position;
         var targetPosition = target.Entity.Get<SpatialState>().Position;
+        if (!world.PrepareWork(entity, targetPosition)) { order.OrderPhase = OrderPhase.Approaching; return; }
         long distance = ObjectGeometry.DistanceSquared(actor.Type, position, target.Type, targetPosition, out _, out _);
         var step = _mechanic.Advance(new(actor, target, tick, distance));
         switch (step)

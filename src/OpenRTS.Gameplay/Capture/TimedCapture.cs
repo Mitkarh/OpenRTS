@@ -37,7 +37,8 @@ internal sealed class TimedCapture : ICaptureMechanic
             state.Sides = new();
             _activeTargets.Add(target.Entity);
         }
-        int work = state.Sides.GetValueOrDefault(actor.Owner).Work + 1;
+        int work = state.Sides.GetValueOrDefault(actor.Owner).Work +
+            (actor.Type.WorksAt(attempt.Tick, actor.Entity.Get<EntityIdentity>().Id) ? 1 : 0);
         state.Sides[actor.Owner] = new(work, attempt.Tick);
         return work >= Duration(target.Type) ? CaptureStep.Complete : CaptureStep.Engage;
     }
@@ -57,7 +58,7 @@ internal sealed class TimedCapture : ICaptureMechanic
                 foreach (uint owner in _decayingSides)
                 {
                     var progress = sides[owner];
-                    if (progress.Work == 1) sides.Remove(owner);
+                    if (progress.Work <= 1) sides.Remove(owner);
                     else sides[owner] = progress with { Work = progress.Work - 1 };
                 }
                 if (sides.Count != 0) continue;

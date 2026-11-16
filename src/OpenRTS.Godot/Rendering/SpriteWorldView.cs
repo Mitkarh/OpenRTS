@@ -37,6 +37,8 @@ public sealed class SpriteWorldView
     private const float HoverLiftScale = 0.45f;
     public const float OverlayHeight = 2f;
     private readonly Model[] _models;
+    private readonly WorkFlightVisual _workFlights;
+    private double _workTime;
     private readonly SortedDictionary<EntityId, EntityPose> _wrecks = new(Comparer<EntityId>.Create((a, b) => a.Value.CompareTo(b.Value)));
     private EntityPose[] _ordered = [];
     private readonly IComparer<EntityPose> _poseOrder = Comparer<EntityPose>.Create((a, b) => a.Id.Value.CompareTo(b.Id.Value));
@@ -74,6 +76,8 @@ public sealed class SpriteWorldView
     public Vector3 DisplayPosition(in EntityPose pose, float alpha = 1)
     {
         var point = Interpolate(pose, alpha);
+        var offset = _workFlights.Offset(pose, _workTime);
+        point.X += offset.X; point.Z += offset.Y;
         point.Z -= HoverLift(_models[pose.UnitType].Unit, point.Y);
         return point;
     }
@@ -81,6 +85,7 @@ public sealed class SpriteWorldView
     public SpriteWorldView(UnitCatalog units, ModelCatalog models, Func<uint, Color>? ownerColor = null)
     {
         _ownerColor = ownerColor ?? (_ => Colors.White);
+        _workFlights = new(units.Presentations.Select(p => p.WorkRoaming).ToArray(), units.Units);
         models.ValidateUnits(units);
         _models = new Model[units.Units.Count];
         for (int i = 0; i < _models.Length; i++)
@@ -170,6 +175,8 @@ public sealed class SpriteWorldView
         ReadOnlySpan<ContactPose> contacts = default, ContactDisplayStyle contactStyle = ContactDisplayStyle.BuildingModels)
     {
         alpha = Math.Clamp(alpha, 0, 1); double time = tick == 0 ? 0 : tick + alpha; SpriteCount = 0;
+        _workTime = time;
+        _workFlights.Update(poses, tick);
         foreach (var batch in _batches) batch.Clear();
         Span<Vector2> pivots = stackalloc Vector2[8];
         Span<float> angles = stackalloc float[8];
@@ -255,6 +262,8 @@ public sealed class SpriteWorldView
             if (model.NearlyDestroyed != 0 && pose.Health > 0 && (long)pose.Health * 4 <= model.Unit.MaxHealth) view = view with { States = view.States | model.NearlyDestroyed };
             bool ghost = _ghostIds.Contains(pose.Id);
             var point = Interpolate(pose, alpha);
+            var offset = _workFlights.Offset(pose, time);
+            point.X += offset.X; point.Z += offset.Y;
             float elevation = point.Y;
             float height = Math.Max(0, elevation - _flightSurface);
             float lift = HoverLift(model.Unit, elevation);

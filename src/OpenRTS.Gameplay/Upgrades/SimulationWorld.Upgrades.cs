@@ -99,6 +99,7 @@ public sealed partial class SimulationWorld
         int actorType = actor.Get<EntityIdentity>().Type;
         var from = actor.Get<SpatialState>().Position;
         var at = target.Get<SpatialState>().Position;
+        if (type.Flight is { Mode: FlightMode.Hover }) { yield return at; yield break; }
         var targetType = TypeOf(target);
         if (targetType.Footprint is not { } footprint) yield break;
         foreach (var point in Construction.ConstructionGeometry.Approaches(footprint, at, from, type.Body,
@@ -164,6 +165,7 @@ public sealed partial class SimulationWorld
         }
 
         var position = actor.Get<SpatialState>().Position;
+        if (!PrepareAirWork(actor, target.Get<SpatialState>().Position)) { orders.OrderPhase = OrderPhase.Approaching; return; }
         if (!InUpgradeRange(actor, target) || TypeOf(actor).Movable && !StopAllowed(identity.Type, position))
         {
             if (TypeOf(target).Footprint is not null)
@@ -183,7 +185,7 @@ public sealed partial class SimulationWorld
         Halt(index);
         target.Get<UpgradeState>().Support = identity.Id;
         orders.OrderPhase = OrderPhase.Engaging;
-        AdvanceUpgrade(target);
+        if (TypeOf(actor).WorksAt(Tick, identity.Id)) AdvanceUpgrade(target);
     }
 
     private void AdvanceUpgrade(Entity target)

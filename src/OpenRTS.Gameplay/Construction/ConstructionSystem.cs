@@ -176,7 +176,8 @@ internal sealed class ConstructionSystem
         var site = project?.Position ?? foundation.Get<SpatialState>().Position;
         var position = builder.Get<SpatialState>().Position;
         var type = TypeOf(builder);
-        if (project is { ReservedAt: > 0 } && ConstructionGeometry.Touches(target.Footprint!, site, position, position, type.Body))
+        if (!_world.PrepareWork(builder, site)) { state.OrderPhase = OrderPhase.Approaching; return; }
+        if (type.Flight is null && project is { ReservedAt: > 0 } && ConstructionGeometry.Touches(target.Footprint!, site, position, position, type.Body))
         {
             state.OrderPhase = OrderPhase.Waiting;
             return; // Preserve the movement assigned by evacuation.
@@ -216,7 +217,7 @@ internal sealed class ConstructionSystem
 
             var target = project is null ? TypeOf(foundation) : ProjectType(project);
             var position = project?.Position ?? foundation.Get<SpatialState>().Position;
-            if (!BuildInRange(actor, target, position)) continue;
+            if (!BuildInRange(actor, target, position) || !_world.PrepareWork(actor, position)) continue;
             var conditions = _world.ReadConditions(actor);
             if (project is not null)
             {
@@ -224,7 +225,7 @@ internal sealed class ConstructionSystem
                 project.LastAttempt = _world.Tick;
                 if (!TryStartConstruction(project, out foundation)) continue;
             }
-            AdvanceConstruction(foundation, conditions);
+            if (TypeOf(actor).WorksAt(_world.Tick, id)) AdvanceConstruction(foundation, conditions);
         }
         foreach (var id in _idleBuilders)
         {
@@ -249,7 +250,12 @@ internal sealed class ConstructionSystem
                 foundation = site;
                 bestId = candidate.Value;
             }
-            if (foundation != default) { AdvanceConstruction(foundation, _world.ReadConditions(actor)); continue; }
+            if (foundation != default)
+            {
+                if (type.Flight is not null) _world.IssueOrder(id, new(UnitActionKind.Build, default, foundation.Get<EntityIdentity>().Id), queued: false);
+                else if (type.WorksAt(_world.Tick, id)) AdvanceConstruction(foundation, _world.ReadConditions(actor));
+                continue;
+            }
             if (!type.Movable || (_world.Tick + id.Value) % 8 != 0) continue;
             const int helpRange = 8 * WorldPosition.UnitsPerCell;
             _nearbySites.Clear();
@@ -262,7 +268,7 @@ internal sealed class ConstructionSystem
                 foreach (var project in projects.Values) AddSite(project.Id, ProjectType(project), project.Position);
             foreach (var site in _nearbySites.OrderBy(s => s.Distance).ThenBy(s => s.Id.Value))
             {
-                if (!BuildInRange(actor, site.Type, site.Position) && !ConstructionGeometry.Approaches(site.Type.Footprint!, site.Position,
+                if (type.Flight is null && !BuildInRange(actor, site.Type, site.Position) && !ConstructionGeometry.Approaches(site.Type.Footprint!, site.Position,
                     position, type.Body, type.ConstructionRange, _world.Width, _world.Depth)
                     .Any(p => BuildInRange(actor, site.Type, site.Position, p) && _world.CanApproach(actor, p))) continue;
                 _world.IssueOrder(id, new(UnitActionKind.Build, default, site.Id), queued: false);
@@ -297,6 +303,7 @@ internal sealed class ConstructionSystem
             if (!_world.TryGetEntity(id, out var actor) || !_world.IsOnMap(actor)) continue;
             var type = TypeOf(actor);
             var position = actor.Get<SpatialState>().Position;
+            if (type.Flight is not null && position.Elevation > project.Position.Elevation + 512) continue;
             bool intersects = type.Footprint is { } existing
                 ? ConstructionGeometry.Overlaps(footprint, center, existing, position)
                 : ConstructionGeometry.Touches(footprint, center, position, position, type.Body);

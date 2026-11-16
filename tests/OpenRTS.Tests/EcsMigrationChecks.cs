@@ -71,14 +71,15 @@ internal static class EcsMigrationChecks
         return text.Replace("main: { Weapon: rifle, Animation: fire }", "main: { Weapon: cannon, Animation: fire }");
     }
 
-    // Mechanics format 33: paid projects and suspended clearance orders; producer exit lanes forbid stopping.
+    // Mechanics format 33, extended air support definitions and 6-slot vehicle passengers.
+    // Ground mechanics are unchanged; catalog recipes, type ordinals and passenger components change the traces.
     private static readonly Dictionary<string, string> Expected = new()
     {
-        ["direct"] = "BC64411A3027697D47A269DC4FC0ACC33C16DF13FE4939626ABE45954223C699",
-        ["navigation"] = "3761CA22F5F87D8D88B5F927348B3761BCCD4465F2EA070D23461B7110BFA57B",
-        ["combat"] = "5C8B30FF1CF6F931184ECEE41CDD16B3F3BDF3E175427E80322AC59C3FA67E52",
-        ["buildings"] = "A78761E08AD173E62B23C5ADB35EEE53A14248DFE9B15F42DFED97EC1427A373",
-        ["production"] = "9F9327A08D92CF9B48F299938FFD1FA3F339C457190CBCBB34A5F540E0B2D0B8"
+        ["direct"] = "B09FDD6CD85DCBFA45B8B6198C61E18E25A2D769C0F741928F7CB01022CC9732",
+        ["navigation"] = "1B7CED67EE3FA1B9ADCC8FBCE1618C33A8E4C83AA3C6310B3B3251B639074578",
+        ["combat"] = "DBFD2F7236195A4E89E09E5F30DB2D1DB6935F453323A0D23676EBCE862BFF59",
+        ["buildings"] = "62E44FE29F62091FD28600DCA103C6009F9A80F3B0FC12974D9054C023A78833",
+        ["production"] = "B875D7E99DDBE1E1BA883BE8A3ED75F7CD4F67AA1034AEB3AE1083C67B6C1DF9"
     };
 
     internal static readonly JsonSerializerOptions TraceOptions = new() { Converters = { new EntitySetWriter() } };

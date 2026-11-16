@@ -76,3 +76,11 @@ objects:
   - {id: tank, type: tank, position: [61440, 32768], owner: red}
   - {id: target, type: bunker-cannon, position: [66560, 30720], owner: red}
   - {id: trees, type: nature-trees, position: [49664, 16384], owner: neutral}
+  - {id: air-engineer, type: engineering-tiltrotor, position: [28672, 34816], owner: blue}
+  - {id: air-supply, type: supply-tiltrotor, position: [30720, 36864], owner: blue}
+  - {id: heavy-transport, type: heavy-air-transport, position: [22528, 32768], owner: blue}
+  - {id: supply-mine, type: mine, position: [46592, 41984], owner: neutral}
+  - {id: supply-depot, type: supply-center, position: [31232, 41984], owner: blue}
+  - {id: cargo-tank-a, type: tank, position: [21504, 29696], owner: blue}
+  - {id: cargo-tank-b, type: tank, position: [22528, 29696], owner: blue}
+  - {id: capture-target, type: oil-derrick, position: [29184, 48640], owner: neutral}

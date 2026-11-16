@@ -15,6 +15,7 @@ public sealed partial class SimulationWorld
         var type = TypeOf(actor);
         var target = _types[productType].WithRotation(quarterTurns);
         if (type.ConstructionRange <= 0 || target.Footprint is not { } footprint) return false;
+        if (type.Flight is { Mode: FlightMode.Hover }) return true;
         var from = actor.Get<SpatialState>().Position;
         long range = (long)type.ConstructionRange * type.ConstructionRange;
         long distance = type.Movable ? ObjectGeometry.DistanceSquared(type, from, target, position, out _, out _) :

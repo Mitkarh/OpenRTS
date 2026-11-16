@@ -579,7 +579,7 @@ public sealed partial class SimulationWorld
     private FacingDirection AirSeparation(Entity actor)
     {
         var f = actor.Get<FlightState>();
-        if (f.ReturnRequested || f.LandRequested) return default;
+        if (f.ReturnRequested || f.LandRequested || f.WorkingTick == Tick) return default;
         var position = actor.Get<SpatialState>().Previous; var id = actor.Get<EntityIdentity>().Id;
         _airIndex!.QueryLimited(position, 1024, 64, _flightCandidates);
         _flightCandidates.Sort(FlightIdComparison);

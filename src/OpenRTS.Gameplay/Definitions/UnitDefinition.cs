@@ -39,6 +39,8 @@ public sealed record UnitDefinition
     public ReadOnlyCollection<ProductionDefinition> Products => (Definition.Production ?? ProducerDefinition.Empty).Products;
     public BuildDefinition? Build => Definition.Build;
     public int ConstructionRange => Definition.ConstructionRange;
+    public int WorkInterval => Definition.WorkInterval;
+    internal bool WorksAt(long tick, EntityId id) => (tick + id.Value) % WorkInterval == 0;
     public SupplyDefinition? Supply => Definition.Supply;
     public IReadOnlyList<UpgradeDefinition> Upgrades => Definition.Upgrades;
     public UpgradeDefinition? DefaultUpgrade { get; }
@@ -109,21 +111,22 @@ public sealed record UnitDefinition
         if (IdleAnimation < 0 || MoveAnimation < 0) throw new ArgumentException("Units require idle and move semantic animations.", nameof(definition));
     }
 
-    public UnitDefinition(string id, int maxHealth, IEnumerable<string>? animations = null, IEnumerable<string>? states = null, Locomotor? locomotor = null, WeaponDefinition? weapon = null, IEnumerable<WeaponMountDefinition>? weapons = null, ArmorKind armor = ArmorKind.Living, bool movable = true, BodyShape? body = null, FootprintDefinition? footprint = null, IEnumerable<AbilityDefinition>? abilities = null, IEnumerable<TaskQueueDefinition>? taskQueues = null, IEnumerable<ProductionDefinition>? products = null, BuildDefinition? build = null, EconomyDefinition? economy = null, CapturableDefinition? capturable = null, DestructionPolicy destruction = DestructionPolicy.Destroy, PassengerDefinition? passenger = null, TransportDefinition? transport = null, int constructionRange = 0, SupplyDefinition? supply = null, IEnumerable<UpgradeDefinition>? upgrades = null, TargetCategories? targetCategories = null, FlightDefinition? flight = null, AirbaseDefinition? airbase = null, int visionRadius = 0, SensorDefinition? sensors = null)
-        : this(Compose(id, maxHealth, animations, states, locomotor, weapon, weapons, armor, movable, body, footprint, abilities, taskQueues, products, build, economy, capturable, destruction, passenger, transport, constructionRange, supply, upgrades, targetCategories, flight, airbase, visionRadius, sensors)) { }
+    public UnitDefinition(string id, int maxHealth, IEnumerable<string>? animations = null, IEnumerable<string>? states = null, Locomotor? locomotor = null, WeaponDefinition? weapon = null, IEnumerable<WeaponMountDefinition>? weapons = null, ArmorKind armor = ArmorKind.Living, bool movable = true, BodyShape? body = null, FootprintDefinition? footprint = null, IEnumerable<AbilityDefinition>? abilities = null, IEnumerable<TaskQueueDefinition>? taskQueues = null, IEnumerable<ProductionDefinition>? products = null, BuildDefinition? build = null, EconomyDefinition? economy = null, CapturableDefinition? capturable = null, DestructionPolicy destruction = DestructionPolicy.Destroy, PassengerDefinition? passenger = null, TransportDefinition? transport = null, int constructionRange = 0, SupplyDefinition? supply = null, IEnumerable<UpgradeDefinition>? upgrades = null, TargetCategories? targetCategories = null, FlightDefinition? flight = null, AirbaseDefinition? airbase = null, int visionRadius = 0, SensorDefinition? sensors = null, int workInterval = 1)
+        : this(Compose(id, maxHealth, animations, states, locomotor, weapon, weapons, armor, movable, body, footprint, abilities, taskQueues, products, build, economy, capturable, destruction, passenger, transport, constructionRange, supply, upgrades, targetCategories, flight, airbase, visionRadius, sensors, workInterval)) { }
 
     private static EntityDefinition Compose(string id, int maxHealth, IEnumerable<string>? animations, IEnumerable<string>? states,
         Locomotor? locomotor, WeaponDefinition? weapon, IEnumerable<WeaponMountDefinition>? weapons, ArmorKind armor, bool movable,
         BodyShape? body, FootprintDefinition? footprint, IEnumerable<AbilityDefinition>? abilities,
-        IEnumerable<TaskQueueDefinition>? taskQueues, IEnumerable<ProductionDefinition>? products, BuildDefinition? build, EconomyDefinition? economy, CapturableDefinition? capturable, DestructionPolicy destruction, PassengerDefinition? passenger, TransportDefinition? transport, int constructionRange, SupplyDefinition? supply, IEnumerable<UpgradeDefinition>? upgrades, TargetCategories? targetCategories, FlightDefinition? flight, AirbaseDefinition? airbase, int visionRadius, SensorDefinition? sensors)
+        IEnumerable<TaskQueueDefinition>? taskQueues, IEnumerable<ProductionDefinition>? products, BuildDefinition? build, EconomyDefinition? economy, CapturableDefinition? capturable, DestructionPolicy destruction, PassengerDefinition? passenger, TransportDefinition? transport, int constructionRange, SupplyDefinition? supply, IEnumerable<UpgradeDefinition>? upgrades, TargetCategories? targetCategories, FlightDefinition? flight, AirbaseDefinition? airbase, int visionRadius, SensorDefinition? sensors, int workInterval)
     {
         if (weapon is not null && weapons is not null) throw new ArgumentException("Use either a single weapon or mounts.");
         return new(id, new(maxHealth, armor, destruction), new(locomotor, movable, body, footprint), new(animations, states),
-            new(weapons ?? (weapon is null ? [] : [new WeaponMountDefinition("main", weapon)]), abilities), new(taskQueues, products), build, economy, capturable, passenger, transport, constructionRange, supply, upgrades, targetCategories, flight, airbase, visionRadius, sensors);
+            new(weapons ?? (weapon is null ? [] : [new WeaponMountDefinition("main", weapon)]), abilities), new(taskQueues, products), build, economy, capturable, passenger, transport, constructionRange, supply, upgrades, targetCategories, flight, airbase, visionRadius, sensors, workInterval);
     }
 
     public void WriteState(BinaryWriter writer)
     {
+        if (WorkInterval != 1) { writer.Write(-36); writer.Write(WorkInterval); }
         if (Sensors is { } sensors) { writer.Write(-30); sensors.WriteState(writer); }
         if (VisionRadius > 0) { writer.Write(-29); writer.Write(VisionRadius); }
         TargetCategories.Write(writer); writer.Write(Flight is not null); Flight?.Write(writer);

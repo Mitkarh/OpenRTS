@@ -399,6 +399,52 @@ construction-engineer:
       site-crane: { Label: Кран, Hotkey: O, Order: 9 }
   Presentation: { Name: Инженер }
 
+engineering-tiltrotor:
+  Inherits: construction-engineer
+  Builder: { Range: 1536, WorkInterval: 2 }
+  Body: { Radius: 320 }
+  Buildable: { Ticks: 150, Cost: 1300 }
+  Aircraft:
+    Mode: Hover
+    Speed: 192
+    CruiseAltitude: 3584
+    VerticalSpeed: 144
+    ServiceType: rotorcraft
+    Categories: [air, helicopter, tiltrotor]
+  Presentation:
+    Model: engineering-tiltrotor
+    Name: Воздушный инженер
+    WorkRoaming: true
+    States: [damaged, airborne]
+
+supply-tiltrotor:
+  Inherits: supply-truck
+  Body: { Radius: 320 }
+  Buildable: { Ticks: 125, Cost: 1100 }
+  Aircraft:
+    Mode: Hover
+    Speed: 192
+    CruiseAltitude: 3584
+    VerticalSpeed: 144
+    ServiceType: rotorcraft
+    Categories: [air, helicopter, tiltrotor]
+  Presentation:
+    Model: supply-tiltrotor
+    Name: Конвертоплан снабжения
+    States: [damaged, loaded, airborne]
+
+heavy-air-transport:
+  Inherits: tiltrotor
+  -Armaments:
+  Body: { Radius: 480 }
+  Health: { HP: 800 }
+  Buildable: { Ticks: 175, Cost: 1800 }
+  Aircraft: { Ammo: 0, Speed: 144 }
+  Transport: { Accepts: [infantry, vehicle], Slots: 12, UnloadDistance: 1024 }
+  Presentation:
+    Model: heavy-air-transport
+    Name: Тяжёлый воздушный транспорт
+
 airfield:
   Inherits: ^building
   Health: { HP: 1800 }
@@ -454,10 +500,16 @@ helipad:
   Actions:
     Definitions:
       tiltrotor: { Unit: tiltrotor }
+      engineer-air: { Unit: engineering-tiltrotor }
+      supply-air: { Unit: supply-tiltrotor }
+      heavy-transport: { Unit: heavy-air-transport }
   ActionPanel:
     Buttons:
       tiltrotor:
         { Label: Конвертоплан, Icon: "res://assets/units/tiltrotor.png" }
+      engineer-air: { Label: Воздушный инженер, Icon: "res://assets/units/engineering-tiltrotor.png" }
+      supply-air: { Label: Воздушное снабжение, Icon: "res://assets/units/supply-tiltrotor.png" }
+      heavy-transport: { Label: Тяжёлый транспорт, Icon: "res://assets/units/heavy-air-transport.png" }
   Presentation: { Model: helipad, Name: Вертолётная площадка }
 
 stealth-generator:

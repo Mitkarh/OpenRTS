@@ -23,6 +23,7 @@ internal interface IConstructionWorld
     void IssueOrder(EntityId actor, UnitOrder order, bool queued);
     void Halt(EntityId actor);
     bool CanApproach(Entity actor, WorldPosition position);
+    bool PrepareWork(Entity actor, WorldPosition position);
     bool TrySetTarget(EntityId actor, WorldPosition position);
     bool TryEvacuate(EntityId actor, WorldPosition position, bool preserveOrder);
 

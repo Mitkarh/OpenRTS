@@ -2,10 +2,10 @@
   Model:
     Kind: Sprite
     States:
-      constructing: {Tint: [0.8, 0.9, 1.0], Opacity: 0.8}
-      lowpower: {Tint: [0.45, 0.45, 0.5]}
-      damaged: {Tint: [0.64, 0.48, 0.40]}
-      swimming: {Tint: [0.64, 0.86, 1.0], Scale: 0.94, Opacity: 0.88}
+      constructing: { Tint: [0.8, 0.9, 1.0], Opacity: 0.8 }
+      lowpower: { Tint: [0.45, 0.45, 0.5] }
+      damaged: { Tint: [0.64, 0.48, 0.40] }
+      swimming: { Tint: [0.64, 0.86, 1.0], Scale: 0.94, Opacity: 0.88 }
 
 infantry-rifle:
   Inherits: ^sprite
@@ -18,9 +18,9 @@ infantry-rifle:
         Size: [1.25, 1.25]
         Pivot: [0.5, 0.64]
     Animations:
-      idle: {Sequence: stand, Parts: [body]}
-      move: {Sequence: travel, Parts: [body]}
-      fire: {Sequence: shoot, Parts: [body], Recoil: 0.045, Flash: 0.24}
+      idle: { Sequence: stand, Parts: [body] }
+      move: { Sequence: travel, Parts: [body] }
+      fire: { Sequence: shoot, Parts: [body], Recoil: 0.045, Flash: 0.24 }
 
 infantry-rocket:
   Inherits: infantry-rifle
@@ -30,7 +30,7 @@ infantry-rocket:
         Resource: res://resources/units/rocketeer.tres
         Pivot: [0.5, 0.64]
     Animations:
-      fire: {Sequence: shoot, Parts: [body], Recoil: 0.09, Flash: 0.32}
+      fire: { Sequence: shoot, Parts: [body], Recoil: 0.09, Flash: 0.32 }
 
 apc-machinegun:
   Inherits: ^sprite
@@ -49,9 +49,9 @@ apc-machinegun:
         Offset: [0, -0.04]
         Layer: 1
     Animations:
-      idle: {Sequence: stand, Parts: [body, turret]}
-      move: {Sequence: travel, Parts: [body], Bob: 0.008}
-      fire: {Sequence: shoot, Parts: [turret], Recoil: 0.05, Flash: 0.30}
+      idle: { Sequence: stand, Parts: [body, turret] }
+      move: { Sequence: travel, Parts: [body], Bob: 0.008 }
+      fire: { Sequence: shoot, Parts: [turret], Recoil: 0.05, Flash: 0.30 }
 
 apc-missiles:
   Inherits: apc-machinegun
@@ -62,7 +62,7 @@ apc-missiles:
         Size: [1.25, 1.25]
         Pivot: [0.5, 0.5]
     Animations:
-      fire: {Sequence: shoot, Parts: [turret], Recoil: 0.06, Flash: 0.40}
+      fire: { Sequence: shoot, Parts: [turret], Recoil: 0.06, Flash: 0.40 }
 
 tank:
   Inherits: apc-machinegun
@@ -77,7 +77,7 @@ tank:
         Pivot: [0.5, 0.73]
         Offset: [0, -0.07]
     Animations:
-      fire: {Sequence: shoot, Parts: [turret], Recoil: 0.12, Flash: 0.38}
+      fire: { Sequence: shoot, Parts: [turret], Recoil: 0.12, Flash: 0.38 }
 
 infantry-grenade:
   Inherits: infantry-rifle
@@ -90,9 +90,9 @@ engineer:
         Resource: res://resources/units/engineer.tres
         Size: [1.9, 1.9]
     Animations:
-      idle: {Sequence: stand, Parts: [body]}
-      move: {Sequence: travel, Parts: [body], Bob: 0.008}
-      repair: {Sequence: shoot, Parts: [body], Flash: 0.15}
+      idle: { Sequence: stand, Parts: [body] }
+      move: { Sequence: travel, Parts: [body], Bob: 0.008 }
+      repair: { Sequence: shoot, Parts: [body], Flash: 0.15 }
 
 tank-mixed:
   Inherits: tank
@@ -110,10 +110,10 @@ tank-mixed:
         Size: [2.0, 2.0]
         Pivot: [0.5, 0.73]
     Animations:
-      idle: {Sequence: stand, Parts: [body, turret, radar]}
-      move: {Sequence: travel, Parts: [body, turret, radar]}
-      fire: {Sequence: shoot, Parts: [body, turret, radar]}
-      missiles: {Sequence: shoot, Parts: [turret, radar], Flash: 0.5}
+      idle: { Sequence: stand, Parts: [body, turret, radar] }
+      move: { Sequence: travel, Parts: [body, turret, radar] }
+      fire: { Sequence: shoot, Parts: [body, turret, radar] }
+      missiles: { Sequence: shoot, Parts: [turret, radar], Flash: 0.5 }
 
 bunker-cannon:
   Inherits: tank
@@ -121,8 +121,8 @@ bunker-cannon:
     DamagedState: damaged
     DestroyedState: destroyed
     States:
-      working: {Pulse: 0.05}
-      destroyed: {Tint: [0.72, 0.68, 0.62]}
+      working: { Pulse: 0.05 }
+      destroyed: { Tint: [0.72, 0.68, 0.62] }
     Parts:
       body:
         HiddenWhen: [destroyed]
@@ -137,8 +137,8 @@ bunker-cannon:
         Size: [2.6, 2.6]
         VisibleWhen: [destroyed]
     Animations:
-      idle: {Sequence: stand, Parts: [body, turret, ruins]}
-      move: {Sequence: stand, Parts: [body]}
+      idle: { Sequence: stand, Parts: [body, turret, ruins] }
+      move: { Sequence: stand, Parts: [body] }
 
 bunker-mixed:
   Inherits: tank-mixed
@@ -146,10 +146,10 @@ bunker-mixed:
     DamagedState: damaged
     DestroyedState: destroyed
     States:
-      working: {Pulse: 0.05}
-      destroyed: {Tint: [0.72, 0.68, 0.62]}
+      working: { Pulse: 0.05 }
+      destroyed: { Tint: [0.72, 0.68, 0.62] }
     Parts:
-      radar: {HiddenWhen: [destroyed]}
+      radar: { HiddenWhen: [destroyed] }
       body:
         HiddenWhen: [destroyed]
         Resource: res://resources/units/bunker-base.tres
@@ -163,8 +163,8 @@ bunker-mixed:
         Size: [2.6, 2.6]
         VisibleWhen: [destroyed]
     Animations:
-      idle: {Sequence: stand, Parts: [body, turret, ruins, radar]}
-      move: {Sequence: stand, Parts: [body]}
+      idle: { Sequence: stand, Parts: [body, turret, ruins, radar] }
+      move: { Sequence: stand, Parts: [body] }
 
 apc-upgradable:
   Inherits: apc-machinegun
@@ -174,7 +174,7 @@ apc-upgradable:
       cannon: {}
       firing-ports: {}
     Parts:
-      turret: {HiddenWhen: [rockets, cannon]}
+      turret: { HiddenWhen: [rockets, cannon] }
       rocket:
         Parent: body
         Facing: Weapon
@@ -200,9 +200,21 @@ apc-upgradable:
         Layer: 1
         VisibleWhen: [firing-ports]
     Animations:
-      idle: {Sequence: stand, Parts: [body, turret, rocket, cannon, ports]}
-      fire: {Sequence: shoot, Parts: [turret, rocket, cannon], Recoil: 0.06, Flash: 0.35}
-      construct: {Sequence: stand, Parts: [body, turret, rocket, cannon, ports], ScaleFrom: 0.85, OpacityFrom: 0.35}
+      idle: { Sequence: stand, Parts: [body, turret, rocket, cannon, ports] }
+      fire:
+        {
+          Sequence: shoot,
+          Parts: [turret, rocket, cannon],
+          Recoil: 0.06,
+          Flash: 0.35,
+        }
+      construct:
+        {
+          Sequence: stand,
+          Parts: [body, turret, rocket, cannon, ports],
+          ScaleFrom: 0.85,
+          OpacityFrom: 0.35,
+        }
 
 fighter:
   Inherits: ^sprite
@@ -245,20 +257,26 @@ tiltrotor:
     Animations:
       idle: { Sequence: stand, Parts: [body, rotor-left, rotor-right] }
       move: { Sequence: travel, Parts: [body, rotor-left, rotor-right] }
-      fire: { Sequence: shoot, Parts: [body, rotor-left, rotor-right], Flash: 0.18 }
+      fire:
+        { Sequence: shoot, Parts: [body, rotor-left, rotor-right], Flash: 0.18 }
 
 radar-buggy:
   Inherits: ^sprite
   Model:
     Parts:
-      body: {Resource: res://resources/units/radar-buggy.tres, Size: [2.8, 2.8], Facing: Body}
+      body:
+        {
+          Resource: res://resources/units/radar-buggy.tres,
+          Size: [2.8, 2.8],
+          Facing: Body,
+        }
     Animations:
-      idle: {Sequence: stand, Parts: [body]}
-      move: {Sequence: travel, Parts: [body]}
-      fire: {Sequence: shoot, Parts: [body], Flash: 0.2}
-      construct: {Sequence: stand, Parts: [body]}
-      door: {Sequence: stand, Parts: [body]}
-      produce: {Sequence: stand, Parts: [body]}
+      idle: { Sequence: stand, Parts: [body] }
+      move: { Sequence: travel, Parts: [body] }
+      fire: { Sequence: shoot, Parts: [body], Flash: 0.2 }
+      construct: { Sequence: stand, Parts: [body] }
+      door: { Sequence: stand, Parts: [body] }
+      produce: { Sequence: stand, Parts: [body] }
 
 stealth-truck:
   Inherits: ^sprite
@@ -271,21 +289,26 @@ stealth-truck:
         Layer: 4
         Spin: 140
         EmitterSpin: true
-      body: {Resource: res://resources/units/stealth-truck.tres, Size: [3.8, 3.8], Facing: Body}
+      body:
+        {
+          Resource: res://resources/units/stealth-truck.tres,
+          Size: [3.8, 3.8],
+          Facing: Body,
+        }
     Animations:
-      idle: {Sequence: stand, Parts: [body, rotor]}
-      move: {Sequence: travel, Parts: [body, rotor]}
-      fire: {Sequence: shoot, Parts: [body, rotor], Flash: 0.2}
-      construct: {Sequence: stand, Parts: [body, rotor]}
-      door: {Sequence: stand, Parts: [body, rotor]}
-      produce: {Sequence: stand, Parts: [body, rotor]}
+      idle: { Sequence: stand, Parts: [body, rotor] }
+      move: { Sequence: travel, Parts: [body, rotor] }
+      fire: { Sequence: shoot, Parts: [body, rotor], Flash: 0.2 }
+      construct: { Sequence: stand, Parts: [body, rotor] }
+      door: { Sequence: stand, Parts: [body, rotor] }
+      produce: { Sequence: stand, Parts: [body, rotor] }
 
 stealth-generator:
   Inherits: ^sprite
   Model:
     States:
-      working: {Pulse: 0.05}
-      destroyed: {Tint: [0.4, 0.4, 0.4]}
+      working: { Pulse: 0.05 }
+      destroyed: { Tint: [0.4, 0.4, 0.4] }
     Parts:
       rotor:
         Parent: body
@@ -293,12 +316,94 @@ stealth-generator:
         Size: [2.6, 2.6]
         Layer: 4
         Spin: 140
+        Offset: [0.0, -0.5]
         EmitterSpin: true
-      body: {Resource: res://resources/units/stealth-generator.tres, Size: [5.2, 5.2], Facing: Body}
+      body:
+        {
+          Resource: res://resources/units/stealth-generator.tres,
+          Size: [5.2, 5.2],
+          Facing: Body,
+        }
     Animations:
-      idle: {Sequence: stand, Parts: [body, rotor]}
-      move: {Sequence: travel, Parts: [body, rotor]}
-      fire: {Sequence: shoot, Parts: [body, rotor], Flash: 0.2}
-      construct: {Sequence: stand, Parts: [body, rotor]}
-      door: {Sequence: stand, Parts: [body, rotor]}
-      produce: {Sequence: stand, Parts: [body, rotor]}
+      idle: { Sequence: stand, Parts: [body, rotor] }
+      move: { Sequence: travel, Parts: [body, rotor] }
+      fire: { Sequence: shoot, Parts: [body, rotor], Flash: 0.2 }
+      construct: { Sequence: stand, Parts: [body, rotor] }
+      door: { Sequence: stand, Parts: [body, rotor] }
+      produce: { Sequence: stand, Parts: [body, rotor] }
+
+engineering-tiltrotor:
+  Inherits: tiltrotor
+  Model:
+    Parts:
+      body:
+        {
+          Resource: res://resources/units/engineering-tiltrotor.tres,
+          Size: [3.2, 3.2],
+        }
+      rotor-left: { Size: [0.86, 0.86], Offset: [-1.0, -0.16] }
+      rotor-right: { Size: [0.86, 0.86], Offset: [1.0, -0.16] }
+    Animations:
+      repair:
+        { Sequence: shoot, Parts: [body, rotor-left, rotor-right], Flash: 0.12 }
+
+supply-tiltrotor:
+  Inherits: tiltrotor
+  Model:
+    Parts:
+      body:
+        {
+          Resource: res://resources/units/supply-tiltrotor.tres,
+          Size: [3.2, 3.2],
+        }
+      rotor-left: { Size: [0.78, 0.78], Offset: [-1.0, -0.38] }
+      rotor-right: { Size: [0.78, 0.78], Offset: [1.0, -0.38] }
+    States:
+      loaded: { Tint: [0.9, 1.1, 0.9] }
+
+heavy-air-transport:
+  Inherits: tiltrotor
+  Model:
+    Parts:
+      body:
+        {
+          Resource: res://resources/units/heavy-air-transport.tres,
+          Size: [4.4, 4.4],
+        }
+      rotor-left: { Size: [0.98, 0.98], Offset: [-1.29, -0.95] }
+      rotor-right: { Size: [0.98, 0.98], Offset: [1.29, -0.95] }
+      rotor-rear-left:
+        Parent: body
+        Resource: res://resources/units/rotor.tres
+        Size: [0.98, 0.98]
+        Offset: [-1.27, 1.10]
+        Layer: 1
+        VisibleWhen: [airborne]
+        Spin: -720
+      rotor-rear-right:
+        Parent: body
+        Resource: res://resources/units/rotor.tres
+        Size: [0.98, 0.98]
+        Offset: [1.27, 1.10]
+        Layer: 1
+        VisibleWhen: [airborne]
+        Spin: 720
+    Animations:
+      idle:
+        {
+          Sequence: stand,
+          Parts:
+            [body, rotor-left, rotor-right, rotor-rear-left, rotor-rear-right],
+        }
+      move:
+        {
+          Sequence: travel,
+          Parts:
+            [body, rotor-left, rotor-right, rotor-rear-left, rotor-rear-right],
+        }
+      fire:
+        {
+          Sequence: shoot,
+          Parts:
+            [body, rotor-left, rotor-right, rotor-rear-left, rotor-rear-right],
+        }

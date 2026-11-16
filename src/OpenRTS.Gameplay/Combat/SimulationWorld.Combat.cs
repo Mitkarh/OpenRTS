@@ -61,14 +61,14 @@ public sealed partial class SimulationWorld
             }
         return compatible ?? best;
     }
-    private bool InWeaponRange(int index, int target, int range) => InWeaponRange(index, target, range, out _);
+    private bool InWeaponRange(int index, int target, int range, bool repair = false) => InWeaponRange(index, target, range, out _, repair);
 
-    private bool InWeaponRange(int index, int target, int range, out long distanceSquared)
+    private bool InWeaponRange(int index, int target, int range, out long distanceSquared, bool repair = false)
     {
         ref var source = ref _entityHandles[index];
         ref var other = ref _entityHandles[target];
         distanceSquared = ObjectGeometry.DistanceSquared(TypeOf(source), source.Get<SpatialState>().Position, TypeOf(other), other.Get<SpatialState>().Position, out var from, out var to);
-        bool spatial = IsAircraft(source) || IsAircraft(other);
+        bool spatial = (IsAircraft(source) || IsAircraft(other)) && !(repair && TypeOf(source).Flight is { Mode: FlightMode.Hover });
         long dz = (long)from.Elevation - to.Elevation;
         return distanceSquared <= (long)range * range && (!spatial || distanceSquared + dz * dz <= (long)range * range) &&
             (_baseGrid is null || (spatial ? SpatialTerrainClear(from, to) : TerrainGeometry.Clear(_baseGrid, from, to, 0)));
@@ -94,7 +94,7 @@ public sealed partial class SimulationWorld
         foreach (var candidateId in _combatCandidates)
         {
             if (!ValidTarget(index, candidateId, weapon, out int candidate) ||
-                !InWeaponRange(index, candidate, range, out long distance)) continue;
+                !InWeaponRange(index, candidate, range, out long distance, weapon.Effect == WeaponEffect.Repair)) continue;
             long score = 0;
             if (rule is not null)
             {
@@ -186,12 +186,12 @@ public sealed partial class SimulationWorld
                     else
                     {
                         var preferred = repairOrder ? entityOrders.ActiveOrder.Target : entityOrders.CombatTarget;
-                        if (!ValidTarget(origin, preferred, weapon, out target) || !InWeaponRange(origin, target, weapon.Range))
+                        if (!ValidTarget(origin, preferred, weapon, out target) || !InWeaponRange(origin, target, weapon.Range, weapon.Effect == WeaponEffect.Repair))
                         {
                             target = -1;
                             if (!repairOrder && (weapon.Effect == WeaponEffect.Damage || state.AutoCast))
                             {
-                                if (ValidTarget(origin, state.Target, weapon, out int previous) && InWeaponRange(origin, previous, weapon.Range)) target = previous;
+                                if (ValidTarget(origin, state.Target, weapon, out int previous) && InWeaponRange(origin, previous, weapon.Range, weapon.Effect == WeaponEffect.Repair)) target = previous;
                                 else if ((Tick + entityIdentity.Id.Value + mountIndex) % 4 == 0 || entityOrders.OrderStarted == Tick) target = AcquireWeaponTarget(origin, weapon);
                             }
                         }

@@ -1,0 +1,33 @@
+{
+  "assets": [
+    {
+      "asset": "sandbox/assets/units/engineering-tiltrotor.png",
+      "cleanup_prompt": "Use case: precise-object-edit. This engineering tiltrotor is a production RTS sprite. Preserve the exact aircraft design, top-down orientation, folded construction arms, silhouette, colors, cockpit and all mechanical details. Remove ONLY the diffuse colored glow and haze outside the aircraft, and any background. The entire surrounding area, spaces between components, and canvas corners must be genuinely alpha transparent. No glow, no shadow, no smoke or lighting halo. Hard clean sprite edges, no backdrop. Keep flat magenta team-color panels on the aircraft unchanged.",
+      "name": "engineering-tiltrotor",
+      "normalization": "alpha>0 bounds, aspect fit928 centered1024, preserve alpha",
+      "prompt": "Use case: stylized-concept. Asset type: transparent production sprite for the top-down RTS game OpenRTS. Create ONE unarmed engineering VTOL tiltrotor aircraft. Strict orthographic directly overhead, nose UP, centered complete silhouette with generous margin. Weathered olive-gray industrial metal, dark blue cockpit, flat vivid MAGENTA team-color panels, yellow hazard stripes. Two large ducted fans symmetrically at left and right, both fan hubs exactly on the same horizontal centerline, wingspan dominates width. Compact central fuselage, clearly visible folded yellow construction manipulator arms along sides, welding tool and mechanical toolboxes, construction vehicle silhouette. NO guns, missiles or weapons. Separate rotor animation overlays will be added by the engine. Crisp hand-painted RTS asset readable at small scale, matching existing military twin-rotor style. No ground shadow, no exhaust, no surroundings, no text, no watermark, genuine alpha transparency; no checkerboard.",
+      "sha256": "0f8ffc8533c00dbf0144cb699d1402351b67bc5a683abc464b96131d9bcddb9e",
+      "source": "docs/assets/sources/engineering-tiltrotor-source.png",
+      "source_sha256": "68ba754c341b1b9218c1fa9be18a4ad7a46c9f89df1fb76995970e9b76d12ce2"
+    },
+    {
+      "asset": "sandbox/assets/units/supply-tiltrotor.png",
+      "name": "supply-tiltrotor",
+      "normalization": "alpha>0 bounds, aspect fit928 centered1024, preserve alpha",
+      "prompt": "Use case: stylized-concept. Asset type: transparent production sprite for top-down RTS OpenRTS. ONE unarmed supply cargo VTOL tiltrotor, strict orthographic directly overhead, nose UP, complete centered silhouette with margin. Weathered olive-gray industrial fuselage, dark blue compact cockpit, two large circular ducted fans on short side wings, symmetric hubs on same horizontal centerline. Wide rectangular armored cargo container integrated behind cockpit, visible reinforced ribbing, cargo clamps, yellow hazard stripes and flat vivid MAGENTA team-color plates. Clearly a resource-hauling utility aircraft, no weapons, no rockets, no external dangling loads. Crisp hand-painted industrial military RTS style, readable at small scale. Alpha-transparent background with absolutely no ground, shadows, glow, smoke, exhaust, checkerboard, text or watermark. Only hard-edged aircraft silhouette; all space around it fully transparent.",
+      "sha256": "c9c0e1336fa150ee8752ea29c24f287921da741e2a80c82d9f7753c134e81a99",
+      "source": "docs/assets/sources/supply-tiltrotor-source.png",
+      "source_sha256": "ae880d92ac69ae73dadd6fe567be303a68491c383959d9d396868ab29ae9cec5"
+    },
+    {
+      "asset": "sandbox/assets/units/heavy-air-transport.png",
+      "name": "heavy-air-transport",
+      "normalization": "alpha>0 bounds, aspect fit928 centered1024, preserve alpha",
+      "prompt": "Use case: stylized-concept. Asset type: transparent top-down RTS production sprite, OpenRTS. ONE massive unarmed military heavy VTOL dropship, troop and vehicle transporter. Strict directly overhead orthographic view, nose UP, complete centered silhouette surrounded by clear margin. Broad bulky olive-gray armored fuselage with dark blue cockpit at north end, a wide rectangular rear cargo bay large enough for TWO armored vehicles, reinforced loading ramp at tail, four large ducted lift fans arranged symmetrically two at front wings and two at rear wings. The four fan hubs form a rectangle. Strong chunky readable silhouette distinctly heavier than a utility twin-rotor. Weathered industrial hand-painted military RTS sprite, flat vivid MAGENTA team-color plates and restrained yellow hazard markings. No weapons, no visible troops or vehicles. Genuine alpha transparency; no environment, ground shadow, glow, smoke, exhaust, labels, watermark or checkerboard. Only hard-edged aircraft with all surrounding space completely transparent.",
+      "sha256": "28c44345e14dc42184cba80d290805031b969432055d51cb884233c0b87b9fa3",
+      "source": "docs/assets/sources/heavy-air-transport-source.png",
+      "source_sha256": "9e40a437664f34458401af45e92a843479e42c77b202fdfe11fdb8ebc48817f4"
+    }
+  ],
+  "tool": "built-in imagegen"
+}

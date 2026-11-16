@@ -8,6 +8,7 @@ internal sealed class FlightState
     internal int Slot = -1;
     internal bool ReturnRequested, LandRequested, MovementRequested;
     internal bool RunwayReserved, TaxiToParking;
+    internal long WorkingTick = -1; // Derived within the current tick, like MovementRequested; never used on later ticks.
     internal WorldPosition LandingPoint, ExitPoint;
     internal long RequestTick, RetryTick;
     internal void Write(BinaryWriter w)

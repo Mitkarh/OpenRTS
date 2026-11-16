@@ -55,7 +55,7 @@ public sealed partial class SimulationWorld
     }
     private bool AbilityInRange(int index, UnitOrder order, WeaponDefinition weapon)
     {
-        if (order.Target.Value != 0) return _indices.TryGetValue(order.Target, out int target) && IsOnMap(_entityHandles[target]) && InWeaponRange(index, target, weapon.Range);
+        if (order.Target.Value != 0) return _indices.TryGetValue(order.Target, out int target) && IsOnMap(_entityHandles[target]) && InWeaponRange(index, target, weapon.Range, weapon.Effect == WeaponEffect.Repair);
         var e = _entityHandles[index];
         var closest = ObjectGeometry.ClosestPoint(TypeOf(e), e.Get<SpatialState>().Position, order.Position);
         return DistanceSquared(closest, order.Position) <= (long)weapon.Range * weapon.Range && (_baseGrid is null || TerrainGeometry.Clear(_baseGrid, closest, order.Position, 0));
@@ -70,6 +70,7 @@ public sealed partial class SimulationWorld
         var order = eOrders.ActiveOrder; int mount = AbilityMount(eIdentity.Type, order.Ability); var weapon = _types[eIdentity.Type].Weapons[mount].Weapon;
         if (order.Target.Value != 0 && !ValidTarget(i, order.Target, weapon, out _)) { eOrders.HasOrder = false; Halt(i); return; }
         var aim = order.Target.Value != 0 ? _entityHandles[_indices[order.Target]].Get<SpatialState>().Position : order.Position;
+        if (weapon.Effect == WeaponEffect.Repair && !PrepareAirWork(e, aim)) { eOrders.OrderPhase = OrderPhase.Approaching; return; }
         ePresentation.HasAim = true; ePresentation.AimEntity = order.Target; ePresentation.AimPoint = aim;
         if (AbilityInRange(i, order, weapon)) { Halt(i); eOrders.OrderPhase = OrderPhase.Engaging; }
         else if (_types[eIdentity.Type].Movable)

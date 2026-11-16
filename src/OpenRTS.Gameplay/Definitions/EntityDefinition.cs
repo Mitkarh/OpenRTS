@@ -21,12 +21,13 @@ public sealed record EntityDefinition
     public PassengerDefinition? Passenger { get; }
     public TransportDefinition? Transport { get; }
     public int ConstructionRange { get; }
+    public int WorkInterval { get; }
     public SupplyDefinition? Supply { get; }
     public IReadOnlyList<UpgradeDefinition> Upgrades { get; }
 
     public EntityDefinition(string id, HealthDefinition? health = null, SpatialDefinition? spatial = null,
         PresentationDefinition? presentation = null, ArmamentDefinition? armament = null,
-        ProducerDefinition? production = null, BuildDefinition? build = null, EconomyDefinition? economy = null, CapturableDefinition? capturable = null, PassengerDefinition? passenger = null, TransportDefinition? transport = null, int constructionRange = 0, SupplyDefinition? supply = null, IEnumerable<UpgradeDefinition>? upgrades = null, TargetCategories? targetCategories = null, FlightDefinition? flight = null, AirbaseDefinition? airbase = null, int visionRadius = 0, SensorDefinition? sensors = null)
+        ProducerDefinition? production = null, BuildDefinition? build = null, EconomyDefinition? economy = null, CapturableDefinition? capturable = null, PassengerDefinition? passenger = null, TransportDefinition? transport = null, int constructionRange = 0, SupplyDefinition? supply = null, IEnumerable<UpgradeDefinition>? upgrades = null, TargetCategories? targetCategories = null, FlightDefinition? flight = null, AirbaseDefinition? airbase = null, int visionRadius = 0, SensorDefinition? sensors = null, int workInterval = 1)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         if (visionRadius < 0 || visionRadius > WorldPosition.MaximumExtent || visionRadius > 0 && spatial is null) throw new ArgumentOutOfRangeException(nameof(visionRadius));
@@ -34,8 +35,10 @@ public sealed record EntityDefinition
         if (sensors is not null && spatial is null) throw new ArgumentException("Sensors require spatial capability.", nameof(sensors));
         Sensors = sensors;
         TargetCategories = targetCategories ?? TargetCategories.Ground; Flight = flight; Airbase = airbase;
-        if (flight is not null && (spatial?.Movable != true || spatial.Footprint is not null || health is null || passenger is not null || airbase is not null || supply is not null || constructionRange != 0))
-            throw new ArgumentException("Aircraft require a mobile body and cannot be passengers, suppliers, builders or airbases.");
+        if (flight is not null && (spatial?.Movable != true || spatial.Footprint is not null || health is null || passenger is not null || airbase is not null ||
+            supply is not null && supply.Role != SupplyRole.Truck || flight.Mode != FlightMode.Hover &&
+            (supply is not null || constructionRange != 0 || armament?.Abilities.Any(a => a.Kind == AbilityKind.Capture) == true)))
+            throw new ArgumentException("Aircraft require a mobile body; only hover aircraft can build, capture or haul supply.");
         if (airbase is not null && (spatial?.Movable != false || spatial.Footprint is null || health is null))
             throw new ArgumentException("Airbases require an immobile footprint and health.");
         if (airbase is not null)
@@ -50,6 +53,8 @@ public sealed record EntityDefinition
                 armament?.Abilities.Any(a => a.Kind == AbilityKind.Build) == true)))
             throw new ArgumentException("On-site construction requires a spatial builder and a positive range.");
         ConstructionRange = constructionRange;
+        if (workInterval is < 1 or > 256) throw new ArgumentOutOfRangeException(nameof(workInterval));
+        WorkInterval = workInterval;
         Supply = supply;
         if (supply is not null && (spatial is null || health is null ||
             (supply.Role == SupplyRole.Truck ? !spatial.Movable || passenger is not null : spatial.Movable) ||

@@ -14,7 +14,11 @@ public sealed partial class UnitCatalog
         [Range(1, 100)] public int InitialHealthPercent { get; set; } = 20;
         public BuildDefinition Compile() => new(Ticks, Cost, Kind, PlacementRadius, InitialHealthPercent);
     }
-    private sealed class BuilderOptions { [Range(1, WorldPosition.MaximumExtent)] public int Range { get; set; } = 1024; }
+    private sealed class BuilderOptions
+    {
+        [Range(1, WorldPosition.MaximumExtent)] public int Range { get; set; } = 1024;
+        [Range(1, 256)] public int WorkInterval { get; set; } = 1;
+    }
     private sealed class QueueOptions { public Dictionary<string, QueueSettings> Queues { get; set; } = new(); }
     private sealed class QueueSettings
     {

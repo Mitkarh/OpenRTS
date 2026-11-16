@@ -124,6 +124,7 @@ public partial class Sandbox : Node3D
             if (_verifyPresentation) { _verifySimulation = true; _ticks = 12; }
             if ((verify ? 1 : 0) + (_verifySimulation ? 1 : 0) + (_verifyControls ? 1 : 0) > 1) throw new ArgumentException("Выберите один режим проверки.");
             _manifest = LoadManifest(modPath ?? (_buildings ? "res://game.yaml" : "res://diagnostic-game.yaml"));
+            LoadRangeDefaults(_manifest.Settings.SensorRanges);
             var unitSources = _manifest.Rules.Select(source =>
             {
                 string text = source.Text;

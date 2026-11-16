@@ -87,6 +87,7 @@ public sealed partial class SimulationWorld
             orders.SuspendedOrder = null;
             orders.PendingOrders?.Clear();
             orders.CombatTarget = default;
+            BeforeFlightOrder(actor);
             truck.Automatic = true;
             Halt(index);
         }
@@ -117,7 +118,7 @@ public sealed partial class SimulationWorld
             if (!TrySupplyStation(id, owner, returning, out var station)) continue;
             long candidate = ActorDistanceSquared(actor, station);
             if (candidate > maxDistance || candidate >= distance) continue;
-            if (candidate > (long)DockRange * DockRange || !StopAllowed(identity.Type, position))
+            if (TypeOf(actor).Flight is null && (candidate > (long)DockRange * DockRange || !StopAllowed(identity.Type, position)))
             {
                 bool reachable = false;
                 foreach (var point in SupplyExits(actor, station))
@@ -211,11 +212,12 @@ public sealed partial class SimulationWorld
                 return;
             }
         }
-        if (ActorDistanceSquared(actor, station) > (long)DockRange * DockRange ||
+        if (!PrepareAirWork(actor, station.Get<SpatialState>().Position) ||
+            ActorDistanceSquared(actor, station) > (long)DockRange * DockRange ||
             !StopAllowed(actor.Get<EntityIdentity>().Type, actor.Get<SpatialState>().Position))
         {
             truck.Arrival = 0;
-            ApproachFootprint(index, station);
+            if (!IsAircraft(actor)) ApproachFootprint(index, station);
             orders.OrderPhase = actor.Get<MotionState>().Moving ? OrderPhase.Approaching : OrderPhase.Waiting;
             return;
         }

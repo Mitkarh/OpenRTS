@@ -63,7 +63,6 @@ public partial class Sandbox
 
     private void AddTerminalHud()
     {
-        LoadRangeDefaults(_manifest.Settings.SensorRanges);
         var settings = new ConfigFile();
         if (!_verifySkirmish && !_verifyMatchSetup && !(_jammingScenario && _verifySimulation) && settings.Load(TerminalSettingsPath) == Error.Ok)
         {

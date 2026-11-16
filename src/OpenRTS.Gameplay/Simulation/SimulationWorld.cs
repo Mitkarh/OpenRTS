@@ -296,7 +296,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
             destination[i] = new(entityIdentity.Id, entityIdentity.Type, spatial.Previous, spatial.Position,
                 new(entityOwnership.Owner, entityPresentation.PreviousBodyFacing, entityPresentation.BodyFacing, entityPresentation.PreviousWeaponFacing, entityPresentation.WeaponFacing,
                     entityPresentation.BodyAnimation, entityPresentation.WeaponAnimation, states),
-                new(entityOrders.ActiveOrder.Kind, entityOrders.OrderPhase, entityMotion.Target, entityOrders.HasOrder && entityOrders.ActiveOrder.Kind is UnitActionKind.Build or UnitActionKind.UpgradeSupport ? entityOrders.ActiveOrder.Target : entityOrders.CombatTarget, entityOrders.PendingOrders?.Count ?? 0, entityCombat.WeaponReadyTick, capture.Progress, capture.Duration), health, weaponOffset, entityCombat.Weapons.Length, entityNavigation.TerrainStranded, rally.HasRally, rally.Rally, carrier, construction, entityOrders.AutoBuild, supply, upgrade, captureTarget)
+                new(entityOrders.ActiveOrder.Kind, entityOrders.OrderPhase, entityMotion.Target, entityOrders.HasOrder && entityOrders.ActiveOrder.Kind is UnitActionKind.Build or UnitActionKind.UpgradeSupport or UnitActionKind.Capture ? entityOrders.ActiveOrder.Target : entityOrders.CombatTarget, entityOrders.PendingOrders?.Count ?? 0, entityCombat.WeaponReadyTick, capture.Progress, capture.Duration), health, weaponOffset, entityCombat.Weapons.Length, entityNavigation.TerrainStranded, rally.HasRally, rally.Rally, carrier, construction, entityOrders.AutoBuild, supply, upgrade, captureTarget)
                 { Cloaked = IsOpticallyConcealed(entity), Emitter = ReadEmitterVisual(entity), QuarterTurns = type.Footprint is not null ? RotationOf(entity) : 0, Transformation = transformation,
                     Flight = IsAircraft(entity) ? new(entity.Get<FlightState>().Phase, entity.Get<FlightState>().Ammo, type.Flight!.Ammo, entity.Get<FlightState>().Base, entity.Get<FlightState>().Slot, Airborne(entity)) : default };
             weaponOffset += entityCombat.Weapons.Length;
@@ -583,6 +583,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
     void ICaptureWorld.IssueOrder(EntityId actor, UnitOrder order, bool queued) => IssueOrder(_indices[actor], order, queued);
     void ICaptureWorld.SetMovementTarget(EntityId actor, WorldPosition position) => SetTarget(_indices[actor], position);
     void ICaptureWorld.Halt(EntityId actor) => Halt(_indices[actor]);
+    bool ICaptureWorld.PrepareWork(Entity actor, WorldPosition target) => PrepareAirWork(actor, target);
     void ICaptureWorld.ChangeOwner(EntityId target, uint owner) => ChangeOwner(_indices[target], owner);
 
     private EntityId Spawn(int unitType, WorldPosition position, uint owner = 0, uint states = 0,

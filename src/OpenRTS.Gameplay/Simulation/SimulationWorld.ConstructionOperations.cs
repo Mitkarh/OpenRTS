@@ -38,10 +38,12 @@ public sealed partial class SimulationWorld
     void IConstructionWorld.Halt(EntityId actor) => Halt(_indices[actor]);
     bool IConstructionWorld.CanApproach(Entity actor, WorldPosition position)
     {
+        if (TypeOf(actor).Flight is { Mode: FlightMode.Hover }) return true;
         int type = actor.Get<EntityIdentity>().Type;
         return StopAllowed(type, position) && (_motion ?? _combatIndex)?.ClearPlacement(position, out _, TypeOf(actor).Body) != false && (_navigation is null ||
             Resolver(type).CanReach(actor.Get<SpatialState>().Position, position, StepCancellation));
     }
+    bool IConstructionWorld.PrepareWork(Entity actor, WorldPosition position) => PrepareAirWork(actor, position);
     bool IConstructionWorld.TrySetTarget(EntityId actor, WorldPosition position) => SetTarget(_indices[actor], position);
 
     bool IConstructionWorld.TryEvacuate(EntityId actor, WorldPosition position, bool preserveOrder) =>
