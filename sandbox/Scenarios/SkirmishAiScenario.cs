@@ -11,20 +11,20 @@ internal static class SkirmishAiScenario
     public const string MechanizedProfileId = "mechanized-skirmish";
 
     public static SkirmishAi Create(UnitCatalog catalog, SkirmishAiProfile profile, GameMap map, uint player,
-        IReadOnlyList<string>? assignedSlots = null, IBuildingSiteSearch? siteSearch = null)
+        IReadOnlyList<string>? assignedSlots = null, IBuildingSiteSearch? siteSearch = null, long initialTick = 0, IReadOnlySet<uint>? opponents = null)
     {
         var slots = assignedSlots ?? map.Slots;
         if (!map.IsSkirmish || player == 0 || player > slots.Count || slots.Count < 2)
             throw new ArgumentException("AI requires a skirmish map with at least two assigned starts.", nameof(map));
 
         var center = map.StartPosition(slots[(int)player - 1]);
-        var enemy = slots.Where((_, index) => index != (int)player - 1).Select(map.StartPosition)
-            .OrderBy(p => Distance(center, p)).First();
+        var enemy = slots.Where((_, index) => index != (int)player - 1 && (opponents is null || opponents.Contains((uint)index + 1))).Select(map.StartPosition)
+            .OrderBy(p => Distance(center, p)).FirstOrDefault(center);
         int distance = Math.Max(Math.Abs(enemy.X - center.X), Math.Abs(enemy.Y - center.Y));
         int rallyDistance = Math.Min(10 * map.Grid.CellSize, distance / 3);
         int attackDistance = Math.Min(4 * map.Grid.CellSize, distance / 4);
         return new(player, profile, catalog.Units, center, Toward(center, enemy, rallyDistance),
-            Toward(enemy, center, attackDistance), siteSearch);
+            Toward(enemy, center, attackDistance), siteSearch, initialTick);
 
         static long Distance(WorldPosition a, WorldPosition b)
         {

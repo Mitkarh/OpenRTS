@@ -98,7 +98,8 @@ if (Value("--host=") is { } host || Value("--join=") is not null)
     return;
 }
 int passed = 0;
-void Test(string name, Action action) { action(); passed++; Console.WriteLine("PASS Network: " + name); }
+if (args.Contains("--net3")) { StarChecks.Run(Test); Console.WriteLine($"{passed} NET3 checks passed."); return; }
+void Test(string name, Action action) { if (Value("--filter=") is { } filter && !name.Contains(filter, StringComparison.OrdinalIgnoreCase)) return; action(); passed++; Console.WriteLine("PASS Network: " + name); }
 void Check(bool condition) { if (!condition) throw new Exception("Assertion failed"); }
 void Reject(Action action) { try { action(); } catch (Exception e) when (e is InvalidDataException or EndOfStreamException or ArgumentException) { return; } throw new Exception("Expected rejection"); }
 (Guid, byte[]) Batch(long tick, long sequence = 1)
@@ -327,6 +328,7 @@ Test("extended wire fields survive production, ability and transform intents", (
     }
 });
 WanChecks.Run(Test);
+StarChecks.Run(Test);
 Console.WriteLine($"{passed} Network checks passed.");
 
 sealed class SplitStream(Stream inner) : Stream

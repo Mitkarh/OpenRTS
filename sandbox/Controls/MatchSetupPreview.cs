@@ -13,6 +13,7 @@ public sealed partial class MatchSetupPreview : Control
         _texture = TerminalMinimap.CreateTerrainTexture(map.Grid, terrain);
         var worldSize = new Vector2(map.Grid.Width, map.Grid.Height) * map.Grid.CellSize;
         Vector2 Normalize(OpenRTS.Core.WorldPosition p) => new Vector2(p.X, p.Y) / worldSize;
+        _assigned = new int[map.Slots.Count];
         _points = map.Slots.Select(slot => Normalize(map.StartPosition(slot))).ToArray();
         _objects = map.ObjectPositions.Select(Normalize).ToArray();
         QueueRedraw();

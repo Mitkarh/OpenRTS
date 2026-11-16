@@ -329,6 +329,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
                 foreach (var (id, state) in _fieldDeployment.OrderBy(p => p.Key.Value))
                 { writer.Write(id.Value); writer.Write(state.Position.X); writer.Write(state.Position.Y); writer.Write(state.Position.Elevation); writer.Write(state.StoppedAt); }
             }
+            WriteTeams(writer);
             WriteMechanics(writer);
             writer.Write(Tick); writer.Write(Width); writer.Write(Depth);
             writer.Write(TickRate); writer.Write(SpeedPerTick); writer.Write(NextEntityId); writer.Write(_random.State);
@@ -579,6 +580,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
 
     bool ICaptureWorld.TryGetEntity(EntityId id, out Entity entity) => TryGetEntity(id, out entity);
     UnitDefinition ICaptureWorld.TypeOf(Entity entity) => TypeOf(entity);
+    bool ICaptureWorld.AreAllied(uint first, uint second) => AreAllied(first, second);
     bool ICaptureWorld.HasPassengers(Entity entity) => _transport?.HasPassengers(entity) == true;
     void ICaptureWorld.IssueOrder(EntityId actor, UnitOrder order, bool queued) => IssueOrder(_indices[actor], order, queued);
     void ICaptureWorld.SetMovementTarget(EntityId actor, WorldPosition position) => SetTarget(_indices[actor], position);

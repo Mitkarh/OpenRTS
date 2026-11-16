@@ -1,0 +1,34 @@
+PASS Network: canonical codec, large selection, all supported intents, unsupported fields
+PASS Network: future reorder, identical/conflicting duplicate, expired identity and sequence gap
+PASS Network: framing partial reads, coalesced frames, oversized and truncated payload
+PASS Network: two owners, different workers, every-tick hash, offline replay and incomplete log
+PASS Network: delay boundaries bootstrap and close empty ticks
+PASS Network: decoder rejects corrupt kind, issuer, count, invalid flags and sequence
+PASS Network: foreign actor input is denied by gameplay on the agreed tick
+PASS Network: missing input stops after the agreed bootstrap, cancel and EOF stop promptly
+PASS Network: mismatched descriptor and initial seed reject before first Step
+PASS Network: first divergent tick stops the match and records failure
+PASS Network: missing peer cancels bounded wait and releases world/socket
+PASS Network: deadline is reported as timeout rather than user cancellation
+PASS Network: two operating-system processes connect and independently replay
+PASS Network: TLS live peers pace ticks, submit complete player intents, leave and replay
+PASS Network: TLS rejects a wrong host fingerprint and disposing a listener is bounded
+PASS Network: extended wire fields survive production, ability and transform intents
+PASS Network: checkpoint cadence is bounded and bound into match identity
+{"rtt":150,"jitter":20,"loss":5,"delay":8,"slow":false,"bandwidth":1000000,"ticks":100,"steadyHz":25.02,"elapsedMs":4381.1,"waitP50":0.0244,"waitP95":0.1057,"sealedToApplyP50":319.738,"sealedToApplyP95":321.5672,"stalls":0,"maxLead":1,"sendQueueHighWater":2,"receiveQueueHighWater":6,"segments":213,"modeledRetransmissions":10,"bytes":10786,"hash":"7B8BD60B23C4569CE14DED8F783655EBEEF682FCF868A9387A19BD685E91F2CD"}
+PASS Network: pipeline preserves commands/replay at RTT150 with jitter and modeled loss
+{"rtt":50,"jitter":0,"loss":0,"delay":6,"slow":true,"bandwidth":1000000,"ticks":100,"steadyHz":22.48,"elapsedMs":4733.8,"waitP50":0.6538,"waitP95":99.9887,"sealedToApplyP50":240.1472,"sealedToApplyP95":500.401,"stalls":8,"maxLead":6,"sendQueueHighWater":2,"receiveQueueHighWater":2,"segments":213,"modeledRetransmissions":0,"bytes":10934,"hash":"7B8BD60B23C4569CE14DED8F783655EBEEF682FCF868A9387A19BD685E91F2CD"}
+PASS Network: slow simulation stays bounded and converges after recovery
+PASS Network: withheld checkpoints cannot advance beyond the verification window
+PASS Network: buffered traffic cannot bypass an expired progress deadline
+PASS Network: read-side EOF racing the final writer continuation does not discard a flushed ACK
+PASS Network: a peer that stops reading times out within bounded queue capacity
+PASS Network: NET3 stale Ready, config reset, three TLS players and shared pause
+PASS Network: NET3 agreed leave, host AI takeover and survivor histories
+PASS Network: NET3 asymmetric guest loss pauses survivors; host loss aborts clients
+PASS Network: NET3 rejects slot collision and bad pin without killing lobby
+PASS Network: NET3 control revision, frame limits and command ownership envelope
+PASS Network: NET3 asymmetric WAN delay/loss retains bounded verification and identical journals
+PASS Network: NET3 eight human slots at minimum input delay
+PASS Network: NET3 heartbeat cannot extend missing-command deadline
+31 Network checks passed.

@@ -23,8 +23,8 @@ public sealed partial class SimulationWorld
         if ((weapon.Damage == 0 || weapon.Modifier(_types[otherIdentity.Type].Armor) == 0) &&
             (weapon.PassengerDamage == 0 || _transport?.HasPassengers(other) != true)) return false;
         return weapon.Effect == WeaponEffect.Repair
-            ? otherOwnership.Owner == owner && other.Get<HealthState>().Current < _types[otherIdentity.Type].MaxHealth
-            : otherOwnership.Owner != 0 && otherOwnership.Owner != owner;
+            ? AreAllied(otherOwnership.Owner, owner) && other.Get<HealthState>().Current < _types[otherIdentity.Type].MaxHealth
+            : otherOwnership.Owner != 0 && !AreAllied(otherOwnership.Owner, owner);
     }
     private WeaponDefinition? OrderWeapon(int index, bool repair = false, EntityId target = default)
     {
@@ -297,7 +297,7 @@ public sealed partial class SimulationWorld
             var entityIdentity = entity.Get<EntityIdentity>();
             ref var entityOwnership = ref entity.Get<OwnershipState>();
             bool repair = weapon.Effect == WeaponEffect.Repair;
-            if (repair ? entityOwnership.Owner != owner || id == source : entityOwnership.Owner == 0 || !weapon.FriendlyFire && entityOwnership.Owner == owner) return;
+            if (repair ? !AreAllied(entityOwnership.Owner, owner) || id == source : entityOwnership.Owner == 0 || !weapon.FriendlyFire && AreAllied(entityOwnership.Owner, owner)) return;
             if (!WeaponAccepts(weapon, entity)) return;
             if (weapon.SpatialTrajectory && Math.Abs((long)entity.Get<SpatialState>().Position.Elevation - position.Elevation) >
                 weapon.SplashRadius + (TypeOf(entity).Flight?.HalfHeight ?? 256)) return;

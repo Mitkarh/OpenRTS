@@ -15,6 +15,22 @@ internal static class SkirmishAiChecks
         var source = Read("content/ai/skirmish-ai.yaml");
         var profile = SkirmishAiCatalog.Load(source, catalog, SkirmishAiScenario.ProfileId);
 
+        test("NET3 AI takes control at a completed nonzero tick", () =>
+        {
+            var map = MapScenario.Load(catalog, Read, MapScenario.DefaultMap);
+            using var world = map.CreateWorld(1, restrictPlayerCommands: true);
+            for (int tick = 0; tick < 12; tick++) world.Step([]);
+            var ai = SkirmishAiScenario.Create(catalog, profile, map.Map, 2, initialTick: world.Tick);
+            for (int tick = 0; tick < 16; tick++)
+            {
+                var commands = ai.Plan(world);
+                NavigationChecks.Check(commands.All(c => c.Issuer == 2 && c.Tick == world.Tick + 1), "Takeover emitted another player's input.");
+                world.Step(commands);
+            }
+            ai.Plan(world);
+            NavigationChecks.Reject<ArgumentException>(() => ai.Plan(world));
+        });
+
         test("AI2 compiles shared sergeants with profile-specific rules", () =>
         {
             NavigationChecks.Reject<ContentException>(() => SkirmishAiCatalog.Load(

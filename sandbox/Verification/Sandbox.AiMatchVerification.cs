@@ -27,7 +27,7 @@ public partial class Sandbox
         option.ButtonPressed = true;
         // Exchange physical starts while keeping the human as player 1.
         var starts = (GridContainer)setup.FindChild("Players", owned: false);
-        var blue = starts.GetChild<OptionButton>(1);
+        var blue = (OptionButton)starts.FindChild("Start1", owned: false);
         blue.Select(1);
         blue.EmitSignal(OptionButton.SignalName.ItemSelected, 1);
         ((Button)setup.FindChild("Launch", owned: false)).EmitSignal(Button.SignalName.Pressed);

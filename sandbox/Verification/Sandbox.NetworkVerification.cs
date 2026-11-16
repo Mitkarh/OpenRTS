@@ -7,6 +7,11 @@ using OpenRTS.Core.Orders;
 public partial class Sandbox
 {
     private bool _verifyNetwork;
+    private bool _networkVerifyNet3, _networkVerifyPaused, _networkPauseRequested;
+    private ulong _networkPauseBegan;
+    private long _networkReadyRevision;
+    private long _networkPauseTick;
+    private readonly System.Collections.Generic.HashSet<uint> _networkPauseSeen = new();
     private bool _networkVerifyIssued, _networkVerifyMenu, _networkVerifyMenuClosed, _networkVerifyLeaving;
     private System.Threading.Tasks.Task? _networkCapture;
     private long _networkInputTick, _networkMenuTick;
@@ -21,9 +26,13 @@ public partial class Sandbox
             button.Select(value); button.EmitSignal(OptionButton.SignalName.ItemSelected, value);
         }
         Choose("NetworkMode", _networkVerifyRole == "host" ? 1 : 2);
-        Choose("PlayerCount", 1); // exactly two players
+        if (_networkVerifyNet3 && _networkVerifyRole == "host") Choose("Maps", Array.FindIndex(_manifest.Settings.Match.Maps, map => map.Path == MapScenario.CrossroadsMap));
+        Choose("PlayerCount", _networkVerifyNet3 && _networkVerifyRole == "host" ? 3 : 1);
+        ((SpinBox)_matchSetup!.FindChild("NetworkPlayer", owned: false)).Value = _networkVerifyRole == "join3" ? 3 : 2;
+        if (_networkVerifyRole == "watch") Choose("JoinRole", 1);
+        if (_networkVerifyNet3 && _networkVerifyRole == "host") ((SpinBox)_matchSetup.FindChild("NetworkAi", owned: false)).Value = 1;
         ((SpinBox)_matchSetup!.FindChild("NetworkPort", owned: false)).Value = _networkVerifyPort;
-        if (_networkVerifyRole == "join")
+        if (_networkVerifyRole != "host")
             ((LineEdit)_matchSetup.FindChild("NetworkPin", owned: false)).Text = File.ReadAllText(_networkVerifyPinFile).Trim();
         ((Button)_matchSetup.FindChild("Launch", owned: false)).EmitSignal(Button.SignalName.Pressed);
         if (_session?.Network is { } session && _networkVerifyRole == "host")
@@ -35,7 +44,14 @@ public partial class Sandbox
         var network = _session!.Network!;
         if (!_networkVerifyIssued && frame.Tick >= 2)
         {
-            if (Controls(3 - network.Player) || !Controls(network.Player) || CommandOwner != network.Player)
+            if (network.Player == 0)
+            {
+                if (Controls(1) || Controls(2)) throw new InvalidOperationException("Spectator can issue commands.");
+                _networkInputTick = frame.Tick; _networkVerifyIssued = true; GD.Print("OPENRTS_NETWORK_INPUT:0");
+            }
+            else
+            {
+            if (Controls(network.Player == 1 ? 2u : 1u) || !Controls(network.Player) || CommandOwner != network.Player)
                 throw new InvalidOperationException("Network ownership is not bound to local player.");
             var actor = frame.Poses.ToArray().First(p => p.Presentation.Owner == network.Player);
             _session.Submit(CommandKind.SetRally, actor.Current, actor.Id);
@@ -48,6 +64,7 @@ public partial class Sandbox
             _selected = actor.Id; RefreshSelection(); UpdateCommandPanel(frame);
             _networkVerifyIssued = true;
             GD.Print($"OPENRTS_NETWORK_INPUT:{network.Player}");
+            }
         }
         if (!_networkVerifyMenu && frame.Tick >= _networkInputTick + 4)
         {
@@ -65,15 +82,32 @@ public partial class Sandbox
             ToggleMatchMenu(); // local menu must not stop synchronized time
             GD.Print($"OPENRTS_NETWORK_MENU:{frame.Tick}");
         }
-        if (!_networkVerifyLeaving && _networkVerifyMenuClosed && frame.Tick >= _networkInputTick + 16)
+        if (_networkVerifyNet3 && _networkVerifyMenuClosed)
+        {
+            if (network.IsHost && !_networkPauseRequested) { network.Pause(true); _networkPauseRequested = true; }
+            if (network.State.Phase == OpenRTS.Network.MatchPhase.Paused)
+            {
+                if (frame.Tick != network.State.Tick) throw new InvalidOperationException("Paused frame/control tick differs.");
+                if (!_networkVerifyPaused)
+                {
+                    _networkVerifyPaused = true; _networkPauseBegan = Time.GetTicksMsec(); _networkPauseTick = frame.Tick;
+                    network.SendChat("verify-pause-seen");
+                    GD.Print($"OPENRTS_NETWORK_PAUSE:{frame.Tick}");
+                }
+                if (network.IsHost && _networkPauseSeen.Count == 3 + network.State.Spectators && Time.GetTicksMsec() - _networkPauseBegan >= 500) network.Pause(false);
+            }
+        }
+        if (!_networkVerifyLeaving && _networkVerifyMenuClosed && (!_networkVerifyNet3 || _networkVerifyPaused &&
+            network.State.Phase == OpenRTS.Network.MatchPhase.Playing && frame.Tick >= _networkPauseTick + 4) &&
+            frame.Tick >= _networkInputTick + (_networkVerifyNet3 ? 30 : 16))
         {
             _networkVerifyLeaving = true;
-            if (_networkVerifyRole == "host") network.Leave();
+            if (_networkVerifyRole == "host") network.Stop();
         }
         if (network.Completion.IsCompletedSuccessfully)
         {
             using var log = File.OpenRead(network.JournalPath);
-            var replay = OpenRTS.Network.MatchJournal.Replay(log, network.Descriptor, () => CreateNetworkWorld(_mapMatch!));
+            var replay = OpenRTS.Network.StarJournal.Replay(log, network.Descriptor, () => CreateNetworkWorld(_mapMatch!));
             if (replay != network.Completion.Result) throw new InvalidOperationException("Godot match replay differs.");
             GD.Print("OPENRTS_NETWORK_PASS:" + network.Completion.Result.StateHash);
             _verificationDone = true; GetTree().Quit();

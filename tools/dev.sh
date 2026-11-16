@@ -55,7 +55,15 @@ case "$action" in
       dotnet run --project tests/OpenRTS.Network.Tests --no-build --no-launch-profile -- --wan "$@"
     fi
     ;;
+  verify-menu)
+    build; import_assets
+    if [[ "${1:-}" == "--visible" ]]; then
+      shift; exec "$godot_bin" --path "$PWD/sandbox" -- --verify-menu "$@"
+    else
+      exec "$godot_bin" --headless --path "$PWD/sandbox" -- --verify-menu "$@"
+    fi
+    ;;
   verify-network) build; import_assets; python3 tools/verify_network.py "$godot_bin" "$@" ;;
   verify) "$0" test; import_assets; python3 tools/verify.py "$godot_bin" ;;
-  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|verify|verify-network|verify-wan]' >&2; exit 2 ;;
+  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|verify|verify-network|verify-menu|verify-wan]' >&2; exit 2 ;;
 esac

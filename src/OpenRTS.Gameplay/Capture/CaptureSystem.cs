@@ -9,6 +9,7 @@ internal interface ICaptureWorld
     bool TryGetEntity(EntityId id, out Entity entity);
     UnitDefinition TypeOf(Entity entity);
     bool HasPassengers(Entity entity);
+    bool AreAllied(uint first, uint second);
     void IssueOrder(EntityId actor, UnitOrder order, bool queued);
     void SetMovementTarget(EntityId actor, WorldPosition position);
     void Halt(EntityId actor);
@@ -32,7 +33,7 @@ internal sealed class CaptureSystem(ICaptureWorld world, ICaptureMechanic mechan
         actor = target = default;
         if (!world.TryGetEntity(id, out var targetEntity)) return false;
         actor = ParticipantOf(entity);
-        if (actor.Owner == 0 || actor.Owner == targetEntity.Get<OwnershipState>().Owner || world.HasPassengers(targetEntity)) return false;
+        if (actor.Owner == 0 || world.AreAllied(actor.Owner, targetEntity.Get<OwnershipState>().Owner) || world.HasPassengers(targetEntity)) return false;
         target = ParticipantOf(targetEntity);
         return _mechanic.CanStart(actor, target);
     }

@@ -61,6 +61,12 @@ internal sealed class PeerPipeline : IDisposable
         if (Volatile.Read(ref _fault) is { } fault) ExceptionDispatchInfo.Capture(fault).Throw();
         _stop.Token.ThrowIfCancellationRequested();
     }
+    internal bool TrySend(byte[] frame)
+    {
+        Check();
+        if (!_outgoing.Writer.TryWrite(frame)) return false;
+        _enqueued++; SendHighWater = Math.Max(SendHighWater, _outgoing.Reader.Count); return true;
+    }
     internal void Send(byte[] frame)
     {
         Check();
@@ -87,7 +93,7 @@ internal sealed class PeerPipeline : IDisposable
         { throw new TimeoutException("Peer progress deadline exceeded."); }
         catch (ChannelClosedException) { Check(); throw new EndOfStreamException(); }
     }
-    internal void Flush()
+    internal void Flush(TimeSpan? timeout = null)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         while (Interlocked.Read(ref _sent) < _enqueued)
@@ -98,7 +104,7 @@ internal sealed class PeerPipeline : IDisposable
             // Read-side EOF must not cancel an in-flight successful flush; final ACK validation still follows.
             if (Volatile.Read(ref _fault) is not EndOfStreamException || _writer.IsCompleted) Check();
             else _stop.Token.ThrowIfCancellationRequested();
-            var remaining = _timeout - clock.Elapsed;
+            var remaining = (timeout ?? _timeout) - clock.Elapsed;
             if (remaining <= TimeSpan.Zero || !_written.Wait(remaining, _stop.Token))
                 throw new TimeoutException("Send flush deadline exceeded.");
         }

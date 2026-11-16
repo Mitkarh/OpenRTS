@@ -34,8 +34,8 @@ public partial class Sandbox
         Choose(count, 2);
         Choose(FindOption("Modes"), 1);
         var players = (GridContainer)_matchSetup!.FindChild("Players", owned: false);
-        var blue = players.GetChild<OptionButton>(1);
-        var red = players.GetChild<OptionButton>(3);
+        var blue = (OptionButton)players.FindChild("Start1", owned: false);
+        var red = (OptionButton)players.FindChild("Start2", owned: false);
         Choose(blue, 1);
         CheckSkirmish(red.Selected == 0, "Selecting an occupied start did not exchange slots.");
         ((Button)_matchSetup.FindChild("Launch", owned: false)).EmitSignal(Button.SignalName.Pressed);

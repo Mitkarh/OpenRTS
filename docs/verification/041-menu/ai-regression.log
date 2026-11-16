@@ -1,0 +1,10 @@
+PASS AI2 compiles shared sergeants with profile-specific rules
+PASS AI2 keeps a guard independent and rebuilds a wiped assault group
+PASS AI2 switches strategy on threat and releases a discretionary squad after spending
+PASS AI2 counts queued recruits once across separate unarmed patrols
+PASS AI2 opens on both sides, skips an invalid candidate and captures income
+PASS AI2 accounts for a paid blueprint before ordering a replacement truck
+PASS AI2 reserves deferred queue balances and releases them after cancellation
+PASS AI2 builds a factory and deploys a separate group of progressively paid vehicles
+PASS AI2 recovers its crew and freight, resumes the blueprint and upgrades a serviced mine
+9 OpenRTS checks passed; 0 failed.

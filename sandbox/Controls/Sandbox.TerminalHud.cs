@@ -210,9 +210,11 @@ public partial class Sandbox
         _matchMenu = modal;
         _rtsPanels.Add(modal);
 
-        var center = new CenterContainer();
-        modal.AddChild(center);
-        center.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        var scroll = new ScrollContainer();
+        modal.AddChild(scroll);
+        scroll.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect, margin: 16);
+        var center = new CenterContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        scroll.AddChild(center);
         var menu = AddSection(center, "OPENRTS   /   МЕНЮ МАТЧА");
         menu.CustomMinimumSize = new(280, 0);
         menu.AddChild(TerminalButton("Продолжить", "Esc", ToggleMatchMenu));
@@ -239,7 +241,33 @@ public partial class Sandbox
         if (_networkMode == 0) menu.AddChild(TerminalButton("Перезапустить матч", "Сбросить текущий матч", () => { ToggleMatchMenu(); StartSession(); }));
         if (_startedFromSetup)
             menu.AddChild(TerminalButton("Новый матч", "Вернуться к выбору карты и игроков", () => GetTree().CallDeferred(SceneTree.MethodName.ReloadCurrentScene)));
-        if (_networkMode != 0) menu.AddChild(TerminalButton("Покинуть матч", "Завершить прямую игру для обоих участников", () => _session?.Network?.Leave()));
+        if (_session?.Network is { } network)
+        {
+            menu.AddChild(TerminalButton("Общая пауза / продолжить", "Согласовать паузу с участниками", () => {
+                if (!network.Completion.IsCompleted) network.Pause(network.State.Phase != OpenRTS.Network.MatchPhase.Paused);
+            }));
+            if (network.IsHost)
+            {
+                foreach (var slot in network.State.Slots.Where(s => s.Player != 1 && _configuredOptions?.Seats[s.Player - 1].Controller != OpenRTS.Network.SlotController.None))
+                    menu.AddChild(TerminalButton($"ИИ стороны {slot.Player}: включить / выключить", "На паузе можно передать отключённую сторону ИИ (режим Снабжение)", () => {
+                        if (!network.Completion.IsCompleted && network.State.Phase == OpenRTS.Network.MatchPhase.Paused &&
+                            !network.State.Slots[(int)slot.Player - 1].Connected && _opponentProfile is not null)
+                            network.SetAi(slot.Player, network.State.Slots[(int)slot.Player - 1].Controller != OpenRTS.Network.SlotController.Ai);
+                    }));
+                menu.AddChild(TerminalButton("Завершить матч", "Согласованно завершить матч для всех", () => { if (!network.Completion.IsCompleted) network.Stop(); }));
+            }
+            var message = new LineEdit { PlaceholderText = "Чат · Enter", MaxLength = 64 };
+            message.TextSubmitted += text => {
+                if (!network.Completion.IsCompleted && !string.IsNullOrWhiteSpace(text))
+                {
+                    try { network.SendChat(text); message.Clear(); }
+                    catch (InvalidOperationException error) { _notice = error.Message; }
+                }
+            };
+            menu.AddChild(message);
+            _networkChatLabel = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart }; menu.AddChild(_networkChatLabel);
+            menu.AddChild(TerminalButton("Покинуть матч", "Хост завершает матч; выход гостя ставит оставшихся на общую паузу", () => { if (!network.Completion.IsCompleted) network.Leave(); }));
+        }
         menu.AddChild(TerminalButton("Выйти", "Закрыть OpenRTS", () => GetTree().Quit()));
     }
 

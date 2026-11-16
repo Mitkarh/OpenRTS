@@ -38,9 +38,11 @@ public sealed class SkirmishAi
     public long BuildingCandidatesChecked => _baseConstruction.CandidatesChecked;
 
     public SkirmishAi(uint player, SkirmishAiProfile profile, IReadOnlyList<UnitDefinition> types,
-        WorldPosition baseCenter, WorldPosition rally, WorldPosition attack, IBuildingSiteSearch? siteSearch = null)
+        WorldPosition baseCenter, WorldPosition rally, WorldPosition attack, IBuildingSiteSearch? siteSearch = null, long initialTick = 0)
     {
         ArgumentOutOfRangeException.ThrowIfZero(player);
+        ArgumentOutOfRangeException.ThrowIfNegative(initialTick);
+        _lastTick = initialTick - 1;
         _player = player;
         _profile = profile;
         _types = types;
@@ -267,7 +269,7 @@ public sealed class SkirmishAi
 
     private void UpdateArmy(SimulationWorld world, EntityPose[] own, long? credits, bool tactics)
     {
-        var enemies = _poses.Where(p => p.Presentation.Owner != 0 && p.Presentation.Owner != _player && p.Carrier == default &&
+        var enemies = _poses.Where(p => p.Presentation.Owner != 0 && !world.AreAllied(_player, p.Presentation.Owner) && p.Carrier == default &&
             !p.Construction.Active && _types[p.UnitType].Destruction != DestructionPolicy.Invulnerable).ToArray();
         _army.Update(world.Tick, world.Width, world.Depth, own, enemies, credits, tactics, _commands);
     }

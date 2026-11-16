@@ -3,240 +3,193 @@ using System.Collections.Generic;
 using Godot;
 using OpenRTS.Content;
 using OpenRTS.Core;
+using OpenRTS.Network;
 
 public sealed partial class MatchSetupScreen : CanvasLayer
 {
     public event Action? CancelNetwork;
+    public event Action? ConfigurationChanged;
+    public event Action<GameMap, StartingSet, string[], bool>? Launch;
     private readonly OptionButton _network = new() { Name = "NetworkMode" };
-    private readonly LineEdit _address = new() { Name = "NetworkAddress", Text = "127.0.0.1", PlaceholderText = "IP / имя хоста" };
+    private readonly LineEdit _address = new() { Name = "NetworkAddress", Text = "127.0.0.1", PlaceholderText = "Адрес хоста" };
     private readonly SpinBox _port = new() { Name = "NetworkPort", MinValue = 1, MaxValue = 65535, Value = 17771 };
-    private readonly SpinBox _delay = new() { Name = "NetworkDelay", MinValue = 1, MaxValue = 16, Value = 6,
-        TooltipText = "Буфер ввода в тиках: больше — устойчивее к задержкам и jitter, меньше — быстрее реакция. Настройка должна совпадать у обоих игроков." };
-    private readonly Label _delayLabel = new() { Text = "Буфер ввода · тики" };
-    public int NetworkInputDelay => (int)_delay.Value;
-    private readonly LineEdit _pin = new() { Name = "NetworkPin", PlaceholderText = "SHA-256 отпечаток хоста · для подключения" };
+    private readonly LineEdit _pin = new() { Name = "NetworkPin", PlaceholderText = "SHA-256 отпечаток хоста" };
+    private readonly SpinBox _networkPlayer = new() { Name = "NetworkPlayer", MinValue = 2, MaxValue = 4, Value = 2, CustomMinimumSize = new(110, 36), Prefix = "Место: " };
+    private readonly SpinBox _networkAi = new() { Name = "NetworkAi", MinValue = 0, MaxValue = 3, Value = 0 };
+    private readonly SpinBox _delay = new() { Name = "NetworkDelay", MinValue = 1, MaxValue = 16, Value = 6 };
+    private readonly OptionButton _maps = new() { Name = "Maps" }, _modes = new() { Name = "Modes" }, _count = new() { Name = "PlayerCount" };
+    private readonly OptionButton _fog = new() { Name = "Fog" }, _fogStyle = new() { Name = "FogStyle" }, _radarStyle = new() { Name = "RadarStyle" };
+    private readonly OptionButton _speed = new() { Name = "GameSpeed" };
+    private readonly CheckButton _opponent = new() { Name = "AiOpponent", Text = "Играть против ИИ" };
+    private readonly GridContainer _players = new() { Name = "Players", Columns = 6, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+    private readonly List<OptionButton> _starts = [], _roles = [], _teams = [];
+    private readonly List<Label> _readyLabels = [];
+    private MatchSeat[] _seats = [new(SlotController.Human, 0), new(SlotController.Human, 1), new(SlotController.None, 2), new(SlotController.None, 3)];
+    private readonly Label _details = new() { AutowrapMode = TextServer.AutowrapMode.WordSmart }, _status = new() { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+    private readonly Label _title = new(), _viewers = new();
+    private readonly Button _launch = new() { Name = "Launch", Text = "Начать матч" }, _readyNetwork = new() { Name = "NetworkReady", Text = "Готов" }, _startNetwork = new() { Name = "NetworkStart", Text = "Запустить матч" };
+    private readonly MatchSetupPreview _preview = new() { Name = "SelectedMap", CustomMinimumSize = new(260, 180), TextureFilter = Control.TextureFilterEnum.Nearest, MouseDefaultCursorShape = Control.CursorShape.PointingHand };
+    private readonly MatchSetupPreview _background = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Modulate = new Color(0.85f, 0.9f, 0.8f) };
+    private readonly Dictionary<string, Control> _pages = new();
+    private Control _root = null!;
+    private VBoxContainer _advanced = null!;
+    private Button _mapButton = null!;
+    private string _page = "main", _lastSettings = "";
+    private bool _applying, _busy;
+    private StarSession? _networkSession;
+    private MatchState? _shownState;
+    private (string Title, string Description, GameMap Map)[] _mapChoices = [];
+    private (string Title, StartingSet Set)[] _modeChoices = [];
+    private LocomotionCatalog _terrain = null!;
     public int NetworkMode => _network.Selected;
     public string NetworkAddress => _address.Text.Trim();
     public int NetworkPort => (int)_port.Value;
     public string NetworkPin => _pin.Text;
-    private readonly OptionButton _maps = new() { Name = "Maps" };
-    private readonly OptionButton _fog = new() { Name = "Fog", TooltipText = "Скрыта: требуется разведка. Разведана: известна вся местность, объекты только в обзоре. Видима: все объекты видны." };
-    private readonly OptionButton _fogStyle = new() { Name = "FogStyle" };
-    private readonly OptionButton _radarStyle = new() { Name = "RadarStyle" };
-    public OpenRTS.Godot.Rendering.ContactDisplayStyle SelectedRadarStyle =>
-        (OpenRTS.Godot.Rendering.ContactDisplayStyle)_radarStyle.Selected;
+    public int NetworkInputDelay => (int)_delay.Value;
+    public uint NetworkPlayer => _joinRole.Selected == 1 ? 0 : (uint)_networkPlayer.Value;
+    public uint[] NetworkAiPlayers => _seats.Select((s, i) => (s, i)).Where(p => p.s.Controller == SlotController.Ai).Select(p => (uint)p.i + 1).ToArray();
+    public uint[] ClosedPlayers => _seats.Select((s, i) => (s, i)).Where(p => p.s.Controller == SlotController.None).Select(p => (uint)p.i + 1).ToArray();
+    public SlotController[] Controllers => _seats.Select(s => s.Controller).ToArray();
     public OpenRTS.Core.Visibility.FogMode SelectedFog => (OpenRTS.Core.Visibility.FogMode)_fog.Selected;
     public OpenRTS.Godot.Rendering.FogDisplayStyle SelectedFogStyle => (OpenRTS.Godot.Rendering.FogDisplayStyle)_fogStyle.Selected;
-    private readonly OptionButton _modes = new() { Name = "Modes" };
-    private readonly OptionButton _count = new() { Name = "PlayerCount" };
-    private readonly CheckButton _opponent = new() { Name = "AiOpponent", Text = "Играть против ИИ" };
-    private readonly GridContainer _players = new() { Name = "Players", Columns = 2 };
-    private readonly List<OptionButton> _starts = [];
-    private readonly Label _details = new() { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-    private readonly Label _status = new() { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-    private readonly Button _launch = new() { Name = "Launch", Text = "НАЧАТЬ МАТЧ" };
-    private readonly MatchSetupPreview _preview = new()
-    {
-        CustomMinimumSize = new(382, 288), TextureFilter = Control.TextureFilterEnum.Nearest
-    };
-    private (string Title, string Description, GameMap Map)[] _mapChoices = [];
-    private (string Title, StartingSet Set)[] _modeChoices = [];
-    private LocomotionCatalog _terrain = null!;
-
-    public event Action<GameMap, StartingSet, string[], bool>? Launch;
-
-    public void Build(Theme theme, LocomotionCatalog terrain,
-        (string Title, string Description, GameMap Map)[] maps, (string Title, StartingSet Set)[] modes,
-        int defaultMap = 0, int defaultMode = 0)
-    {
-        Name = "MatchSetup";
-        Layer = 10;
-        _mapChoices = maps;
-        _modeChoices = modes;
-        _terrain = terrain;
-        var backdrop = new ColorRect { Color = new("#0b100c"), Theme = theme };
-        AddChild(backdrop);
-        backdrop.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
-        var scroll = new ScrollContainer { FollowFocus = true };
-        backdrop.AddChild(scroll);
-        scroll.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect, margin: 16);
-        var center = new CenterContainer
-        {
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ExpandFill
-        };
-        scroll.AddChild(center);
-        var panel = new PanelContainer();
-        panel.AddThemeStyleboxOverride("panel", Sandbox.TerminalBox(new("#131911"), new("#71815a"), 20));
-        center.AddChild(panel);
-
-        var layout = new VBoxContainer();
-        layout.AddThemeConstantOverride("separation", 14);
-        panel.AddChild(layout);
-        layout.AddChild(Sandbox.TerminalHeading("OPENRTS   /   НАСТРОЙКА ИГРЫ"));
-        var title = new Label { Text = "Настройка матча" };
-        title.AddThemeFontSizeOverride("font_size", 28);
-        layout.AddChild(title);
-
-        var body = new HBoxContainer();
-        body.AddThemeConstantOverride("separation", 18);
-        layout.AddChild(body);
-        var mapColumn = new VBoxContainer();
-        body.AddChild(mapColumn);
-        mapColumn.AddChild(Sandbox.TerminalHeading("КАРТА И СТАРТОВЫЕ ТОЧКИ"));
-        mapColumn.AddChild(_preview);
-        mapColumn.AddChild(_details);
-
-        var setup = new VBoxContainer { CustomMinimumSize = new(284, 0) };
-        setup.AddThemeConstantOverride("separation", 9);
-        body.AddChild(setup);
-        _network.AddItem("Локальный матч"); _network.AddItem("Создать прямую игру · игрок 1"); _network.AddItem("Подключиться · игрок 2");
-        AddField(setup, "Подключение", _network);
-        setup.AddChild(_address); setup.AddChild(_port); setup.AddChild(_pin); setup.AddChild(_delayLabel); setup.AddChild(_delay);
-        _network.ItemSelected += _ => { if (NetworkMode != 0 && _count.ItemCount >= 2) { _count.Select(1); UpdatePlayers(); } UpdateNetworkControls(false); UpdateOpponent(); _status.Text = "На обоих клиентах выберите одинаковые карту, режим, туман, стартовые точки и буфер ввода. Нажатие «Начать» подтверждает готовность."; };
-        AddField(setup, "Карта", _maps);
-        AddField(setup, "Режим игры", _modes);
-        AddField(setup, "Количество игроков", _count);
-        _fog.AddItem("Скрыта · нужна разведка"); _fog.AddItem("Разведана · только текущий обзор"); _fog.AddItem("Видима · без тумана");
-        _fogStyle.AddItem("Точная сетка"); _fogStyle.AddItem("Круги обзора"); _fogStyle.AddItem("Круги и границы сетки"); _fogStyle.Select(1);
-        AddField(setup, "Туман войны", _fog); AddField(setup, "Отображение тумана · F9 в игре", _fogStyle);
-        _radarStyle.AddItem("Иконки всех контактов");
-        _radarStyle.AddItem("Модели зданий, иконки юнитов");
-        _radarStyle.AddItem("Модели всех опознанных объектов");
-        _radarStyle.Select(1);
-        AddField(setup, "Радарные контакты · F7 в игре", _radarStyle);
-        _fog.ItemSelected += _ => _fogStyle.Disabled = SelectedFog == OpenRTS.Core.Visibility.FogMode.Visible;
-        setup.AddChild(_opponent);
-        setup.AddChild(Sandbox.TerminalHeading("СТАРТОВЫЕ ПОЗИЦИИ"));
-        _players.AddThemeConstantOverride("h_separation", 12);
-        _players.AddThemeConstantOverride("v_separation", 5);
-        setup.AddChild(_players);
-
-        layout.AddChild(new HSeparator());
-        layout.AddChild(new Label { Text = "ИИ доступен в режиме «Снабжение» с двумя игроками." });
-        layout.AddChild(_status);
-        var buttons = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
-        layout.AddChild(buttons);
-        var cancel = new Button { Text = "Отменить подключение" };
-        cancel.Pressed += () => CancelNetwork?.Invoke(); buttons.AddChild(cancel);
-        var quit = new Button { Text = "Выход" };
-        quit.Pressed += () => GetTree().Quit();
-        buttons.AddChild(quit);
-        _launch.CustomMinimumSize = new(172, 38);
-        _launch.AddThemeStyleboxOverride("normal", Sandbox.TerminalBox(new("#40321a"), new("#af8445"), 8));
-        buttons.AddChild(_launch);
-
-        foreach (var map in maps) _maps.AddItem(map.Title);
-        foreach (var mode in modes) _modes.AddItem(mode.Title);
-        _maps.Select(defaultMap);
-        _modes.Select(defaultMode);
-        _maps.ItemSelected += _ => SelectMap(PlayerCount);
-        _modes.ItemSelected += _ => { UpdateOpponent(); _status.Text = ""; };
-        _count.ItemSelected += _ => UpdatePlayers();
-        _launch.Pressed += () => Launch?.Invoke(CurrentMap, _modeChoices[_modes.Selected].Set, AssignedSlots(), _opponent.ButtonPressed && !_opponent.Disabled);
-        SelectMap(2);
-        UpdateNetworkControls(false);
-        _maps.GrabFocus();
-    }
-
-    private static void AddField(VBoxContainer column, string label, OptionButton input)
-    {
-        column.AddChild(new Label { Text = label });
-        column.AddChild(input);
-    }
-
+    public OpenRTS.Godot.Rendering.ContactDisplayStyle SelectedRadarStyle => (OpenRTS.Godot.Rendering.ContactDisplayStyle)_radarStyle.Selected;
+    public MatchSetupOptions Options => new(CurrentMap.Id, _modeChoices[_modes.Selected].Set.Id, _fog.Selected, (int)_delay.Value, new[] { 15, 25, 40 }[_speed.Selected], _seats.ToArray());
     private GameMap CurrentMap => _mapChoices[_maps.Selected].Map;
-    private int PlayerCount => _count.Selected + 1;
+    private bool Editable => NetworkMode != 2 && (!_busy || NetworkMode == 1 && _networkSession?.State.Phase == MatchPhase.Lobby);
 
-    private void SelectMap(int previousCount)
+    public void Build(Theme theme, LocomotionCatalog terrain, (string Title, string Description, GameMap Map)[] maps,
+        (string Title, StartingSet Set)[] modes, int defaultMap = 0, int defaultMode = 0)
     {
-        int capacity = Math.Min(CurrentMap.Slots.Count, MapScenario.MaximumPlayers);
-        _count.Clear();
-        for (int i = 1; i <= capacity; i++) _count.AddItem(i.ToString());
-        _count.Select(Math.Clamp(previousCount, 1, capacity) - 1);
-        _starts.Clear();
-        var entry = _mapChoices[_maps.Selected];
-        _details.Text = $"{entry.Map.Grid.Width} × {entry.Map.Grid.Height} · до {capacity} игроков\n{entry.Description}";
-        _preview.SetMap(entry.Map, _terrain);
-        UpdatePlayers();
+        Name = "MatchSetup"; Layer = 10; _mapChoices = maps; _modeChoices = modes; _terrain = terrain;
+        _root = new Control { Theme = theme }; AddChild(_root); _root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _root.AddChild(_background); _background.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect); _background.SetMap(maps[Math.Min(1, maps.Length - 1)].Map, terrain);
+        var shade = new ColorRect { Color = new Color(0.025f, 0.04f, 0.035f, 0.55f), MouseFilter = Control.MouseFilterEnum.Ignore };
+        _root.AddChild(shade); shade.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
+        _network.AddItem("Skirmish"); _network.AddItem("Host"); _network.AddItem("Join");
+        foreach (var item in maps) _maps.AddItem(item.Title); foreach (var item in modes) _modes.AddItem(item.Title);
+        _maps.Select(Math.Max(0, defaultMap)); _modes.Select(Math.Max(0, defaultMode));
+        foreach (string s in new[] { "Скрыта", "Разведана", "Видима" }) _fog.AddItem(s);
+        foreach (string s in new[] { "Точная сетка", "Круги обзора", "Круги и сетка" }) _fogStyle.AddItem(s); _fogStyle.Select(1);
+        foreach (string s in new[] { "Иконки", "Модели зданий", "Все модели" }) _radarStyle.AddItem(s); _radarStyle.Select(1);
+        foreach (string s in new[] { "Медленно · 15", "Обычно · 25", "Быстро · 40" }) _speed.AddItem(s); _speed.Select(1);
+        // Hidden selectors keep diagnostic scenarios on the same public controls as the shell.
+        foreach (Control c in new Control[] { _network, _maps, _count, _networkAi, _opponent }) { _root.AddChild(c); c.Hide(); }
+        BuildMain(); BuildBrowser(); BuildLobby(); BuildMaps(); BuildSettings();
+        _maps.ItemSelected += _ => { SelectMap(); Changed(); };
+        _count.ItemSelected += _ => {
+            for (int i = 1; i < 4; i++) _seats[i] = _seats[i] with { Controller = i <= _count.Selected ? SlotController.Human : SlotController.None };
+            RebuildPlayers(); Changed();
+        };
+        _network.ItemSelected += _ => { ShowPage("lobby"); RefreshControls(); };
+        _modes.ItemSelected += _ => { if (_modeChoices[_modes.Selected].Set.Id != "supply") for (int i = 1; i < 4; i++) if (_seats[i].Controller == SlotController.Ai) _seats[i] = _seats[i] with { Controller = SlotController.Human }; RebuildPlayers(); Changed(); };
+        _fog.ItemSelected += _ => { RefreshControls(); Changed(); }; _speed.ItemSelected += _ => Changed(); _delay.ValueChanged += _ => Changed();
+        _networkAi.ValueChanged += value => { for (int i = 1; i < CurrentMap.Slots.Count; i++) _seats[i] = _seats[i] with { Controller = i >= CurrentMap.Slots.Count - (int)value ? SlotController.Ai : SlotController.Human }; RebuildPlayers(); Changed(); };
+        _opponent.Toggled += enabled => { _seats[1] = _seats[1] with { Controller = enabled ? SlotController.Ai : SlotController.Human }; RebuildPlayers(); };
+        _launch.Pressed += LaunchMatch; _readyNetwork.Pressed += () => _networkSession?.Ready(_networkSession.State.Revision); _startNetwork.Pressed += () => _networkSession?.Start();
+        SelectMap(); ShowPage("main");
     }
-
-    private void UpdatePlayers()
+    private void LaunchMatch() => Launch?.Invoke(CurrentMap, _modeChoices[_modes.Selected].Set, AssignedSlots(), _seats.Any(s => s.Controller == SlotController.Ai));
+    private string[] AssignedSlots() => _seats.Take(CurrentMap.Slots.Count).Select(s => CurrentMap.Slots[s.Start]).ToArray();
+    public void OpenSkirmish()
     {
-        var selected = _starts.Select(row => row.Selected).Take(PlayerCount).ToList();
-        while (selected.Count < PlayerCount)
-            selected.Add(Enumerable.Range(0, CurrentMap.Slots.Count).First(slot => !selected.Contains(slot)));
-
-        foreach (var child in _players.GetChildren())
+        _network.Select(0); _busy = false;
+        if (_modeChoices[_modes.Selected].Set.Id == "supply") _seats[1] = _seats[1] with { Controller = SlotController.Ai };
+        RebuildPlayers(); ShowPage("lobby");
+    }
+    private void SelectMap()
+    {
+        int capacity = Math.Min(4, CurrentMap.Slots.Count), previous = _count.Selected;
+        _count.Clear(); for (int i = 1; i <= capacity; i++) _count.AddItem(i.ToString()); _count.Select(Math.Clamp(previous, 0, capacity - 1));
+        if (previous < 0) _count.Select(Math.Min(1, capacity - 1));
+        for (int i = 0; i < 4; i++) _seats[i] = _seats[i] with { Start = i % capacity, Controller = i >= capacity ? SlotController.None : _seats[i].Controller };
+        _details.Text = $"{_mapChoices[_maps.Selected].Title}   ·   {CurrentMap.Grid.Width} × {CurrentMap.Grid.Height}\n{_mapChoices[_maps.Selected].Description}";
+        _mapButton.Text = _mapChoices[_maps.Selected].Title + "  ↗";
+        _preview.SetMap(CurrentMap, _terrain); RebuildPlayers();
+    }
+    private void Changed() { if (!_applying && Editable && _networkSession is { IsHost: true }) ConfigurationChanged?.Invoke(); }
+    private void RebuildPlayers()
+    {
+        foreach (var child in _players.GetChildren()) { _players.RemoveChild(child); child.QueueFree(); }
+        _starts.Clear(); _roles.Clear(); _teams.Clear(); _readyLabels.Clear();
+        foreach (string label in new[] { "СТОРОНА", "УЧАСТНИК", "ФРАКЦИЯ", "АЛЬЯНС", "СТАРТ", "ГОТОВ" }) _players.AddChild(new Label { Text = label });
+        for (int i = 0; i < CurrentMap.Slots.Count; i++)
         {
-            _players.RemoveChild(child);
-            child.QueueFree();
-        }
-        _starts.Clear();
-        for (int i = 0; i < PlayerCount; i++)
-        {
-            int player = i;
-            var label = new Label { Text = MapScenario.PlayerName(i), CustomMinimumSize = new(68, 0) };
-            label.AddThemeColorOverride("font_color", Sandbox.TeamMarkerColor((uint)i + 1));
-            _players.AddChild(label);
-            var select = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-            for (int slot = 0; slot < CurrentMap.Slots.Count; slot++)
-                select.AddItem($"Точка {slot + 1:00}");
-            select.Select(selected[i]);
-            select.ItemSelected += slot =>
-            {
-                int old = selected[player];
-                int other = selected.IndexOf((int)slot);
-                if (other >= 0 && other != player)
-                {
-                    selected[other] = old;
-                    _starts[other].Select(old);
-                }
-                selected[player] = (int)slot;
-                _preview.SetAssignments(selected);
-                _status.Text = "";
+            int row = i;
+            var name = new Label { Text = MapScenario.PlayerName(i), CustomMinimumSize = new(82, 36), VerticalAlignment = VerticalAlignment.Center };
+            name.AddThemeColorOverride("font_color", Sandbox.TeamMarkerColor((uint)i + 1)); _players.AddChild(name);
+            var role = new OptionButton { Name = "Role" + (i + 1), CustomMinimumSize = new(110, 36) };
+            role.AddItem(i == 0 ? "Игрок · Host" : NetworkMode == 0 || _networkSession?.State.Slots[i].Connected == true ? "Игрок " + (i + 1) : "Открыто", (int)SlotController.Human);
+            role.AddItem("ИИ · Skirmish", (int)SlotController.Ai); role.AddItem("Закрыто", (int)SlotController.None);
+            role.Select((int)_seats[i].Controller); _players.AddChild(role); _roles.Add(role);
+            var faction = new OptionButton { CustomMinimumSize = new(78, 36), Disabled = true }; faction.AddItem("OpenRTS"); _players.AddChild(faction);
+            var team = new OptionButton { Name = "Team" + (i + 1), CustomMinimumSize = new(64, 36), TooltipText = "Одинаковый альянс: без атак друг на друга. Обзор и управление раздельные." };
+            team.AddItem("Нет"); for (int t = 1; t <= 4; t++) team.AddItem(t.ToString()); team.Select((int)_seats[i].Team); _players.AddChild(team); _teams.Add(team);
+            var start = new OptionButton { Name = "Start" + (i + 1), CustomMinimumSize = new(58, 36) };
+            for (int t = 0; t < CurrentMap.Slots.Count; t++) start.AddItem((t + 1).ToString("00")); start.Select(_seats[i].Start); _players.AddChild(start); _starts.Add(start);
+            var ready = new Label { HorizontalAlignment = HorizontalAlignment.Center }; _players.AddChild(ready); _readyLabels.Add(ready);
+            role.ItemSelected += value => { _seats[row] = _seats[row] with { Controller = (SlotController)value }; RebuildPlayers(); Changed(); };
+            team.ItemSelected += value => { _seats[row] = _seats[row] with { Team = (uint)value }; Changed(); };
+            start.ItemSelected += value => {
+                int old = _seats[row].Start;
+                int other = Array.FindIndex(_seats, s => s.Start == (int)value);
+                if (other >= 0 && other != row) { _seats[other] = _seats[other] with { Start = old }; if (other < _starts.Count) _starts[other].Select(old); }
+                _seats[row] = _seats[row] with { Start = (int)value }; _preview.SetAssignments(_seats.Take(CurrentMap.Slots.Count).Select(s => s.Start).ToArray()); Changed();
             };
-            _players.AddChild(select);
-            _starts.Add(select);
         }
-        _preview.SetAssignments(selected);
-        UpdateOpponent();
-        _status.Text = "";
+        _preview.SetAssignments(_seats.Take(CurrentMap.Slots.Count).Select(s => s.Start).ToArray()); RefreshControls();
     }
-
-    private string[] AssignedSlots() => _starts.Select(row => CurrentMap.Slots[row.Selected]).ToArray();
-
-    private bool CanUseOpponent => NetworkMode == 0 && CurrentMap.IsSkirmish && _modeChoices[_modes.Selected].Set.Id == "supply" && PlayerCount == 2;
-
-    private void UpdateOpponent()
+    private void RefreshControls()
     {
-        _opponent.Disabled = !CanUseOpponent;
-        if (_opponent.Disabled) _opponent.SetPressedNoSignal(false);
+        _opponent.Disabled = NetworkMode != 0 || _modeChoices[_modes.Selected].Set.Id != "supply";
+        _opponent.SetPressedNoSignal(_seats[1].Controller == SlotController.Ai);
+        _title.Text = NetworkMode == 0 ? "Skirmish" : NetworkMode == 1 ? "Лобби · Host" : NetworkPlayer == 0 ? "Лобби · Зритель" : "Лобби · Игрок " + NetworkPlayer;
+        _maps.Disabled = _modes.Disabled = _count.Disabled = _fog.Disabled = _speed.Disabled = _mapButton.Disabled = !Editable;
+        _delay.Editable = Editable; _fogStyle.Disabled = _fog.Selected == 2;
+        for (int i = 0; i < _roles.Count; i++)
+        {
+            bool connected = _networkSession?.State.Slots[i].Connected == true;
+            _roles[i].Disabled = !Editable || i == 0 || connected;
+            _roles[i].SetItemDisabled(1, _modeChoices[_modes.Selected].Set.Id != "supply");
+            _starts[i].Disabled = _teams[i].Disabled = !Editable || _seats[i].Controller == SlotController.None;
+            _readyLabels[i].Text = _seats[i].Controller == SlotController.None ? "—" : _seats[i].Controller == SlotController.Ai ? "✓" : NetworkMode == 0 ? "•" : _networkSession?.State.Slots[i].Ready == true ? "✓" : "…";
+        }
+        if (_connectionPanel is not null) _connectionPanel.Visible = NetworkMode != 0;
+        _launch.Visible = NetworkMode == 0 || _networkSession is null;
+        _launch.Disabled = _busy;
+        _readyNetwork.Visible = NetworkMode != 0 && _networkSession is not null && NetworkPlayer != 0 || NetworkMode == 1 && _networkSession is not null;
+        _startNetwork.Visible = _networkSession?.IsHost == true;
+        if (_networkSession is { } network)
+        {
+            _readyNetwork.Disabled = network.State.Slots[(int)network.Player - 1 < 0 ? 0 : (int)network.Player - 1].Ready;
+            _startNetwork.Disabled = network.State.Slots.Any(s => s.Controller == SlotController.Human && (!s.Connected || !s.Ready));
+        }
     }
-
-    private void UpdateNetworkControls(bool busy)
+    public void ApplyOptions(string data)
     {
-        _address.Visible = _port.Visible = _pin.Visible = _delay.Visible = _delayLabel.Visible = NetworkMode != 0;
-        _delay.Editable = !busy;
-        _address.Editable = _port.Editable = !busy;
-        _pin.Editable = !busy && NetworkMode == 2;
-        _count.Disabled = busy || NetworkMode != 0;
+        var options = MatchSetupOptions.Parse(data); _applying = true;
+        try
+        {
+            int map = Array.FindIndex(_mapChoices, m => m.Map.Id == options.Map), mode = Array.FindIndex(_modeChoices, m => m.Set.Id == options.Mode);
+            if (map < 0 || mode < 0) throw new ArgumentException("Карта или стартовый набор не установлены.");
+            bool changedMap = _maps.Selected != map; _maps.Select(map); _modes.Select(mode);
+            if (changedMap) SelectMap();
+            _fog.Select(options.Fog); _delay.Value = options.Delay; _speed.Select(Array.IndexOf(new[] { 15, 25, 40 }, options.TickRate)); _seats = options.Seats.ToArray();
+            RebuildPlayers();
+        }
+        finally { _applying = false; }
     }
-
-    public void SetNetworkStatus(string status, string fingerprint)
+    public void SetNetworkStatus(string status, string fingerprint) { if (NetworkMode == 1) _pin.Text = fingerprint; _status.Text = status; }
+    public void UpdateNetworkLobby(StarSession network)
     {
-        if (NetworkMode == 1) _pin.Text = fingerprint;
-        _status.Text = status + "\nСверьте отпечаток хоста по отдельному каналу. Параметры матча должны совпадать.";
+        _networkSession = network;
+        if (network.LobbySettings != "" && network.LobbySettings != _lastSettings) { _lastSettings = network.LobbySettings; ApplyOptions(_lastSettings); }
+        if (!ReferenceEquals(_shownState, network.State))
+        {
+            _shownState = network.State;
+            for (int i = 0; i < 4; i++) _seats[i] = _seats[i] with { Controller = network.State.Slots[i].Controller };
+            _viewers.Text = $"Наблюдатели: {network.State.Spectators}" + (NetworkMode == 2 ? "   ·   Настройки задаёт Host" : ""); RebuildPlayers();
+        }
+        RefreshControls();
     }
-
-    public void SetLaunching(bool busy, string message)
-    {
-        _address.Editable = _pin.Editable = !busy; _network.Disabled = busy; _port.Editable = !busy;
-        _maps.Disabled = _modes.Disabled = _count.Disabled = _fog.Disabled = _launch.Disabled = busy;
-        _fogStyle.Disabled = busy || SelectedFog == OpenRTS.Core.Visibility.FogMode.Visible;
-        _radarStyle.Disabled = busy;
-        _opponent.Disabled = busy || !CanUseOpponent;
-        foreach (var start in _starts) start.Disabled = busy;
-        _status.Text = message;
-        UpdateNetworkControls(busy);
-    }
+    public void SetLaunching(bool busy, string message) { _busy = busy; _status.Text = message; RefreshControls(); }
 }

@@ -186,10 +186,18 @@ public partial class Sandbox
     }
     private Vector2 Screen(EntityPose pose) => _camera!.UnprojectPosition(_sprites!.DisplayPosition(pose, _displayAlpha));
     private bool OnScreen(EntityPose pose) => Playfield().HasPoint(Screen(pose));
-    private bool Controls(uint owner) => _networkMode != 0 ? _session?.Completion.IsCompleted == false && owner == _fogViewer : PlayerFog ? owner == _fogViewer : owner == 1 || _opponentProfile is null && _mapMatch is not null && owner is >= 2 and <= MapScenario.MaximumPlayers;
+    private bool Controls(uint owner)
+    {
+        if (_networkMode != 0)
+            return _session?.Network is { Player: > 0 } n && !n.Completion.IsCompleted &&
+                n.State.Phase is OpenRTS.Network.MatchPhase.Playing or OpenRTS.Network.MatchPhase.Paused &&
+                n.State.Slots[(int)n.Player - 1].Controller == OpenRTS.Network.SlotController.Human && owner == _fogViewer;
+        return PlayerFog ? owner == _fogViewer : owner == 1 || _opponentProfile is null && _mapMatch is not null && owner is >= 2 and <= MapScenario.MaximumPlayers;
+    }
     private uint CommandOwner => _networkMode != 0 ? _fogViewer : PlayerFog ? _fogViewer : _opponentProfile is null ? Selected()?.Presentation.Owner ?? 1 : 1;
+    private bool SetupAllied(uint a, uint b) => a != 0 && b != 0 && (a == b || _configuredOptions is { } options && a <= 4 && b <= 4 && options.Seats[a - 1].Team != 0 && options.Seats[a - 1].Team == options.Seats[b - 1].Team);
     private bool Ally(EntityPose pose) => pose.Presentation.Owner != 0 && pose.Presentation.Owner == CommandOwner;
-    private bool Enemy(EntityPose pose) => pose.Presentation.Owner != 0 && pose.Presentation.Owner != CommandOwner && _catalog!.Units[pose.UnitType].Destruction != DestructionPolicy.Invulnerable;
+    private bool Enemy(EntityPose pose) => pose.Presentation.Owner != 0 && !SetupAllied(pose.Presentation.Owner, CommandOwner) && _catalog!.Units[pose.UnitType].Destruction != DestructionPolicy.Invulnerable;
     private bool CanDamageSelected(EntityPose victim)
     {
         var target = _catalog!.Units[victim.UnitType];
@@ -197,7 +205,7 @@ public partial class Sandbox
         return ActiveRecipients().Any(id => _catalog.Units[_selectionPoses[id].UnitType].Weapons.Any(m =>
             m.Weapon.Effect == WeaponEffect.Damage && m.Weapon.CanTarget(categories) && m.Weapon.Modifier(target.Armor) > 0));
     }
-    private bool CapturableTarget(EntityPose pose) => pose.Presentation.Owner != CommandOwner && _catalog!.Units[pose.UnitType].Capturable is not null;
+    private bool CapturableTarget(EntityPose pose) => !SetupAllied(pose.Presentation.Owner, CommandOwner) && _catalog!.Units[pose.UnitType].Capturable is not null;
     private bool AbilityTarget(AbilityDefinition ability, UnitDefinition type, EntityPose target)
     {
         if (ability.Kind == AbilityKind.Capture) return CapturableTarget(target);

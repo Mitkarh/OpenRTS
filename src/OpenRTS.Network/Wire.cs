@@ -53,6 +53,7 @@ internal static class Wire
     internal static byte[] Batch(Guid match, uint player, long tick, IReadOnlyList<WorldCommand> commands)
         => Pack(w => {
             w.Write((byte)3); w.Write(match.ToByteArray()); w.Write(player); w.Write(tick);
+            if (player is < 1 or > 8 || tick <= 0) throw new InvalidDataException("Invalid batch identity.");
             if (commands.Count > 256) throw new InvalidDataException("Command count limit.");
             w.Write(commands.Count);
             int recipients = 0;
@@ -85,7 +86,7 @@ internal static class Wire
         => Unpack(bytes, r => {
             if (r.ReadByte() != 3) throw new InvalidDataException("Expected batch.");
             var match = new Guid(r.ReadBytes(16)); uint player = r.ReadUInt32(); long tick = r.ReadInt64();
-            if (player is not (1 or 2) || tick <= 0) throw new InvalidDataException("Invalid batch identity.");
+            if (player is < 1 or > 8 || tick <= 0) throw new InvalidDataException("Invalid batch identity.");
             int count = r.ReadInt32(), total = 0;
             if (count is < 0 or > 256) throw new InvalidDataException("Command count limit.");
             var commands = new WorldCommand[count];

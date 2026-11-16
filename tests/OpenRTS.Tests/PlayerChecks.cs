@@ -11,6 +11,36 @@ internal static class PlayerChecks
         => new(id, hp, ["idle", "fire"], ["lowpower"], movable: false, economy: new(energy, income, interval), capturable: capture, destruction: destruction);
     public static void Run(Action<string, Action> test)
     {
+        test("Lobby teams prevent allied auto attacks and preserve canonical FFA hashes", () =>
+        {
+            var weapon = new WeaponDefinition(8192, 8192, 10, 100, 0);
+            var type = new UnitDefinition("armed", 100, ["idle", "move", "fire"], weapon: weapon);
+            using var allied = new SimulationWorld([type], 20000, 16000);
+            using var enemy = new SimulationWorld([type], 20000, 16000);
+            foreach (var world in new[] { allied, enemy }) { world.AddInitialUnit(0, new(2048, 2048), 1); world.AddInitialUnit(0, new(4096, 2048), 2); }
+            string initial = enemy.Report().StateHash;
+            enemy.SetInitialTeams(new Dictionary<uint, uint> { [1] = 0, [2] = 0 });
+            NavigationChecks.Check(enemy.Report().StateHash == initial, "FFA teams changed existing hashes");
+            allied.SetInitialTeams(new Dictionary<uint, uint> { [2] = 1, [1] = 1 });
+            NavigationChecks.Check(allied.AreAllied(1, 2) && !allied.AreAllied(0, 1) && allied.Report().StateHash != initial, "Teams were not hashed");
+            for (int i = 0; i < 4; i++) { allied.Step(); enemy.Step(); }
+            NavigationChecks.Check(Poses(allied).All(p => p.Health == 100) && Poses(enemy).Any(p => p.Health < 100), "Allied actors attacked each other");
+            NavigationChecks.Reject<InvalidOperationException>(() => allied.SetInitialTeams(new Dictionary<uint, uint>()));
+        });
+        test("Lobby allies reject capture while neutral capture remains available", () =>
+        {
+            UnitDefinition[] types = [new("engineer", 100, abilities: [new("capture", "", Kind: AbilityKind.Capture, Range: 8192)]),
+                Building("depot", capture: new(1))];
+            using var world = new SimulationWorld(types, 20000, 16000);
+            var actor = world.AddInitialUnit(0, new(2048, 2048), 1);
+            var ally = world.AddInitialUnit(1, new(4096, 2048), 2);
+            var neutral = world.AddInitialUnit(1, new(6144, 2048));
+            world.SetInitialTeams(new Dictionary<uint, uint> { [1] = 2, [2] = 2 });
+            world.Step([new(1, 0, 1, CommandKind.CaptureTarget, actor, TargetEntity: ally)]); world.Step();
+            NavigationChecks.Check(Poses(world).Single(p => p.Id == ally).Presentation.Owner == 2, "Captured an allied building");
+            world.Step([new(3, 0, 2, CommandKind.CaptureTarget, actor, TargetEntity: neutral)]); world.Step();
+            NavigationChecks.Check(Poses(world).Single(p => p.Id == neutral).Presentation.Owner == 1, "Alliances blocked neutral capture");
+        });
         test("Players: neutral, power, income ownership and frozen resource frames", () =>
         {
             using var w = new SimulationWorld([Building("plant", 100), Building("consumer", -120), Building("deposit", income: 7)], 20000, 16000,

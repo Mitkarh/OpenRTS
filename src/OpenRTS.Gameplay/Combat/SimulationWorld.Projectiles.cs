@@ -89,7 +89,7 @@ public sealed partial class SimulationWorld
         {
             if (!_indices.TryGetValue(id, out int i)) continue;
             var actor = _entityHandles[i];
-            if (!WeaponAccepts(weapon, actor) || id == source || !weapon.FriendlyFire && actor.Get<OwnershipState>().Owner == owner)
+            if (!WeaponAccepts(weapon, actor) || id == source || !weapon.FriendlyFire && AreAllied(actor.Get<OwnershipState>().Owner, owner))
                 continue;
             var spatial = actor.Get<SpatialState>();
             var previous = swept ? spatial.Previous : spatial.Position;

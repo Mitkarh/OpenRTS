@@ -68,6 +68,9 @@ public partial class Sandbox : Node3D
                 if (arg.StartsWith("--verify-network=", StringComparison.Ordinal)) { _verifyNetwork = true; _networkVerifyRole = arg[17..]; continue; }
                 if (arg.StartsWith("--network-port=", StringComparison.Ordinal)) { _networkVerifyPort = int.Parse(arg[15..]); continue; }
                 if (arg.StartsWith("--network-pin-file=", StringComparison.Ordinal)) { _networkVerifyPinFile = arg[19..]; continue; }
+                if (arg == "--verify-menu") { _verifyMenu = true; continue; }
+                if (arg.StartsWith("--menu-captures=", StringComparison.Ordinal)) { _menuCaptures = arg[16..]; continue; }
+                if (arg == "--network-net3") { _networkVerifyNet3 = true; continue; }
                 if (arg.StartsWith("--mod=", StringComparison.Ordinal) && arg.Length > 6) { modPath = arg[6..]; continue; }
                 if (arg.StartsWith("--fog-hold=", StringComparison.Ordinal) && int.TryParse(arg[11..], out int hold) && hold is >= 0 and <= 250) { _fogHoldTicks = hold; continue; }
                 if (arg == "--verify-fog-match") { _verifyFogMatch = _verifyMatchSetup = true; continue; }
@@ -170,7 +173,7 @@ public partial class Sandbox : Node3D
         catch (Exception error)
         {
             GD.PushError(error.ToString());
-            if (_verifyNetwork || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
+            if (_verifyMenu || _verifyNetwork || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
             else AddOverlay("Ошибка загрузки контента\n" + error.Message);
         }
     }
@@ -218,15 +221,19 @@ public partial class Sandbox : Node3D
         _combatEffects?.Clear(); _sprites?.ClearWrecks();
         _rtsOverlay?.RadarContacts.Clear();
         var map = _mapMatch;
-        var opponent = _opponent = _opponentProfile is { } profile ? SkirmishAiScenario.Create(catalog, profile, map!.Map, 2, _opponentStarts) : null;
+        _opponent = null;
         if (_networkMode != 0) { StartNetworkSession(map!, catalog); return; }
-        _session = new SandboxSession(new SimulationSession(() => _jammingScenario ? JammingScenario.Create(catalog) : _fogScenario && (!_sensorScenario || map is null) ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, workers: _workers, restrictPlayerCommands: opponent is not null, tickRate: _manifest.Settings.Simulation.TickRate) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
+        var offlineAis = _configuredOptions is { } configured && map is not null && _opponentProfile is not null
+            ? configured.Seats.Select((seat, i) => (seat, i)).Where(p => p.seat.Controller == OpenRTS.Network.SlotController.Ai)
+                .Select(p => SkirmishAiScenario.Create(catalog, _opponentProfile, map.Map, (uint)p.i + 1, _opponentStarts, opponents: configured.Opponents((uint)p.i + 1))).ToArray() : [];
+        _opponent = offlineAis.FirstOrDefault();
+        _session = new SandboxSession(new SimulationSession(() => _jammingScenario ? JammingScenario.Create(catalog) : _fogScenario && (!_sensorScenario || map is null) ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? _configuredOptions is { } selectedOptions ? CreateConfiguredWorld(map, selectedOptions) : map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, workers: _workers, restrictPlayerCommands: offlineAis.Length != 0, tickRate: _manifest.Settings.Simulation.TickRate) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
             _verifySensors ? FogScenario.RadarCommands : _verifyFog ? FogScenario.Commands : _verifyAviation ? AviationScenario.Commands.Where(c => c.Tick <= _ticks).ToArray() : map is not null ? [] : _productionScenario ? ProductionScenario.Commands(catalog) : _buildings ? BuildingScenario.Commands(catalog) : _showcase ? (_verifyPresentation ? ShowcaseScenario.VerificationCommands(catalog) : []) : _navigation ? (_verifySimulation ? NavigationScenario.Commands(_count, _ticks) : [])
                 : DiagnosticScenario.Commands(_count, _verifySimulation ? _ticks : long.MaxValue),
             _verifySimulation ? _ticks : null, realtime: !_verifySimulation || _pacedVerification,
             maximumEventBacklog: Math.Max(65536, _count + 1024),
             playbackSpeed: _verifySimulation ? 1 : _playbackSpeed, startPaused: !_verifySimulation && (_paused || _matchSetup is not null),
-            collectCommands: opponent is null ? null : opponent.Plan));
+            collectCommands: offlineAis.Length == 0 ? null : world => offlineAis.SelectMany(ai => ai.Plan(world)).OrderBy(c => c.Issuer).ThenBy(c => c.Sequence).ToArray()));
     }
 
     private static Color TeamColor(uint owner) => owner switch
@@ -253,7 +260,10 @@ public partial class Sandbox : Node3D
         try
         {
             if (_session.Network is { } network && _networkLabel is not null)
-                _networkLabel.Text = $"Игрок {network.Player} · {network.Status}";
+            {
+                _networkLabel.Text = $"{(network.Player == 0 ? "Зритель" : "Игрок " + network.Player)} · {network.Status}";
+                UpdateNetworkChat(network);
+            }
             bool completed = _session.Completion.IsCompleted;
             if (_networkMode != 0 && completed && !_networkEnded) { _networkEnded = true; _panelDirty = true; }
             if (_session.Completion.IsFaulted) _session.Completion.GetAwaiter().GetResult();
@@ -557,6 +567,7 @@ public partial class Sandbox : Node3D
 
     public override void _ExitTree()
     {
+        _networkAdvertiser?.Dispose(); _networkAdvertiser = null;
         if (_showcase) Input.MouseMode = Input.MouseModeEnum.Visible;
         _session?.Dispose();
         _session = null;

@@ -7,6 +7,10 @@ using OpenRTS.Core;
 
 public partial class Sandbox
 {
+    private System.Collections.Generic.Dictionary<string, GameMap> _setupMaps = new();
+    private System.Collections.Generic.Dictionary<string, StartingSet> _setupSets = new();
+    private MatchSetupOptions? _configuredOptions;
+    private string? _pendingLobbySettings;
     private MatchSetupScreen? _matchSetup;
     private bool _startedFromSetup, _verifyMatchSetup;
     private bool _verifyAiMatch;
@@ -25,14 +29,18 @@ public partial class Sandbox
         var maps = mapChoices.Select(choice => (choice.Title, choice.Description, Map(choice.Path))).ToArray();
         if (maps.Any(choice => !choice.Item3.IsSkirmish)) throw new ArgumentException("Экран настройки принимает только skirmish-карты.");
         var modes = setChoices.Select(choice => (choice.Title, Set(choice.Path))).ToArray();
+        _setupMaps = maps.ToDictionary(m => m.Item3.Id, m => m.Item3);
+        _setupSets = modes.ToDictionary(m => m.Item2.Id, m => m.Item2);
         _matchSetup = new();
         AddChild(_matchSetup);
         _matchSetup.Build(TerminalTheme(), catalog.Locomotion!, maps, modes,
             Array.FindIndex(mapChoices, choice => choice.Path == settings.DefaultMap),
             Array.FindIndex(setChoices, choice => choice.Path == settings.DefaultStartSet));
         _matchSetup.Launch += BeginMatchFromSetup;
+        _matchSetup.ConfigurationChanged += () => _pendingLobbySettings = _matchSetup.Options.Serialize();
         _matchSetup.CancelNetwork += () => { if (_session?.Network is not null) MatchSetupFailed(new OperationCanceledException("Подключение отменено."), true); };
-        if (_verifyNetwork) SelectNetworkVerificationMatch();
+        if (_verifyMenu) { _ = VerifyMenuFlow(); }
+        else if (_verifyNetwork) SelectNetworkVerificationMatch();
         else if (_verifyAiMatch) SelectAiVerificationMatch();
         else if (_verifyMatchSetup) SelectVerificationMatch();
     }
@@ -43,18 +51,21 @@ public partial class Sandbox
         try
         {
             _networkMode = _matchSetup!.NetworkMode;
-            if (_networkMode != 0 && (slots.Length != 2 || aiOpponent))
-                throw new ArgumentException("Прямая игра требует двух игроков без ИИ.");
+            if (_networkMode != 0 && slots.Length < 2)
+                throw new ArgumentException("Прямая игра требует хотя бы двух игровых сторон.");
             _networkAddress = _matchSetup.NetworkAddress; _networkPort = _matchSetup.NetworkPort;
             _networkPin = _matchSetup.NetworkPin; _networkDelay = _matchSetup.NetworkInputDelay;
-            _fogViewer = _networkMode == 2 ? 2u : 1u;
+            _networkPlayer = _matchSetup.NetworkPlayer; _networkAiPlayers = _matchSetup.NetworkAiPlayers;
+            _fogViewer = _networkMode == 2 ? _networkPlayer : 1u;
             _matchFogMode = _matchSetup!.SelectedFog;
             _fogStyle = _matchSetup.SelectedFogStyle;
             _radarStyle = _matchSetup.SelectedRadarStyle;
             _matchPlayers = slots.Length;
-            _mapMatch = MapScenario.Prepare(map, set, slots);
-            _opponentProfile = aiOpponent ? SkirmishAiCatalog.Load(ReadMapSource(_manifest.Settings.Match.AiConfig), _catalog!, _aiProfileId ?? _manifest.Settings.Match.AiProfile) : null;
-            _opponentStarts = aiOpponent ? slots : null;
+            _configuredOptions = _matchSetup.Options;
+            _mapMatch = PrepareMap(_configuredOptions);
+            bool canPlanAi = aiOpponent || _networkMode != 0;
+            _opponentProfile = canPlanAi ? SkirmishAiCatalog.Load(ReadMapSource(_manifest.Settings.Match.AiConfig), _catalog!, _aiProfileId ?? _manifest.Settings.Match.AiProfile) : null;
+            _opponentStarts = canPlanAi ? slots : null;
             _count = _mapMatch.UnitCount;
             _matchSetup!.SetLaunching(true, "Подготовка поля боя…");
             StartSession();
@@ -79,11 +90,31 @@ public partial class Sandbox
         }
 
         if (_session.Network is { } network)
+        {
+            if (network.IsHost && _pendingLobbySettings is { } pending)
+            {
+                try { network.ConfigureLobby(pending, MatchSetupOptions.Parse(pending).Seats.Select(s => s.Controller).ToArray()); _pendingLobbySettings = null; }
+                catch (InvalidOperationException) { }
+            }
             _matchSetup!.SetNetworkStatus(network.Status, network.Fingerprint);
+            _matchSetup.UpdateNetworkLobby(network);
+            if (_verifyNetwork && network.State.Match != Guid.Empty && network.State.Phase == OpenRTS.Network.MatchPhase.Lobby)
+            {
+                if (network.Player != 0 && _networkReadyRevision != network.State.Revision) { network.Ready(network.State.Revision); _networkReadyRevision = network.State.Revision; }
+                if (network.IsHost && network.State.Slots.All(p => p.Controller != OpenRTS.Network.SlotController.Human || p.Connected && p.Ready)) network.Start();
+            }
+        }
         using var frame = _session.Frames.AcquireLatest();
         if (frame is null) return;
         try
         {
+            if (_session.Network is { } joined)
+            {
+                _configuredOptions = MatchSetupOptions.Parse(joined.LobbySettings);
+                _mapMatch = PrepareMap(_configuredOptions); _matchFogMode = (OpenRTS.Core.Visibility.FogMode)_configuredOptions.Fog;
+                _fogViewer = joined.Player; _networkPlayer = joined.Player;
+                _opponentStarts = _configuredOptions.Seats.Take(_mapMatch.Map.Slots.Count).Select(s => _mapMatch.Map.Slots[s.Start]).ToArray();
+            }
             _startedFromSetup = true;
             BuildBattleScene(_catalog!);
             AddNetworkStatus();
@@ -99,10 +130,31 @@ public partial class Sandbox
         }
     }
 
+    private MapMatch PrepareMap(MatchSetupOptions options)
+    {
+        if (!_setupMaps.TryGetValue(options.Map, out var map) || !_setupSets.TryGetValue(options.Mode, out var set)) throw new ArgumentException("Карта или стартовый набор не установлены.");
+        int capacity = map.Slots.Count;
+        if (options.Seats.Where((seat, i) => seat.Controller != OpenRTS.Network.SlotController.None && (i >= capacity || seat.Start >= capacity)).Any() ||
+            options.Seats.Any(s => s.Controller == OpenRTS.Network.SlotController.Ai) && set.Id != "supply") throw new ArgumentException("Недоступные места или ИИ для этой карты/режима.");
+        var active = options.Seats.Take(capacity).Select(s => s.Controller != OpenRTS.Network.SlotController.None).ToArray();
+        return MapScenario.Prepare(map, set, options.Seats.Take(capacity).Select(s => map.Slots[s.Start]).ToArray(), active);
+    }
+    private SimulationWorld CreateConfiguredWorld(MapMatch map, MatchSetupOptions options)
+    {
+        var fog = (OpenRTS.Core.Visibility.FogMode)options.Fog;
+        var world = map.CreateWorld(new GameplayMechanics { FogCellSize = fog == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024,
+            FogMode = fog, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick,
+            workers: _workers, restrictPlayerCommands: _networkMode != 0 || options.Seats.Any(s => s.Controller == OpenRTS.Network.SlotController.Ai), tickRate: options.TickRate);
+        try { world.SetInitialTeams(options.Seats.Select((s, i) => (s, i)).Where(p => p.s.Controller != OpenRTS.Network.SlotController.None).ToDictionary(p => (uint)p.i + 1, p => p.s.Team)); return world; }
+        catch { world.Dispose(); throw; }
+    }
+
     private void MatchSetupFailed(Exception error, bool canRetry)
     {
         _session?.Dispose();
+        _networkAdvertiser?.Dispose(); _networkAdvertiser = null;
         _session = null;
+        _pendingLobbySettings = null;
         _networkMode = 0;
         _mapMatch = null;
         _opponentProfile = null;

@@ -17,13 +17,14 @@ public static class MapScenario
 
     public static string PlayerName(int index) => PlayerNames[index];
 
-    public static MapMatch Prepare(GameMap map, StartingSet? startingSet, IReadOnlyList<string> playerSlots)
+    public static MapMatch Prepare(GameMap map, StartingSet? startingSet, IReadOnlyList<string> playerSlots, IReadOnlyList<bool>? activePlayers = null)
     {
         if (playerSlots.Count > MaximumPlayers)
             throw new ArgumentException($"The sandbox supports up to {MaximumPlayers} players.");
+        if (activePlayers is not null && activePlayers.Count != playerSlots.Count) throw new ArgumentException("Active slot count mismatch.");
         var players = new Dictionary<string, PlayerDefinition>(StringComparer.Ordinal);
         for (int i = 0; i < playerSlots.Count; i++)
-            if (!players.TryAdd(playerSlots[i], new((uint)i + 1, PlayerNames[i])))
+            if ((activePlayers is null || activePlayers[i]) && !players.TryAdd(playerSlots[i], new((uint)i + 1, PlayerNames[i])))
                 throw new ArgumentException($"Start '{playerSlots[i]}' is assigned more than once.");
         return map.Prepare(players, startingSet);
     }
