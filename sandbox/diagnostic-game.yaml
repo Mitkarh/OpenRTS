@@ -1,9 +1,9 @@
 # Fixed catalog for movement, combat and presentation laboratories.
 Version: 1
 Title: OpenRTS Diagnostics
-Rules: [content/units.yaml]
+Rules: [content/units/units.yaml]
 Terrain: [content/terrain.yaml]
-Weapons: [content/weapons.yaml]
-Models: [content/models.yaml]
+Weapons: [content/weapons/weapons.yaml]
+Models: [content/models/models.yaml]
 Effects: [content/effects.yaml]
-Settings: [content/settings]
+Settings: [content/settings/]
