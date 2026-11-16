@@ -65,22 +65,44 @@ internal static class ConfigurationChecks
             {
                 "Simulation: {TickRate: 0}", "Simulation: {SpeedPerTick: 1025}",
                 "Simulation: {Tickrate: 25}", "Unknown: {}", "Match: {DefaultMap: ../outside.yaml}",
+                "SensorRanges: {Radar: {Owners: [Enemy]}}",
+                "SensorRanges: {Radar: {Mode: Sometimes}}",
+                "SensorRanges: {Radar: {Color: invalid}}",
+                "SensorRanges: {Radar: {Color: ''}}",
+                "SensorRanges: {Radar: {Owner: Own}}",
                 "Match: {Maps: [{Path: a.yaml}]}",
                 "Match: {Maps: [{Path: a.yaml, Title: A}]}",
                 "Match: {DefaultMap: a.yaml, Maps: [{Path: a.yaml, Title: A}, {Path: a.yaml, Title: B}]}"
             }) ExpectContent(() => GameSettings.Load([new("settings.yaml", text)]), "settings.yaml:");
+        });
+        test("Configuration: sensor range YAML controls defaults and owner policy", () =>
+        {
+            var settings = GameSettings.Load([new("ranges.yaml", """
+                SensorRanges:
+                  Jam: {Mode: Always, Color: "#ff000080", Owners: [Own, Neutral]}
+                  Radar: {Mode: Hidden, Owners: []}
+                """)]).SensorRanges;
+            Check(settings.Jam.Mode == SensorRangeMode.Always && settings.Jam.Color == "#ff000080" &&
+                settings.Jam.Owners.SequenceEqual([SensorRangeOwner.Own, SensorRangeOwner.Neutral]), "Custom range defaults lost");
+            Check(settings.Radar.Owners.Length == 0 && settings.Radar.Mode == SensorRangeMode.Hidden,
+                "Explicitly empty policy must prohibit all owners");
+            Check(settings.Stealth.Mode == SensorRangeMode.Selected &&
+                settings.Stealth.Owners.SequenceEqual([SensorRangeOwner.Own, SensorRangeOwner.Allies]), "Safe defaults changed");
+            var manifest = GameManifest.Load("sandbox/game.yaml");
+            Check(manifest.Settings.SensorRanges.Jam.Color == "#ffb840a6" &&
+                manifest.Settings.SensorRanges.Radar.Mode == SensorRangeMode.Selected, "Sandbox YAML defaults not loaded");
         });
         test("Configuration: sandbox manifests preserve catalogs and feed map world settings", () =>
         {
             var manifest = GameManifest.Load("sandbox/game.yaml");
             var catalog = manifest.LoadUnits();
             var files = manifest.Files;
-            var old = UnitCatalog.Load([files.Read("content/units.yaml"), files.Read("content/buildings.yaml")],
-                LocomotionCatalog.Load([files.Read("content/terrain.yaml")]), WeaponCatalog.Load([files.Read("content/weapons.yaml")]));
+            var old = UnitCatalog.Load([files.Read("content/units/units.yaml"), files.Read("content/units/buildings.yaml")],
+                LocomotionCatalog.Load([files.Read("content/terrain.yaml")]), WeaponCatalog.Load([files.Read("content/weapons/weapons.yaml")]));
             Check(catalog.Summary == old.Summary, "Manifest changed the full catalog");
             var diagnostic = GameManifest.Load("sandbox/diagnostic-game.yaml");
-            Check(diagnostic.LoadUnits().Summary == UnitCatalog.Load([files.Read("content/units.yaml")], old.Locomotion,
-                WeaponCatalog.Load([files.Read("content/weapons.yaml")])).Summary, "Diagnostic catalog changed");
+            Check(diagnostic.LoadUnits().Summary == UnitCatalog.Load([files.Read("content/units/units.yaml")], old.Locomotion,
+                WeaponCatalog.Load([files.Read("content/weapons/weapons.yaml")])).Summary, "Diagnostic catalog changed");
             _ = ModelCatalog.Load(manifest.Models);
             _ = EffectCatalog.Load(manifest.Effects);
             var match = MapScenario.Load(catalog, files.Read, manifest.Settings.Match.DefaultMap,

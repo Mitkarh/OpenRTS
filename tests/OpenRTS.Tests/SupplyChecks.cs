@@ -127,7 +127,7 @@ internal static class SupplyChecks
         test("Supply: a produced truck travels and pays into its own account on the Valley", () =>
         {
             static ContentSource Read(string path) => new(path, File.ReadAllText(Path.Combine("sandbox", path)));
-            var catalog = UnitCatalog.Load([Read("content/units.yaml"), Read("content/buildings.yaml")],
+            var catalog = UnitCatalog.Load([Read("content/units/units.yaml"), Read("content/units/buildings.yaml")],
                 LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
             var oil = catalog.Units.Single(u => u.Id == "oil-derrick");
             var depot = catalog.Units.Single(u => u.Supply?.Role == SupplyRole.Depot);

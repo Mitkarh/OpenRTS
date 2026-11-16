@@ -1,0 +1,17 @@
+# Owners is a game rule, never overridden by local UI preferences.
+# Mode and Color are defaults; players may override them in the match menu.
+# Modes: Hidden, Selected, Always. Colors: quoted #RRGGBBAA.
+# Owners: Own, Allies, Neutral, Enemies. Allies awaits diplomacy support.
+SensorRanges:
+  Jam:
+    Mode: Selected
+    Color: "#ffb840a6"
+    Owners: [Own, Allies]
+  Stealth:
+    Mode: Selected
+    Color: "#33f2ffbf"
+    Owners: [Own, Allies]
+  Radar:
+    Mode: Selected
+    Color: "#73ff66a6"
+    Owners: [Own, Allies]

@@ -55,6 +55,7 @@ public sealed class SpriteWorldView
         { QuarterTurns = value.QuarterTurns };
     }
     private readonly List<SpriteBatch> _batches = [];
+    private readonly Dictionary<SpriteBatch, SpriteBatch> _translucentBatches = [];
     private readonly Dictionary<(ulong, Rect2), SpriteBatch> _textures = new();
     public Node3D Node { get; } = new() { Name = "SpriteUnits" };
     public int BatchCount => _batches.Count;
@@ -154,6 +155,15 @@ public sealed class SpriteWorldView
         _textures.Add(key, batch); _batches.Add(batch); Node.AddChild(batch.Node); return batch;
     }
 
+    private SpriteBatch TintedBatch(SpriteBatch frame, Color tint)
+    {
+        if (tint.A >= 0.999f) return frame;
+        if (_translucentBatches.TryGetValue(frame, out var batch)) return batch;
+        batch = frame.Translucent();
+        _translucentBatches.Add(frame, batch); _batches.Add(batch); Node.AddChild(batch.Node);
+        return batch;
+    }
+
     private readonly HashSet<EntityId> _ghostIds = new();
 
     public void Apply(ReadOnlySpan<EntityPose> poses, float alpha, long tick, int tickRate, ReadOnlySpan<WeaponPose> weapons = default, ReadOnlySpan<ConstructionProjectPose> projects = default, ConstructionProjectPose? preview = null,
@@ -251,7 +261,7 @@ public sealed class SpriteWorldView
             Vector2 origin = new(point.X, point.Z - lift);
             float body = Angle(view.PreviousBodyFacing, view.BodyFacing, alpha), weapon = Angle(view.PreviousWeaponFacing, view.WeaponFacing, alpha);
             int construct = pose.Upgrade.Active ? model.Unit.AnimationIndex("construct") : -1;
-            Color tint = ghost ? new(0.7f, 0.9f, 1, 0.42f) : pose.Cloaked ? new(0.8f, 0.95f, 1f, 0.55f) : Colors.White;
+            Color tint = ghost ? new(0.7f, 0.9f, 1, 0.42f) : pose.Cloaked ? new(0.62f, 0.7f, 0.76f, 0.42f) : Colors.White;
             float scale = 1, stateFlash = 0;
             for (int state = 0; state < model.States.Length; state++) if ((view.States & (1u << state)) != 0)
             {
@@ -339,12 +349,13 @@ public sealed class SpriteWorldView
                 if (model.Unit.Flight is { } flight && part.Parent < 0 && height > 0.25f && !ghost)
                 {
                     float shadowOffset = flight.Mode == FlightMode.Hover ? 0 : height * 0.28f;
-                    frame.Add(new(center.X + shadowOffset, ShadowHeight, center.Y + lift + shadowOffset * 0.65f), drawAngle, size * 0.9f, new(0, 0, 0, 0.3f * tint.A), Colors.Transparent);
+                    var shadow = new Color(0, 0, 0, 0.3f * tint.A);
+                    TintedBatch(frame, shadow).Add(new(center.X + shadowOffset, ShadowHeight, center.Y + lift + shadowOffset * 0.65f), drawAngle, size * 0.9f, shadow, Colors.Transparent);
                     SpriteCount++;
                 }
                 int layer = ghost ? PreviewLayer : pose.Flight.Airborne ? AirLayer : (int)(part.DrawLayer ?? model.DrawLayer);
                 var (depth, stride) = _drawDepths[i * LayerCount + layer];
-                frame.Add(new(center.X, elevation + depth + part.Layer * (stride / model.PartLayerCount), center.Y), drawAngle, size, partTint, team);
+                TintedBatch(frame, partTint).Add(new(center.X, elevation + depth + part.Layer * (stride / model.PartLayerCount), center.Y), drawAngle, size, partTint, team);
                 SpriteCount++;
             }
         }

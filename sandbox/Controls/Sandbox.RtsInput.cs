@@ -52,10 +52,17 @@ public partial class Sandbox
         overlay.FieldBounds = Playfield();
         foreach (var pose in frame.Poses)
         {
-            if (!Controls(pose.Presentation.Owner)) continue;
-            void Ring(int radius, Color color)
+            uint owner = pose.Presentation.Owner;
+            var audience = owner == 0 ? RangeOwners.Neutral : Controls(owner) ? RangeOwners.Own : RangeOwners.Enemies;
+            bool selected = _selection.Contains(pose.Id);
+            if (pose.Carrier.Value != 0 || pose.Construction.Active ||
+                !(_rangeStyles[0].Shows(selected, audience) || _rangeStyles[1].Shows(selected, audience) ||
+                  _rangeStyles[2].Shows(selected, audience))) continue;
+            void Ring(int radius, RangeStyle style, bool preparing = false)
             {
-                if (radius <= 0) return;
+                if (radius <= 0 || !style.Shows(selected, audience)) return;
+                var color = style.Color;
+                if (preparing) color.A *= 0.33f;
                 int at = overlay.FieldRingCount++;
                 if (at == overlay.FieldRings.Count) overlay.FieldRings.Add((new Vector2[97], color));
                 var points = overlay.FieldRings[at].Points;
@@ -68,9 +75,16 @@ public partial class Sandbox
                 }
                 overlay.FieldRings[at] = (points, color);
             }
-            Ring(pose.Emitter.JamRange, new Color(1f, 0.72f, 0.25f, 0.6f));
+            var sensors = _catalog!.Units[pose.UnitType].Sensors;
+            if (sensors is null) continue;
+            // Enemy rings use the known type's nominal ranges, never hidden actors or contacts.
+            Ring(sensors.JamRange, _rangeStyles[0]);
             bool deployed = !pose.Emitter.Moving && frame.Tick - pose.Emitter.DeployStartTick >= pose.Emitter.DeployTicks;
-            Ring(pose.Emitter.StealthRange, deployed ? new Color(0.2f, 0.95f, 1f, 0.75f) : new Color(0.2f, 0.95f, 1f, 0.25f));
+            Ring(sensors.StealthRange, _rangeStyles[1], !deployed);
+            int radar = 0;
+            foreach (var detector in sensors.Detectors)
+                if (detector.Channel == "radar") radar = Math.Max(radar, detector.Range);
+            Ring(radar, _rangeStyles[2]);
         }
         _radarWeapons.Clear();
         if (frame.Contacts.IsEmpty) return;

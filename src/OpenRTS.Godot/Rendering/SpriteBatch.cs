@@ -9,9 +9,19 @@ internal sealed class SpriteBatch
     private float[] _buffer = [];
     internal int Count { get; private set; }
     internal int Capacity => _buffer.Length / 20;
-    internal SpriteBatch(Texture2D texture, Rect2 region, bool teamPaint)
+    private readonly Texture2D _texture;
+    private readonly Rect2 _region;
+    private readonly bool _teamPaint;
+    private static Shader? _translucentShader;
+    internal SpriteBatch Translucent() => new(_texture, _region, _teamPaint, true);
+    internal SpriteBatch(Texture2D texture, Rect2 region, bool teamPaint, bool translucent = false)
     {
-        var material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/team_sprite.gdshader") };
+        _texture = texture; _region = region; _teamPaint = teamPaint;
+        var shader = GD.Load<Shader>("res://shaders/team_sprite.gdshader");
+        // Cutout sprites stay in the opaque pass; fading sprites need alpha blending.
+        if (translucent) shader = _translucentShader ??= new Shader { Code = shader.Code.Replace(
+            "ALPHA_SCISSOR_THRESHOLD = 0.08;", "if (sample_color.a < 0.08) discard;") };
+        var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter("sprite_texture", texture);
         material.SetShaderParameter("uv_rect", new Vector4(region.Position.X, region.Position.Y, region.Size.X, region.Size.Y));
         material.SetShaderParameter("team_paint", teamPaint);

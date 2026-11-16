@@ -12,10 +12,10 @@ public partial class Sandbox
         var catalog = _catalog!; using var world = new SimulationWorld(catalog.Units, 48 * 1024, 32 * 1024);
         int Type(string id) => catalog.Units.ToList().FindIndex(u => u.Id == id);
         void Spawn(string id, int x, int y, uint owner) => world.AddInitialUnit(Type(id), new(x * 1024, y * 1024), owner);
-        Spawn("tank-mixed", 12, 10, 1); Spawn("bunker-cannon", 17, 10, 2);
+        Spawn("tank-mixed", 12, 10, 1); Spawn("bunker-cannon", 16, 10, 2);
         Spawn("engineer", 12, 18, 1); Spawn("apc-mg", 14, 18, 1); Spawn("rocketeer", 19, 18, 2);
         Spawn("rifleman", 25, 10, 1); Spawn("bunker-mixed", 29, 10, 2); Spawn("rifleman", 29, 11, 2);
-        bool firedCannon = false, firedRocket = false, repaired = false, exploded = false;
+        bool firedMain = false, firedRocket = false, repaired = false, exploded = false;
         var saved = _displayPoses; int savedCount = _displayCount; var selected = _selection.Snapshot();
         var cameraPosition = _camera!.Position; float cameraSize = _camera.Size;
         _camera.Position = new(20, 40, 14); _camera.Size = 21;
@@ -40,7 +40,7 @@ public partial class Sandbox
                 {
                     _combatEffects.Accept(value);
                     if (value.Kind == WorldEventKind.WeaponFired && value.Entity.Value == 1)
-                    { firedCannon |= value.Mount == 0; firedRocket |= value.Mount == 1; }
+                    { firedMain |= value.Mount == 0; firedRocket |= value.Mount == 1; }
                     repaired |= value.Kind == WorldEventKind.Repaired;
                     exploded |= value.Kind == WorldEventKind.ProjectileImpact && value.Entity.Value == 6;
                 }
@@ -78,14 +78,14 @@ public partial class Sandbox
                 if (tick is 18 or 24 or 36 && _capturePath is not null && DisplayServer.GetName() != "headless")
                 {
                     _selection.Change([], OpenRTS.Godot.Controls.SelectionChange.Replace); UpdateSelection(1);
-                    if (_label is not null) _label.Text = $"OpenRTS · оружие · тик {tick}\nПушка + ракета на ходу · граната · ремонт союзника";
+                    if (_label is not null) _label.Text = $"OpenRTS · оружие · тик {tick}\nПулемёт + ракета на ходу · граната · ремонт союзника";
                     await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                     using var screenshot = GetViewport().GetTexture().GetImage();
                     string path = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(_capturePath))!, $"combat-{tick}.png");
                     if (screenshot.SavePng(path) != Error.Ok) throw new IOException("Combat capture failed.");
                 }
             }
-            if (!firedCannon || !firedRocket || !repaired || !exploded) throw new InvalidOperationException($"Combat presentation scenario incomplete: {firedCannon}/{firedRocket}/{repaired}/{exploded}.");
+            if (!firedMain || !firedRocket || !repaired || !exploded) throw new InvalidOperationException($"Combat presentation scenario incomplete: {firedMain}/{firedRocket}/{repaired}/{exploded}.");
             GD.Print("OPENRTS_COMBAT_PRESENTATION:PASS independent weapons, projectiles, impacts, repair action/cursor and three batched effect nodes");
         }
         finally

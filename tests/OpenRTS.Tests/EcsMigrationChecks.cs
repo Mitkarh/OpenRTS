@@ -13,9 +13,9 @@ internal static class EcsMigrationChecks
         foreach (var scenario in new[] { "direct", "navigation", "combat", "buildings", "production" })
             test("ECS baseline: " + scenario, () =>
             {
-                var units = UnitCatalog.Load([new("units", LegacyContent("sandbox/content/units.yaml"))], LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
-                var buildings = UnitCatalog.Load([new("units", LegacyContent("sandbox/content/units.yaml")),
-                    new("buildings", LegacyContent("sandbox/content/buildings.yaml"))], LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
+                var units = UnitCatalog.Load([new("units", LegacyContent("sandbox/content/units/units.yaml"))], LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
+                var buildings = UnitCatalog.Load([new("units", LegacyContent("sandbox/content/units/units.yaml")),
+                    new("buildings", LegacyContent("sandbox/content/units/buildings.yaml"))], LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
                 using var world = scenario switch
                 {
                     "direct" => DiagnosticScenario.Create(units, 100),

@@ -57,8 +57,8 @@ internal static class WeaponChecks
             var catalog = LocomotionChecks.Units();
             NavigationChecks.Check(catalog.Units.Single(u => u.Id == "tank-mixed").Weapons.Count == 2 && catalog.Units.Single(u => u.Id == "engineer").Weapon!.Effect == WeaponEffect.Repair, "Missing sample mounts");
             var weapons = LocomotionChecks.Weapons();
-            var altered = WeaponCatalog.Load([new("w", File.ReadAllText("sandbox/content/weapons.yaml").Replace("Burst: 3", "Burst: 4"))]);
-            NavigationChecks.Check(catalog.Summary != UnitCatalog.Load([new("u", File.ReadAllText("sandbox/content/units.yaml"))], LocomotionChecks.Catalog(), altered).Summary, "Burst excluded from fingerprint");
+            var altered = WeaponCatalog.Load([new("w", File.ReadAllText("sandbox/content/weapons/weapons.yaml").Replace("Burst: 3", "Burst: 4"))]);
+            NavigationChecks.Check(catalog.Summary != UnitCatalog.Load([new("u", File.ReadAllText("sandbox/content/units/units.yaml"))], LocomotionChecks.Catalog(), altered).Summary, "Burst excluded from fingerprint");
             NavigationChecks.Reject<ContentException>(() => UnitCatalog.Load([new("u", "u: {Health: {HP: 1}, Armaments: {Mounts: {a: {Weapon: absent}}}}")], weapons: weapons));
             NavigationChecks.Reject<ContentException>(() => WeaponCatalog.Load([new("w", "w: {Weapon: {Burst: 0}}") ]));
             NavigationChecks.Reject<ContentException>(() => WeaponCatalog.Load([new("w", "w: {Weapon: {Effect: Repair, Projectile: Missile}}") ]));
@@ -67,8 +67,8 @@ internal static class WeaponChecks
         test("Weapons: factory repairs automatically beyond engineer range", () =>
         {
             var catalog = UnitCatalog.Load([
-                new("units", File.ReadAllText("sandbox/content/units.yaml")),
-                new("buildings", File.ReadAllText("sandbox/content/buildings.yaml"))
+                new("units", File.ReadAllText("sandbox/content/units/units.yaml")),
+                new("buildings", File.ReadAllText("sandbox/content/units/buildings.yaml"))
             ], LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
             var factory = catalog.Units.Single(u => u.Id == "factory");
             var engineer = catalog.Units.Single(u => u.Id == "engineer");

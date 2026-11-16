@@ -10,9 +10,9 @@ internal static class SkirmishAiChecks
     public static void Run(Action<string, Action> test)
     {
         static ContentSource Read(string path) => new(path, File.ReadAllText(Path.Combine("sandbox", path)));
-        var catalog = UnitCatalog.Load([Read("content/units.yaml"), Read("content/buildings.yaml")],
+        var catalog = UnitCatalog.Load([Read("content/units/units.yaml"), Read("content/units/buildings.yaml")],
             LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
-        var source = Read("content/skirmish-ai.yaml");
+        var source = Read("content/ai/skirmish-ai.yaml");
         var profile = SkirmishAiCatalog.Load(source, catalog, SkirmishAiScenario.ProfileId);
 
         test("AI2 compiles shared sergeants with profile-specific rules", () =>
@@ -124,10 +124,10 @@ internal static class SkirmishAiChecks
         test("AI2 counts queued recruits once across separate unarmed patrols", () =>
         {
             const uint player = 1;
-            var units = Read("content/units.yaml");
+            var units = Read("content/units/units.yaml");
             var definitions = UnitCatalog.Load([units with { Text = units.Text.Replace(
                     "  Armaments:\n    Mounts:\n      main: { Weapon: missile, FireFromTransport: true }\n", "") },
-                Read("content/buildings.yaml")], LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
+                Read("content/units/buildings.yaml")], LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
             var fixture = SkirmishAiCatalog.Load(source with { Text = source.Text.Replace("Strategy: Assault", "Strategy: Patrol")
                 .Replace("Strategy: Guard", "Strategy: Patrol").Replace(", UnderThreatStrategy: Guard", "")
                 .Replace("rifleman", "rocketeer").Replace("Min: 3, Target: 5", "Min: 1, Target: 1")
@@ -262,9 +262,9 @@ internal static class SkirmishAiChecks
             const uint player = 2;
             foreach (var payment in new[] { PaymentPolicy.Progressive, PaymentPolicy.OnCompletion })
             {
-                var buildings = Read("content/buildings.yaml");
+                var buildings = Read("content/units/buildings.yaml");
                 var edited = buildings.Text.Replace("Capacity: 20,\n          Payment: Upfront", $"Capacity: 20,\n          Payment: {payment}");
-                var definitions = UnitCatalog.Load([Read("content/units.yaml"), buildings with { Text = edited }],
+                var definitions = UnitCatalog.Load([Read("content/units/units.yaml"), buildings with { Text = edited }],
                     LocomotionChecks.Catalog(), LocomotionChecks.Weapons());
                 int Type(string id) => definitions.Units.ToList().FindIndex(u => u.Id == id);
                 int barracksType = Type("barracks"), powerType = Type("power-plant");

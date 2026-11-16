@@ -63,13 +63,15 @@ public partial class Sandbox
 
     private void AddTerminalHud()
     {
+        LoadRangeDefaults(_manifest.Settings.SensorRanges);
         var settings = new ConfigFile();
-        if (!_verifySkirmish && !_verifyMatchSetup && settings.Load(TerminalSettingsPath) == Error.Ok)
+        if (!_verifySkirmish && !_verifyMatchSetup && !(_jammingScenario && _verifySimulation) && settings.Load(TerminalSettingsPath) == Error.Ok)
         {
             _rightHud = (bool)settings.GetValue("hud", "right", true);
             _edgeScroll = (bool)settings.GetValue("camera", "edge_scroll", true);
             _edgeSpeed = Mathf.Clamp((float)settings.GetValue("camera", "edge_speed", 0.7f), 0.2f, 1.4f);
             _allHealth = (bool)settings.GetValue("hud", "all_health", false);
+            LoadRangeSettings(settings);
             if ((bool)settings.GetValue("display", "exclusive_fullscreen", false))
                 SetTerminalFullscreen(true, save: false);
         }
@@ -175,6 +177,7 @@ public partial class Sandbox
         settings.SetValue("camera", "edge_scroll", _edgeScroll);
         settings.SetValue("camera", "edge_speed", _edgeSpeed);
         settings.SetValue("display", "exclusive_fullscreen", _exclusiveFullscreen);
+        SaveRangeSettings(settings);
         if (settings.Save(TerminalSettingsPath) != Error.Ok) GD.PushWarning("Не удалось сохранить настройки HUD.");
     }
 
@@ -200,7 +203,7 @@ public partial class Sandbox
 
     private void AddMatchMenu()
     {
-        var layer = new CanvasLayer { Layer = 10 };
+        var layer = new CanvasLayer { Layer = 30 };
         AddChild(layer);
         var modal = new ColorRect { Color = new(0, 0, 0, 0.65f), Visible = false, Theme = _terminal!.Theme };
         layer.AddChild(modal);
@@ -232,6 +235,7 @@ public partial class Sandbox
         var health = new CheckButton { Text = "Показывать здоровье всех объектов", ButtonPressed = _allHealth, FocusMode = Control.FocusModeEnum.None };
         health.Toggled += enabled => { _allHealth = enabled; SaveTerminalSettings(); };
         menu.AddChild(health);
+        AddRangeSettings(menu);
         menu.AddChild(TerminalButton("Консоль разработчика", "F12", () => { ToggleMatchMenu(); _diagnostics!.Visible = !_diagnostics.Visible; }));
         menu.AddChild(TerminalButton("Перезапустить матч", "Сбросить текущий матч", () => { ToggleMatchMenu(); StartSession(); }));
         if (_startedFromSetup)
@@ -251,6 +255,9 @@ public partial class Sandbox
         }
         else _paused = _pauseBeforeMenu;
         _matchMenu.Visible = !_matchMenu.Visible;
+        _rtsOverlay!.ShowCursor = !_matchMenu.Visible;
+        if (DisplayServer.GetName() != "headless")
+            Input.MouseMode = _matchMenu.Visible ? Input.MouseModeEnum.Visible : Input.MouseModeEnum.Hidden;
         _session.SetPlayback(_playbackSpeed, _paused);
     }
 

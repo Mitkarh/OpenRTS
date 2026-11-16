@@ -30,9 +30,9 @@ public partial class Sandbox
                 Check(_activeType == poses.Single(p => p.Id.Value == 16).UnitType && HandleCustomKey(new InputEventKey(), Key.Q) && _armedCustom == "repair", "A same-frame selection left the previous action panel active");
                 SelectTypes(12);
                 var original = _catalog!;
-                var source = File.ReadAllText(ProjectSettings.GlobalizePath("res://content/units.yaml")).Replace("Cursor: grenade,", "Hotkey: A, Cursor: grenade,");
-                var weapon = WeaponCatalog.Load([new("weapons", File.ReadAllText(ProjectSettings.GlobalizePath("res://content/weapons.yaml")))]);
-                _catalog = UnitCatalog.Load([new("units", source), new("buildings", File.ReadAllText(ProjectSettings.GlobalizePath("res://content/buildings.yaml")))], original.Locomotion, weapon);
+                var source = File.ReadAllText(ProjectSettings.GlobalizePath("res://content/units/units.yaml")).Replace("Cursor: grenade,", "Hotkey: A, Cursor: grenade,");
+                var weapon = WeaponCatalog.Load([new("weapons", File.ReadAllText(ProjectSettings.GlobalizePath("res://content/weapons/weapons.yaml")))]);
+                _catalog = UnitCatalog.Load([new("units", source), new("buildings", File.ReadAllText(ProjectSettings.GlobalizePath("res://content/units/buildings.yaml")))], original.Locomotion, weapon);
                 Check(_catalog.Summary == original.Summary, "Hotkey changed gameplay content");
                 _panelRevision = -1; RefreshSelection();
                 HandleRtsKey(new InputEventKey(), Key.A); Check(_armedCustom == "grenade" && _armedAction is null, "Custom A lost to standard attack-move");
@@ -147,12 +147,15 @@ public partial class Sandbox
                 UpdateCommandPanel(lease);
                 Check(!_upgradeButtons["rockets"].Disabled && _upgradeButtons.Count == 4, "Supported APC variants are missing");
                 _upgradeButtons["rockets"].EmitSignal(BaseButton.SignalName.Pressed);
+                // Earlier builders are across the map, outside the automatic support radius.
+                _session!.Submit(CommandKind.Spawn, apc.Current with { X = apc.Current.X + 2048 },
+                    unitType: _catalog!.Units.ToList().FindIndex(u => u.Id == "construction-engineer"), owner: 1);
                 _actionsCheck = 12; Steps(270); return;
             }
             if (_actionsCheck == 12 && tick >= 749)
             {
                 var apc = poses.Single(p => _catalog!.Units[p.UnitType].Id == "medium-apc");
-                Check(apc.Upgrade.Completed == "rockets", "An engineer did not complete the selected APC variant");
+                Check(apc.Upgrade.Completed == "rockets", $"An engineer did not complete the selected APC variant: {apc.Upgrade}");
                 GD.Print("OPENRTS_ACTIONS:PASS command panel, production, factory and APC upgrades, boarding and unload");
                 _verificationDone = true; GetTree().Quit();
             }
