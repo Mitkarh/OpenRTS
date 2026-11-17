@@ -1,0 +1,45 @@
+{
+  "baseRevision": "a12d753e9462c00b059f55c8c01945897e8742a5",
+  "variant": "B3 working tree",
+  "date": "2026-11-18",
+  "sdk": "10.0.105",
+  "godot": "4.7.2 .NET",
+  "gpu": "Apple M3 Max, OpenGL 4.1 Compatibility",
+  "checks": {
+    "sceneExtraction": 43,
+    "editor": 51,
+    "mapsRegression": 14,
+    "runtimePresentation": "PASS",
+    "exportReleaseBuild": "0 warnings / 0 errors"
+  },
+  "contentFingerprint": "DF7923058812D42A0E92873BAD2243ACFB71D71470EC42F5A8F2FDE63884574B",
+  "gameplayFingerprint": "DD935D6C0C90B666D5A9CB12A721EE5F8141EEBF2EC7949DC58607CA7DB04615",
+  "dataFingerprint": "753F634036739206D5595AACDE2A4A0FDA2B377AB0A87D34C39E8FE24960A5A2",
+  "hosts": {
+    "headless": {
+      "Tick": 32,
+      "EntityCount": 10,
+      "StateHash": "B69CFE2AE0DAAF9D15D31FC199600EC1A653842481A69B7177C5A56383B24BF9"
+    },
+    "godot": {
+      "Tick": 32,
+      "EntityCount": 10,
+      "StateHash": "B69CFE2AE0DAAF9D15D31FC199600EC1A653842481A69B7177C5A56383B24BF9"
+    }
+  },
+  "preview": {
+    "sprites": 6,
+    "allocatedFrameBatches": 87,
+    "width": 1280,
+    "height": 800,
+    "sha256": "6f2bbcd125e0a643e87636a61f6d7ba4206c2c202538fcc4b710387ff86ff235"
+  },
+  "losslessImportsPinned": 57,
+  "sourcePngChanges": false,
+  "spriteFrameRewrites": false,
+  "limits": [
+    "No full native GUI interaction pass",
+    "No B4 entry loader / export package",
+    "No large-map editor performance claim"
+  ]
+}

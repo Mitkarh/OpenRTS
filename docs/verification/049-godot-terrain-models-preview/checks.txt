@@ -1,0 +1,28 @@
+/tmp/openrts-b3-final-verify.log
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+OPENRTS_AUTHORING_CHECKS:43 passed
+ERROR: Parameter "t" is null.
+ERROR: OpenRTS authoring: res://artifacts/maps/editor-saved.tscn::Patrol/Rifleman:1:1 [scene-authoring-sample.objects.patrol/rifle]: Unit 'rifleman' at (12288, 12288): Initial terrain does not permit stopping. (Parameter 'position')
+ERROR: OpenRTS authoring: res://artifacts/maps/editor-saved.tscn::Patrol/Tank:1:1 [objects.patrol/tank.type]: Unknown unit 'missing'.
+OPENRTS_MAP_EDITOR_CHECKS:51 passed
+/tmp/openrts-b3-maps.log
+14 OpenRTS checks passed; 0 failed.
+/tmp/openrts-b3-export-build.log
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+/tmp/openrts-b3-headless.log
+OPENRTS_SIMULATION:{"Tick":32,"EntityCount":10,"StateHash":"B69CFE2AE0DAAF9D15D31FC199600EC1A653842481A69B7177C5A56383B24BF9"}
+/tmp/openrts-b3-simulation-stdout.log
+ERROR: Condition "ret != noErr" is true. Returning: ""
+OPENRTS_SIMULATION:{"Tick":32,"EntityCount":10,"StateHash":"B69CFE2AE0DAAF9D15D31FC199600EC1A653842481A69B7177C5A56383B24BF9"}
+/tmp/openrts-b3-presentation-stdout.log
+ERROR: Condition "ret != noErr" is true. Returning: ""
+OPENRTS_WALK_EXPOSURE:PASS torso luminance spread=6.13%
+OPENRTS_COMBAT_PRESENTATION:PASS independent weapons, projectiles, impacts, repair action/cursor and three batched effect nodes
+OPENRTS_PRESENTATION:PASS alpha sprites, directional and four-frame infantry walking, layered turret, concurrent states, weighted/pingpong timing, 10000-unit buffers and terrain resources
+OPENRTS_SIMULATION:{"Tick":12,"EntityCount":20,"StateHash":"893F5E7208DA7886D7F7855557BA9999EF201A00E8CF44EA94847AD8046A146D"}
+/tmp/openrts-b3-capture-stdout.log
+OPENRTS_MAP_PREVIEW:6 sprites; 87 batches; 1280x800; /tmp/openrts-b3-preview.png

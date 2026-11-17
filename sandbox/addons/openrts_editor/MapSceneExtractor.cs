@@ -16,7 +16,7 @@ public static class MapSceneExtractor
         internal readonly HashSet<int> Orders = [];
     }
 
-    public static MapSource Extract(OpenRtsMap root)
+    public static MapSource Extract(OpenRtsMap root, OpenRtsTerrainStroke? pendingStroke = null)
     {
         ArgumentNullException.ThrowIfNull(root);
         Source Origin(Node node) => new($"{(root.SceneFilePath.Length == 0 ? "<unsaved-scene>" : root.SceneFilePath)}::{root.GetPathTo(node)}", 1, 1);
@@ -85,9 +85,9 @@ public static class MapSceneExtractor
         foreach (Node child in root.GetChildren()) Visit(child, Transform3D.Identity, initial, false, 1);
         if (!root.IsSkirmish) slots.AddRange(root.FixtureSlots.Select(id => new MapSlotSource(id)));
         objects.Sort((a, b) => CompareOrder(a.Order, b.Order));
-        int cells = checked(root.Size.X * root.Size.Y);
+        var layers = MapTerrain.Compose(root, pendingStroke);
         return new(root.MapId, root.IsSkirmish, root.Size.X, root.Size.Y,
-            new([root.TerrainId], new int[cells]), new([root.VisualId], new int[cells]), slots,
+            layers.Terrain, layers.Visual, slots,
             objects.Select(o => o.Object).ToArray(), origin: Origin(root));
     }
 

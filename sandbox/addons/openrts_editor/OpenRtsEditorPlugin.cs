@@ -30,6 +30,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         Button("Add reusable group", () => AddMarker(new OpenRtsMapGroup()));
         Button("Duplicate selected", DuplicateSelected);
         Button("Repair IDs and order", RepairIdentities);
+        SetupTerrainTools();
         Button("Extract source", () => _ = BuildAsync(sourceOnly: true));
         Button("Compile map", () => _ = BuildAsync());
         Button("Cancel compilation", () => Invalidate("Cancelled; previous file retained."));
@@ -57,6 +58,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
     public override void _ExitTree()
     {
         Invalidate("Plugin disabled.");
+        CancelStroke(); ClearPreview(); _selectedTransforms.Clear();
         SceneChanged -= OnSceneChanged;
         GetUndoRedo().VersionChanged -= OnEdited;
         RemoveNode3DGizmoPlugin(_gizmos); _gizmos.Dispose();
@@ -75,9 +77,11 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
 
     private void LoadTypes()
     {
+        CancelStroke();
         var catalog = LoadCatalog(Root());
         _types.Clear();
         foreach (var unit in catalog.Units) _types.AddItem(unit.Id);
+        LoadPreviewCatalog(Root(), catalog);
         _status.Text = $"{catalog.Units.Count} types. Select a marker to edit its properties in Inspector.";
     }
 
@@ -178,6 +182,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
 
     internal async Task BuildAsync(bool sourceOnly = false)
     {
+        try { CommitStroke(); } catch (Exception error) { Fail(error); return; }
         Invalidate("Extracting…");
         var stop = _build = new(); int generation = _generation;
         try
@@ -189,7 +194,12 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
             var source = MapSceneExtractor.Extract(root);
             string snapshot = source.Write();
             _status.Text = "Compiling…";
-            var compiled = await Task.Run(() => MapCompiler.Compile(source, catalog, stop.Token), stop.Token);
+            var compiled = await Task.Run(() =>
+            {
+                var result = MapCompiler.Compile(source, catalog, stop.Token);
+                if (!sourceOnly) ValidateObjects(source, catalog);
+                stop.Token.ThrowIfCancellationRequested(); return result;
+            }, stop.Token);
             stop.Token.ThrowIfCancellationRequested();
             if (generation != _generation || !GodotObject.IsInstanceValid(root) || EditorInterface.Singleton.GetEditedSceneRoot() != root ||
                 root.CompiledPath != outputPath || root.ContentManifest != contentPath || MapSceneExtractor.Extract(root).Write() != snapshot ||
@@ -203,7 +213,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
                 SaveSource(compiled.Source.Write(), output, stop.Token);
             }
             else MapCompiler.Save(compiled, output, stop.Token);
-            _status.Text = $"{(sourceOnly ? "Extracted" : "Compiled")} {compiled.Map.Id}\n{compiled.Source.Objects.Count} objects, {compiled.Source.Slots.Count} slots\n{ProjectSettings.LocalizePath(output)}\nStructural validation only; match placement is checked at world creation.";
+            _status.Text = $"{(sourceOnly ? "Extracted" : "Compiled")} {compiled.Map.Id}\n{compiled.Source.Objects.Count} objects, {compiled.Source.Slots.Count} slots\n{ProjectSettings.LocalizePath(output)}\n{(sourceOnly ? "Structural validation only." : "Placed objects validated; starting armies are checked at match creation.")}";
             EditorInterface.Singleton.GetResourceFilesystem().Scan();
         }
         catch (OperationCanceledException) { if (generation == _generation) _status.Text = "Cancelled/stale; previous file retained."; }
@@ -222,9 +232,9 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
-    private void OnEdited() => Invalidate("Changed; compile again.");
-    private void OnSceneChanged(Node node) { _types.Clear(); Invalidate("Scene changed; load its type catalog."); }
+    private void OnEdited() { _refresh = true; Invalidate("Changed; compile again."); }
+    private void OnSceneChanged(Node node) { CancelStroke(); ClearPreview(); _selectedTransforms.Clear(); _types.Clear(); _refresh = true; Invalidate("Scene changed; load its type catalog."); }
     internal void Invalidate(string message) { _generation++; _build?.Cancel(); _status.Text = message; }
-    private void Fail(Exception error) { _status.Text = "Failed: " + error.Message; GD.PushError("OpenRTS authoring: " + error.Message); }
+    private void Fail(Exception error) { _lastError = error; _status.Text = "Failed: " + error.Message; GD.PushError("OpenRTS authoring: " + error.Message); }
 }
 #endif

@@ -2,6 +2,8 @@
 
 **Дата:** 18 ноября 2026. **Статус:** реализован B2 поверх [контракта 047](047-map-compilation.md). [План B](../research/godot-integration/stage-b-design.md), [проверки](../verification/048-godot-map-authoring.md).
 
+**Продолжение:** [B3 / 049](049-godot-terrain-models-preview.md) реализовал brushes/Models/physical preview и усилил compile-проверку authored objects; описание ниже фиксирует первоначальный срез B2.
+
 ## Поставка и граница ответственности
 
 Addon находится в [sandbox/addons/openrts_editor](../../sandbox/addons/openrts_editor/), включён для Sandbox через `editor_plugins`. Его можно выключить в Project Settings → Plugins. Godot .NET 4.7.2 собирает C# plugin до включения; compiler/Core/Gameplay не зависят от addon. Новых пакетов и сборок нет. В другом Godot .NET проекте нужны исходники addon, ссылка на Content и включение этих `.cs` в compile items, если default items выключены.

@@ -101,53 +101,58 @@ public sealed class SpriteWorldView
         return MathF.Sqrt(squared) + 4;
     }
 
-    public SpriteWorldView(UnitCatalog units, ModelCatalog models, Func<uint, Color>? ownerColor = null)
+    public SpriteWorldView(UnitCatalog units, ModelCatalog models, Func<uint, Color>? ownerColor = null, Func<string, SpriteFrames>? framesFor = null)
     {
-        _ownerColor = ownerColor ?? (_ => Colors.White);
-        _workFlights = new(units.Units.Select(p => p.Flight?.WorkRoaming ?? false).ToArray());
-        models.ValidateUnits(units);
-        _models = new Model[units.Units.Count];
-        for (int i = 0; i < _models.Length; i++)
+        try
         {
-            var type = units.Units[i]; var binding = units.Presentations[i];
-            if (binding.Model is null) throw new ArgumentException("Sprite rendering requires a Model binding for " + type.Id);
-            var definition = models.Models[binding.Model]; var parts = new Part[definition.Parts.Count];
-            for (int p = 0; p < parts.Length; p++)
+            _ownerColor = ownerColor ?? (_ => Colors.White);
+            framesFor ??= GD.Load<SpriteFrames>;
+            _workFlights = new(units.Units.Select(p => p.Flight?.WorkRoaming ?? false).ToArray());
+            models.ValidateUnits(units);
+            _models = new Model[units.Units.Count];
+            for (int i = 0; i < _models.Length; i++)
             {
-                var part = definition.Parts[p];
-                var frames = GD.Load<SpriteFrames>(part.Resource) ?? throw new ArgumentException("Missing SpriteFrames: " + part.Resource);
-                var sequences = new Sequence[]?[type.Animations.Count]; var animations = new ModelAnimation?[sequences.Length];
-                for (int a = 0; a < sequences.Length; a++)
+                var type = units.Units[i]; var binding = units.Presentations[i];
+                if (binding.Model is null) throw new ArgumentException("Sprite rendering requires a Model binding for " + type.Id);
+                var definition = models.Models[binding.Model]; var parts = new Part[definition.Parts.Count];
+                for (int p = 0; p < parts.Length; p++)
                 {
-                    var animation = definition.Animations[type.Animations[a]];
-                    if (!animation.Parts.Contains(part.Id)) continue;
-                    using var name = new StringName(animation.Sequence);
-                    if (part.Facings < 2 || frames.HasAnimation(name))
-                        sequences[a] = [LoadSequence(frames, name, part.Resource)];
-                    else
+                    var part = definition.Parts[p];
+                    var frames = framesFor(part.Resource) ?? throw new ArgumentException("Missing SpriteFrames: " + part.Resource);
+                    var sequences = new Sequence[]?[type.Animations.Count]; var animations = new ModelAnimation?[sequences.Length];
+                    for (int a = 0; a < sequences.Length; a++)
                     {
-                        var directions = new Sequence[part.Facings];
-                        for (int facing = 0; facing < directions.Length; facing++)
+                        var animation = definition.Animations[type.Animations[a]];
+                        if (!animation.Parts.Contains(part.Id)) continue;
+                        using var name = new StringName(animation.Sequence);
+                        if (part.Facings < 2 || frames.HasAnimation(name))
+                            sequences[a] = [LoadSequence(frames, name, part.Resource)];
+                        else
                         {
-                            using var variant = new StringName(animation.Sequence + "-" + facing.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                            directions[facing] = LoadSequence(frames, variant, part.Resource);
+                            var directions = new Sequence[part.Facings];
+                            for (int facing = 0; facing < directions.Length; facing++)
+                            {
+                                using var variant = new StringName(animation.Sequence + "-" + facing.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                                directions[facing] = LoadSequence(frames, variant, part.Resource);
+                            }
+                            sequences[a] = directions;
                         }
-                        sequences[a] = directions;
+                        animations[a] = animation;
                     }
-                    animations[a] = animation;
+                    if (sequences[type.IdleAnimation] is null) throw new ArgumentException($"{definition.Id}.{part.Id}: idle must bind every part.");
+                    uint Mask(IEnumerable<string>? names) { uint mask = 0; if (names is not null) foreach (string name in names) mask |= type.StateMask(name); return mask; }
+                    uint State(string? name) => name is null ? 0 : type.StateMask(name);
+                    parts[p] = new(part, sequences, animations, part.Mount is null ? -1 : type.Weapons.ToList().FindIndex(m => m.Id == part.Mount),
+                        Mask(part.VisibleWhen), Mask(part.HiddenWhen), State(part.SpinWhen), State(part.LoopWhen), part.LoopAnimation is null ? -1 : type.AnimationIndex(part.LoopAnimation));
                 }
-                if (sequences[type.IdleAnimation] is null) throw new ArgumentException($"{definition.Id}.{part.Id}: idle must bind every part.");
-                uint Mask(IEnumerable<string>? names) { uint mask = 0; if (names is not null) foreach (string name in names) mask |= type.StateMask(name); return mask; }
-                uint State(string? name) => name is null ? 0 : type.StateMask(name);
-                parts[p] = new(part, sequences, animations, part.Mount is null ? -1 : type.Weapons.ToList().FindIndex(m => m.Id == part.Mount),
-                    Mask(part.VisibleWhen), Mask(part.HiddenWhen), State(part.SpinWhen), State(part.LoopWhen), part.LoopAnimation is null ? -1 : type.AnimationIndex(part.LoopAnimation));
+                int drawLayers = 0;
+                foreach (var part in definition.Parts) drawLayers |= 1 << (int)(part.DrawLayer ?? definition.DrawLayer);
+                _models[i] = new(type, parts, type.States.Select(name => definition.States[name]).ToArray(), definition.DamagedState is null ? 0 : type.StateMask(definition.DamagedState), definition.DestroyedState is null ? 0 : type.StateMask(definition.DestroyedState), type.States.Contains("nearly-destroyed") ? type.StateMask("nearly-destroyed") : 0,
+                    definition.DrawLayer, drawLayers, definition.SortOffset, definition.Parts.Max(part => part.Layer) + 1);
+                MaximumParts = Math.Max(MaximumParts, parts.Length);
             }
-            int drawLayers = 0;
-            foreach (var part in definition.Parts) drawLayers |= 1 << (int)(part.DrawLayer ?? definition.DrawLayer);
-            _models[i] = new(type, parts, type.States.Select(name => definition.States[name]).ToArray(), definition.DamagedState is null ? 0 : type.StateMask(definition.DamagedState), definition.DestroyedState is null ? 0 : type.StateMask(definition.DestroyedState), type.States.Contains("nearly-destroyed") ? type.StateMask("nearly-destroyed") : 0,
-                definition.DrawLayer, drawLayers, definition.SortOffset, definition.Parts.Max(part => part.Layer) + 1);
-            MaximumParts = Math.Max(MaximumParts, parts.Length);
         }
+        catch { Node.Free(); throw; }
     }
 
     private Sequence LoadSequence(SpriteFrames frames, StringName name, string resource)

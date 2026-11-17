@@ -15,6 +15,7 @@ public partial class MapAuthoringChecks : Node
         try
         {
             Run();
+            MapTerrainChecks.Run(Check);
             GD.Print($"OPENRTS_AUTHORING_CHECKS:{_checks} passed"); GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }

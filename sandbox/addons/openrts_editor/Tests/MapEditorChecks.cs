@@ -28,6 +28,7 @@ internal static class MapEditorChecks
             plugin.ShowDock(); Check(plugin.DockAttached, "Editor dock was not attached.");
             root.CompiledPath = "res://artifacts/maps/editor-check.ortmap.json";
             var original = MapSceneExtractor.Extract(root).Write();
+            MapTerrainEditorChecks.Run(plugin, root, Check);
             var undo = plugin.GetUndoRedo().GetHistoryUndoRedo(plugin.GetUndoRedo().GetObjectHistoryId(root));
             editor.GetSelection().Clear();
             var obj = new OpenRtsMapObject { TypeId = "rifleman" };
@@ -90,9 +91,12 @@ internal static class MapEditorChecks
             Check(compiled.Source.Objects.Count == 3, "Editor output did not contain three types.");
             await plugin.BuildAsync(sourceOnly: true);
             Check(File.Exists(path.Replace(".ortmap.json", ".mapsource.json", StringComparison.Ordinal)), "Source extraction did not write a document.");
+            await MapTerrainEditorChecks.Build(plugin, root, Check);
             string good = File.ReadAllText(path); root.GetNode<OpenRtsMapGroup>("Patrol").GetNode<OpenRtsMapObject>("Tank").TypeId = "missing";
             await plugin.BuildAsync();
             Check(File.ReadAllText(path) == good && plugin.Status.StartsWith("Failed", StringComparison.Ordinal), "Failed compile overwrote artifact.");
+            plugin.SelectErrorSource();
+            Check(editor.GetSelection().GetSelectedNodes().Single() == root.GetNode("Patrol/Tank"), "Diagnostic did not select its source marker.");
             root.GetNode<OpenRtsMapGroup>("Patrol").GetNode<OpenRtsMapObject>("Tank").TypeId = "tank";
             pending = plugin.BuildAsync();
             editor.SetPluginEnabled("openrts_editor", false);

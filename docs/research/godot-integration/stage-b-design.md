@@ -1,6 +1,6 @@
 # Этап B — редактор карт Godot и независимая компиляция
 
-**План:** 17 ноября 2026 года; уточнён 18 ноября. **Статус:** B0–B1 реализованы: [контракт 047](../../decisions/047-map-compilation.md), [проверки](../../verification/047-map-compilation.md). B2 добавил [опциональный scene authoring addon и извлечение 048](../../decisions/048-godot-map-authoring.md). B3–B7 и запуск entry сцены карты ещё впереди; реализованные границы закреплены в 047/048, остальные операции остаются проектом.
+**План:** 17 ноября 2026 года; уточнён 18 ноября. **Статус:** B0–B1 реализованы: [контракт 047](../../decisions/047-map-compilation.md), [проверки](../../verification/047-map-compilation.md). B2 добавил [опциональный scene authoring addon и извлечение 048](../../decisions/048-godot-map-authoring.md). B3 добавил [terrain brushes и Models/physical preview 049](../../decisions/049-godot-terrain-models-preview.md). B4–B7 и запуск entry сцены карты ещё впереди; реализованные границы закреплены в 047/048/049, остальные операции остаются проектом.
 
 [Общий план B/C/D](roadmap.md) · [Network/replay и переиспользование](network-reuse.md). Источники текущего поведения — OpenRTS `afb7aef5a46bb937b39c8b63269e935c2a5b91da`; рабочее дерево при чтении чистое. Ссылки на код приведены рядом с соответствующими ограничениями.
 
@@ -183,11 +183,13 @@ P0 — первый полезный сквозной результат; P1 —
 
 ### B2 — authoring addon и извлечение
 
-**Выполнен:** map/object/start/group C# wrappers с Inspector, палитра каталога, простые viewport gizmos, explicit IDs/контекст prefab/order, undoable add/duplicate/repair, сохранение обычных сцен. Snapshot извлекается на owner thread; общий compiler работает на worker, cancel/stale/plugin disable не заменяют artifact. Есть sample с тремя типами и двумя starts, Godot/editor checks и запуск результата headless. Native Duplicate/Paste требует явного Repair при конфликтующих IDs; автоматического переписывания exported properties внутри чужой editor action нет. Terrain пока однородный; подробности и ограничения — 048.
+**Выполнен:** map/object/start/group C# wrappers с Inspector, палитра каталога, простые viewport gizmos, explicit IDs/контекст prefab/order, undoable add/duplicate/repair, сохранение обычных сцен. Snapshot извлекается на owner thread; общий compiler работает на worker, cancel/stale/plugin disable не заменяют artifact. Есть sample с тремя типами и двумя starts, Godot/editor checks и запуск результата headless. Native Duplicate/Paste требует явного Repair при конфликтующих IDs; автоматического переписывания exported properties внутри чужой editor action нет. На срезе B2 terrain был однородным; B3 ниже добавил кисти. Подробности B2 — 048.
 
 Добавить root, placement/start wrappers, Inspector, IDs/order, undo и сохранение; извлечение snapshot в input B1. Выход: три готовых типа размещаются в обычном Godot viewport, сохраняются, компилируются и открываются headless. Проверить duplicate/subscene context/reparent, отмену и неактуальный ответ worker. Начальный preview может быть простым; полный editor не нужен до сквозного результата.
 
 ### B3 — terrain и качественный preview
+
+**Выполнен:** отдельные terrain/visual и shaped кисти через TerrainLayout, один undo на drag, сохранённые strokes/quarter-turns, transient SpriteWorldView/Models и TerrainView preview. Gizmos показывают Body и sparse footprint без вывода физики из Model.Size; есть semantic ID selection и выбор источника ошибки. Публикация addon проверяет authored objects через прежние placement rules. [Контракт 049](../../decisions/049-godot-terrain-models-preview.md), [проверки](../../verification/049-godot-terrain-models-preview.md). Расширенный map bake, большой editor benchmark, entry loader/export сюда не включены.
 
 Подключить плоские brushes/visual bindings, bounds/footprint/body gizmos, выбор по semantic ID и ошибку по полю. Использовать нынешние Models для узнаваемых объектов. Выход: редактируемая terrain-карта и независимые visual/terrain изменения, undo одного brush stroke, неправильная геометрия не проходит. Если полные preview Nodes тормозят, сравнить облегчённые markers и batches выбранных/видимых объектов; не менять Frent ради editor FPS.
 
@@ -220,4 +222,4 @@ P0 — первый полезный сквозной результат; P1 —
 | Lifecycle | Plugin disable, закрытие сцены, C# rebuild, stop/restart и export не оставляют owner/ресурсы |
 | Опциональность | Установленная карта играет без editor addon; .NET headless не грузит Godot/Network |
 
-Реализация всего B завершена после B7 для заявленного профиля. Независимые проверки идут через `tools/dev.sh test`, Godot authoring/editor — через `tools/dev.sh verify-authoring`; QA и измерения оформляются отдельно. Выполнение B0–B2 не означает завершения оставшихся срезов.
+Реализация всего B завершена после B7 для заявленного профиля. Независимые проверки идут через `tools/dev.sh test`, Godot authoring/editor — через `tools/dev.sh verify-authoring`; QA и измерения оформляются отдельно. Выполнение B0–B3 не означает завершения оставшихся срезов.
