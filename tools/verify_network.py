@@ -16,8 +16,10 @@ parser.add_argument('--host-fog-hold', type=int, default=0)
 parser.add_argument('--spectator', action='store_true', help='Add a spectator to the NET3 match')
 parser.add_argument('--net3', action='store_true', help='Three human clients plus a host-controlled AI on Crossroads')
 parser.add_argument('--reconnect', action='store_true', help='Break guest transport and return through the real in-game button')
+parser.add_argument('--slow-client-ms', type=int, default=0, help='Delay one client UI verification while its network owner keeps running')
 parser.add_argument('--output', type=Path)
 args = parser.parse_args()
+if not 0 <= args.slow_client_ms <= 10000: parser.error('--slow-client-ms must be 0..10000')
 root = Path(__file__).resolve().parent.parent
 output = (args.output or Path(tempfile.mkdtemp(prefix='openrts-network-'))).resolve()
 output.mkdir(parents=True, exist_ok=True)
@@ -86,6 +88,9 @@ try:
         command += ['--path', str(root / 'sandbox'), '--', '--verify-network=' + role,
                     '--network-port=' + str(relay_port if args.reconnect and role == 'join' else port), '--network-pin-file=' + str(pin)]
         if args.reconnect: command += ['--network-reconnect']
+        if args.spectator: command += ['--network-spectators=1']
+        if args.slow_client_ms and role in (('join3' if args.net3 else 'join'), 'watch'):
+            command += ['--network-ui-delay-ms=' + str(args.slow_client_ms)]
         if role == 'host' and args.host_fog_hold:
             command += ['--fog-hold=' + str(args.host_fog_hold)]
         if args.net3:

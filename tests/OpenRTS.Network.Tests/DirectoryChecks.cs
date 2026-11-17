@@ -8,6 +8,29 @@ using OpenRTS.Network;
 
 internal static class DirectoryChecks
 {
+    private sealed class Faults(bool failConfirm = false, bool changeCount = false) : DelegatingHandler(new HttpClientHandler { AllowAutoRedirect = false })
+    {
+        private int _failConfirm = failConfirm ? 1 : 0;
+        internal readonly System.Collections.Concurrent.ConcurrentQueue<Guid> Confirmed = new();
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken stop)
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/confirm", StringComparison.Ordinal))
+            {
+                var receipt = System.Text.Json.JsonSerializer.Deserialize<MatchAdmissionReceipt>(await request.Content!.ReadAsStringAsync(stop), DirectoryJson.Options)!;
+                Confirmed.Enqueue(receipt.Ticket);
+                if (Interlocked.Exchange(ref _failConfirm, 0) != 0)
+                    return new(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("{\"code\":\"busy\",\"message\":\"Retry confirm\"}") };
+            }
+            var response = await base.SendAsync(request, stop);
+            if (changeCount && request.RequestUri.AbsolutePath.EndsWith("/join", StringComparison.Ordinal) && response.IsSuccessStatusCode)
+            {
+                var grant = System.Text.Json.JsonSerializer.Deserialize<MatchJoinGrant>(await response.Content.ReadAsStringAsync(stop), DirectoryJson.Options)!;
+                response.Content.Dispose();
+                response.Content = new ByteArrayContent(System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(grant with { PlayerCount = grant.PlayerCount == 2 ? 4 : 2 }, DirectoryJson.Options));
+            }
+            return response;
+        }
+    }
     private sealed class Clock : TimeProvider
     {
         private DateTimeOffset _now = new(2026, 11, 17, 12, 0, 0, TimeSpan.Zero);
@@ -23,7 +46,7 @@ internal static class DirectoryChecks
     }
     private static AccountSession Login(MatchDirectory service, DirectoryIdentity identity)
     { var challenge = service.Challenge(new("Player", identity.PublicKey)); return service.Login(new(challenge.Id, identity.SignLogin(challenge))); }
-    private static MatchAdvertisement Game(Guid? match = null, bool hidden = false) => new(match ?? Guid.NewGuid(), 1, StarSession.ProtocolVersion,
+    private static MatchAdvertisement Game(Guid? match = null, bool hidden = false) => new(match ?? Guid.NewGuid(), 1, StarSession.ProtocolVersion, 2,
         "net5", "content", "Test match", "test-map", new string('A', 64), MatchPhase.Lobby, [2], 1, 0,
         [new(MatchEndpointKind.Direct, "127.0.0.1", 17771)], hidden);
     private static int Port()
@@ -65,6 +88,77 @@ internal static class DirectoryChecks
     }
     internal static void Run(Action<string, Action> test)
     {
+        foreach (int count in new[] { 2, 4, 8 })
+            test($"NET5 signed capacity bootstraps {count} sides including AI and closed slots", () => {
+                using var service = new Service(); using var owner = new MatchDirectoryClient(service.Url, "Host");
+                using var player = new MatchDirectoryClient(service.Url, "Player"); using var observer = new MatchDirectoryClient(service.Url, "Observer");
+                owner.ConnectAsync().GetAwaiter().GetResult();
+                var d = new MatchDescriptor("net5", "content", "capacity", 42, EndTick: 0); int port = Port();
+                SimulationWorld World() { var w = new SimulationWorld([new("unit", 100)], 65536, 65536, 42); for (uint p = 1; p <= count; p++) w.AddInitialUnit(0, new((int)p * 4096, 2048), p); return w; }
+                using var host = new StarSession(true, "127.0.0.1", port, null, d, World, Path.Combine(service.Directory, "host"), playerCount: count,
+                    aiPlayers: count > 2 ? [3] : [], closedPlayers: Enumerable.Range(4, Math.Max(0, count - 3)).Select(p => (uint)p).ToArray(), planAi: (_, _) => [], admissionPolicy: new(owner.Info!.SigningKey));
+                Wait(() => host.Status.StartsWith("Лобби", StringComparison.Ordinal), host);
+                var game = Game(host.State.Match) with { PlayerCount = count, Fingerprint = host.Fingerprint, Endpoints = [new(MatchEndpointKind.Direct, "127.0.0.1", port)] };
+                var lease = owner.RegisterAsync(game).GetAwaiter().GetResult();
+                Check(player.FindAsync("net5", "content").Result.Single().Game.PlayerCount == count);
+                var grant = player.JoinAsync(game.Match, new(Guid.NewGuid(), MatchAccessRole.Player)).GetAwaiter().GetResult();
+                Check(grant.PlayerCount == count);
+                using (var wrong = new StarSession(false, "127.0.0.1", port, host.Fingerprint, d, World, Path.Combine(service.Directory, "wrong"),
+                    admission: grant with { PlayerCount = count == 2 ? 4 : 2 }, accountIdentity: player.Identity))
+                { Wait(() => wrong.Completion.IsCompleted, host); Check(wrong.Completion.IsFaulted && !host.State.Slots[1].Connected); }
+                using var guest = new StarSession(false, "127.0.0.1", port, host.Fingerprint, d, World, Path.Combine(service.Directory, "guest"), admission: grant, accountIdentity: player.Identity);
+                var watch = observer.JoinAsync(game.Match, new(Guid.NewGuid(), MatchAccessRole.Spectator)).GetAwaiter().GetResult();
+                using var spectator = new StarSession(false, "127.0.0.1", port, host.Fingerprint, d, World, Path.Combine(service.Directory, "watch"), player: 0, admission: watch, accountIdentity: observer.Identity);
+                Wait(() => host.State.Slots[1].Connected && host.State.Spectators == 1 && guest.State.Revision == host.State.Revision, host, guest, spectator);
+                Check(guest.State.Slots.Count == count && spectator.State.Slots.Count == count);
+                host.Ready(host.State.Revision); guest.Ready(guest.State.Revision); Wait(() => host.State.Slots.Where(s => s.Controller == SlotController.Human).All(s => s.Ready), host, guest, spectator);
+                host.Start(); Wait(() => Tick(guest) >= 8, host, guest, spectator); host.Stop();
+                Wait(() => host.Completion.IsCompleted && guest.Completion.IsCompleted && spectator.Completion.IsCompleted, host, guest, spectator);
+                foreach (var session in new[] { guest, spectator })
+                { Check(session.Completion.Result == host.Completion.Result); Check(File.ReadAllBytes(session.JournalPath).SequenceEqual(File.ReadAllBytes(host.JournalPath))); }
+                using var journal = File.OpenRead(host.JournalPath); Check(StarJournal.Replay(journal, d, World) == host.Completion.Result);
+            });
+        test("NET5 rejects missing capacity, count changes and unsigned grant tampering", () => {
+            using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256); using var directory = new MatchDirectory(key); using var identity = new DirectoryIdentity();
+            var account = Login(directory, identity); var game = Game();
+            foreach (var invalid in new[] { game with { PlayerCount = 0 }, game with { PlayerCount = 9 }, game with { AvailablePlayers = [3] }, game with { Protocol = 4 } })
+                Reject(() => directory.Register(account.Token, invalid), "invalid_match");
+            var lease = directory.Register(account.Token, game);
+            Reject(() => directory.Heartbeat(account.Token, game.Match, lease.Token, game with { Revision = 2, PlayerCount = 4 }), "stale_revision");
+            using var service = new Service(); using var owner = new MatchDirectoryClient(service.Url, "Host"); using var handler = new Faults(changeCount: true);
+            using var client = new MatchDirectoryClient(service.Url, "Player", handler);
+            var published = Game(); owner.RegisterAsync(published).GetAwaiter().GetResult();
+            Reject(() => client.JoinAsync(published.Match, new(Guid.NewGuid(), MatchAccessRole.Player)).GetAwaiter().GetResult());
+        });
+        test("NET5 retries transient Confirm and skips a cancelled receipt without blocking later admissions", () => {
+            using var service = new Service(); using var faults = new Faults(failConfirm: true);
+            using var owner = new MatchDirectoryClient(service.Url, "Host", faults); using var player = new MatchDirectoryClient(service.Url, "Player");
+            using var cancelled = new MatchDirectoryClient(service.Url, "Cancelled"); using var observer = new MatchDirectoryClient(service.Url, "Observer");
+            owner.ConnectAsync().GetAwaiter().GetResult(); int port = Port(); var d = new MatchDescriptor("net5", "content", "receipts", 42, EndTick: 0);
+            SimulationWorld World() { var w = new SimulationWorld([new("unit", 100)], 16384, 16384, 42); w.AddInitialUnit(0, new(2048, 2048), 1); return w; }
+            using var host = new StarSession(true, "127.0.0.1", port, null, d, World, Path.Combine(service.Directory, "host"), admissionPolicy: new(owner.Info!.SigningKey));
+            Wait(() => host.Status.StartsWith("Лобби", StringComparison.Ordinal), host);
+            using var publication = new DirectoryListing(owner, host, "Receipts", "127.0.0.1", port, () => "map");
+            Wait(() => publication.Status.StartsWith("Игра опубликована", StringComparison.Ordinal), host);
+            var grant = player.JoinAsync(host.State.Match, new(Guid.NewGuid(), MatchAccessRole.Player)).GetAwaiter().GetResult();
+            using var guest = new StarSession(false, "127.0.0.1", port, host.Fingerprint, d, World, Path.Combine(service.Directory, "guest"), admission: grant, accountIdentity: player.Identity);
+            Wait(() => host.State.Slots[1].Connected, host, guest);
+            var old = cancelled.JoinAsync(host.State.Match, new(Guid.NewGuid(), MatchAccessRole.Spectator)).GetAwaiter().GetResult();
+            cancelled.CancelAsync(old.Match, old.Request).GetAwaiter().GetResult();
+            using var first = new StarSession(false, "127.0.0.1", port, host.Fingerprint, d, World, Path.Combine(service.Directory, "first"), player: 0, admission: old, accountIdentity: cancelled.Identity);
+            Wait(() => host.State.Spectators == 1, host, guest, first);
+            var next = observer.JoinAsync(host.State.Match, new(Guid.NewGuid(), MatchAccessRole.Spectator)).GetAwaiter().GetResult();
+            using var second = new StarSession(false, "127.0.0.1", port, host.Fingerprint, d, World, Path.Combine(service.Directory, "second"), player: 0, admission: next, accountIdentity: observer.Identity);
+            Wait(() => host.State.Spectators == 2 && guest.State.Revision == host.State.Revision, host, guest, first, second);
+            host.Ready(host.State.Revision); guest.Ready(guest.State.Revision); Wait(() => host.State.Slots.All(s => s.Ready), host, guest, first, second); host.Start();
+            Wait(() => publication.Status.StartsWith("Каталог недоступен", StringComparison.Ordinal), host, guest, first, second);
+            long tick = Tick(host); Wait(() => Tick(host) >= tick + 8, host, guest, first, second);
+            Wait(() => publication.Status.StartsWith("Игра опубликована", StringComparison.Ordinal), host, guest, first, second);
+            var state = player.FindAsync("net5", "content").Result.Single(); Check(state.ReservedPlayers == 0 && state.ReservedSpectators == 1);
+            var attempts = faults.Confirmed.ToArray(); Check(attempts.Length == 4 && attempts[0] == attempts[1] && attempts.Distinct().Count() == 3);
+            host.Stop(); Wait(() => host.Completion.IsCompleted && guest.Completion.IsCompleted && first.Completion.IsCompleted && second.Completion.IsCompleted, host, guest, first, second);
+            using var journal = File.OpenRead(host.JournalPath); Check(StarJournal.Replay(journal, d, World) == host.Completion.Result);
+        });
         test("NET5 tickets cannot outlive a lease or overlap re-registration after Close", () => {
             using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256); var clock = new Clock(); using var service = new MatchDirectory(key, clock);
             using var hostKey = new DirectoryIdentity(); using var oneKey = new DirectoryIdentity(); using var twoKey = new DirectoryIdentity();
@@ -163,11 +257,12 @@ internal static class DirectoryChecks
             gate.CheckProof(grant.Ticket, nonce, playerKey.SignAdmission(grant.Ticket, nonce));
             Reject(() => gate.CheckProof(grant.Ticket, nonce, attacker.SignAdmission(grant.Ticket, nonce)));
             Reject(() => gate.CheckProof(grant.Ticket, DirectoryIdentity.Secret(), playerKey.SignAdmission(grant.Ticket, nonce)));
-            Reject(() => gate.Redeem(grant.Ticket, Guid.NewGuid(), 2, game.Fingerprint, game.Rules, game.ContentHash));
-            Reject(() => gate.Redeem(grant.Ticket, game.Match, 0, game.Fingerprint, game.Rules, game.ContentHash));
+            Reject(() => gate.Redeem(grant.Ticket, Guid.NewGuid(), 2, game.Fingerprint, game.Rules, game.ContentHash, game.PlayerCount));
+            Reject(() => gate.Redeem(grant.Ticket, game.Match, 0, game.Fingerprint, game.Rules, game.ContentHash, game.PlayerCount));
+            Reject(() => gate.Redeem(grant.Ticket, game.Match, 2, game.Fingerprint, game.Rules, game.ContentHash, game.PlayerCount + 1));
             string corrupt = grant.Ticket[..^4] + "AAAA"; Reject(() => gate.Inspect(corrupt));
-            Check(gate.Redeem(grant.Ticket, game.Match, 2, game.Fingerprint, game.Rules, game.ContentHash).Account == player.Account.Id);
-            Reject(() => gate.Redeem(grant.Ticket, game.Match, 2, game.Fingerprint, game.Rules, game.ContentHash));
+            Check(gate.Redeem(grant.Ticket, game.Match, 2, game.Fingerprint, game.Rules, game.ContentHash, game.PlayerCount).Account == player.Account.Id);
+            Reject(() => gate.Redeem(grant.Ticket, game.Match, 2, game.Fingerprint, game.Rules, game.ContentHash, game.PlayerCount));
             clock.Advance(31); Reject(() => gate.Inspect(grant.Ticket));
         });
         test("NET5 HTTP directory, ticketed TLS fallback and service outage preserve replay", () => {

@@ -25,13 +25,18 @@ public sealed class DirectoryListing : IDisposable
                     try
                     {
                         var state = host.State;
-                        var game = new MatchAdvertisement(state.Match, state.Revision, StarSession.ProtocolVersion, host.Descriptor.Rules, host.Descriptor.ContentHash,
+                        var game = new MatchAdvertisement(state.Match, state.Revision, StarSession.ProtocolVersion, state.Slots.Count, host.Descriptor.Rules, host.Descriptor.ContentHash,
                             title, map(), host.Fingerprint, state.Phase, state.Slots.Where(s => s.Controller == SlotController.Human && !s.Connected).Select(s => s.Player).ToArray(),
                             state.Slots.Count(s => s.Connected), state.Spectators, endpoints, privateGame);
                         if (_lease is null) Volatile.Write(ref _lease, await client.RegisterAsync(game, _stop.Token));
                         else await client.HeartbeatAsync(_lease, game, _stop.Token);
-                        while (host.TryReadAdmission(out var receipt)) receipts.Enqueue(receipt);
-                        while (receipts.TryPeek(out var receipt)) { await client.ConfirmAsync(_lease!, receipt, _stop.Token); receipts.Dequeue(); }
+                        while (receipts.Count < StarSession.MaximumAdmissionReceipts && host.TryReadAdmission(out var receipt)) receipts.Enqueue(receipt);
+                        while (receipts.TryPeek(out var receipt))
+                        {
+                            try { await client.ConfirmAsync(_lease!, receipt, _stop.Token); }
+                            catch (MatchDirectoryException e) when (e.Code == "reservation_missing") { /* This offline admission no longer has a catalogue reservation. */ }
+                            receipts.Dequeue();
+                        }
                         Volatile.Write(ref _status, privateGame ? "Приватная игра опубликована · доступ по приглашению" : "Игра опубликована в каталоге");
                     }
                     catch (MatchDirectoryException e) when (e.Code is "lease_invalid" or "match_expired") { Volatile.Write(ref _lease, null); Volatile.Write(ref _status, "Регистрация истекла; повторная публикация…"); }

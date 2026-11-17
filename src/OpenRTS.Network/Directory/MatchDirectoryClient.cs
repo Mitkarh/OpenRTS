@@ -13,10 +13,11 @@ public sealed class MatchDirectoryClient : IDisposable
     private AccountSession? _session;
     public DirectoryIdentity Identity { get; } = new();
     public DirectoryInfo? Info { get; private set; }
-    public MatchDirectoryClient(string url, string name)
+    public MatchDirectoryClient(string url, string name) : this(url, name, null) { }
+    internal MatchDirectoryClient(string url, string name, HttpMessageHandler? handler)
     {
         DirectoryValidation.Text(name, 40, "имя"); _name = name;
-        _http = new(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = DirectoryValidation.ServiceUri(url), Timeout = TimeSpan.FromSeconds(5) };
+        _http = new(handler ?? new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = DirectoryValidation.ServiceUri(url), Timeout = TimeSpan.FromSeconds(5) };
     }
     public async Task ConnectAsync(CancellationToken cancellation = default)
     {
@@ -70,7 +71,7 @@ public sealed class MatchDirectoryClient : IDisposable
         var grant = await Auth<MatchJoinGrant>(HttpMethod.Post, $"v1/matches/{match:D}/join", request, cancellation);
         var claims = AdmissionTicket.Verify(Info!.SigningKey, grant.Ticket, DateTimeOffset.UtcNow);
         if (grant.Match != match || grant.Request != request.Request || claims.Match != match || claims.Account != Identity.AccountId ||
-            claims.Player != grant.Player || claims.Role != request.Role || grant.Role != request.Role || grant.Expires != claims.Expires || grant.Endpoints is null ||
+            claims.PlayerCount != grant.PlayerCount || claims.Player != grant.Player || claims.Role != request.Role || grant.Role != request.Role || grant.Expires != claims.Expires || grant.Endpoints is null ||
             claims.Fingerprint != grant.Fingerprint || !claims.Endpoints.SequenceEqual(grant.Endpoints)) throw new InvalidDataException("Каталог вернул билет другой роли или identity.");
         return grant;
     }

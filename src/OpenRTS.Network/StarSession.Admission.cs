@@ -15,10 +15,11 @@ public sealed partial class StarSession
     private readonly DirectoryIdentity? _accountIdentity;
     private readonly MatchEndpoint[]? _connectionEndpoints;
     private readonly ConcurrentQueue<MatchAdmissionReceipt> _admitted = new();
+    internal const int MaximumAdmissionReceipts = 1024;
     public bool TryReadAdmission(out MatchAdmissionReceipt receipt) => _admitted.TryDequeue(out receipt!);
     private void Admitted(Peer peer)
     {
-        if (peer.Admission is { } receipt) { _admitted.Enqueue(receipt); while (_admitted.Count > 1024) _admitted.TryDequeue(out _); }
+        if (peer.Admission is { } receipt) { _admitted.Enqueue(receipt); while (_admitted.Count > MaximumAdmissionReceipts) _admitted.TryDequeue(out _); }
     }
     private sealed record HelloData(uint Player, int Count, string Digest, string Hash, string Rules, string Content,
         MatchResumeCredential? Resume, string? Ticket);
@@ -44,7 +45,8 @@ public sealed partial class StarSession
         }
         if (_admissionGate is null) throw new InvalidDataException("Хост не принимает билеты этого каталога.");
         var claims = _admissionGate.Inspect(hello.Ticket);
-        if (claims.Match != State.Match || claims.Player != hello.Player) throw new InvalidDataException("Билет выдан для другого матча или роли.");
+        if (claims.Match != State.Match || claims.Player != hello.Player || claims.PlayerCount != hello.Count || claims.PlayerCount != State.Slots.Count)
+            throw new InvalidDataException("Билет выдан для другого матча, роли или числа сторон.");
         string nonce = DirectoryIdentity.Secret();
         pipe.Send(Wire.Pack(w => { w.Write(StarProtocol.AdmissionChallenge); Wire.Text(w, nonce); }));
         string signature = Wire.Unpack(pipe.Read(TimeSpan.FromSeconds(5)), r => {

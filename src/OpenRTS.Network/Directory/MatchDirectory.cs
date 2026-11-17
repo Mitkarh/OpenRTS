@@ -102,7 +102,7 @@ public sealed class MatchDirectory : IDisposable
         lock (_gate)
         {
             var listing = Owned(session, match, lease); DirectoryValidation.Advertisement(advertisement);
-            if (advertisement.Match != match || advertisement.Revision < listing.Game.Revision || advertisement.Private != listing.Game.Private ||
+            if (advertisement.Match != match || advertisement.PlayerCount != listing.Game.PlayerCount || advertisement.Revision < listing.Game.Revision || advertisement.Private != listing.Game.Private ||
                 advertisement.Fingerprint != listing.Game.Fingerprint || advertisement.Rules != listing.Game.Rules || advertisement.ContentHash != listing.Game.ContentHash ||
                 advertisement.Revision == listing.Game.Revision && !Same(advertisement, listing.Game)) throw Error("stale_revision", "Регистрация изменилась; устаревший heartbeat отклонён.");
             listing.Game = Copy(advertisement); listing.Expires = Now.AddSeconds(30);
@@ -173,9 +173,9 @@ public sealed class MatchDirectory : IDisposable
             DateTimeOffset issued = Now;
             if (issued >= listing.Expires) throw Error("match_expired", "Матч закрыт или heartbeat истёк.", 404);
             Guid nonce = Guid.NewGuid(); DateTimeOffset expires = issued.AddSeconds(30) < listing.Expires ? issued.AddSeconds(30) : listing.Expires;
-            var claims = new AdmissionClaims(1, nonce, match, account.Id, account.PublicKey, request.Role, player, issued, expires,
+            var claims = new AdmissionClaims(2, nonce, match, account.Id, account.PublicKey, request.Role, player, listing.Game.PlayerCount, issued, expires,
                 listing.Game.Protocol, listing.Game.Rules, listing.Game.ContentHash, listing.Game.Fingerprint, listing.Game.Endpoints.ToArray());
-            var grant = new MatchJoinGrant(request.Request, match, player, request.Role, AdmissionTicket.Sign(_signer, claims), expires,
+            var grant = new MatchJoinGrant(request.Request, match, listing.Game.PlayerCount, player, request.Role, AdmissionTicket.Sign(_signer, claims), expires,
                 claims.Endpoints.ToArray(), claims.Fingerprint);
             listing.Reservations.Add(request.Request, new(account.Id, grant, nonce, listing.Game.Revision)); return grant with { Endpoints = grant.Endpoints.ToArray() };
         }

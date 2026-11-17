@@ -36,7 +36,13 @@ public sealed partial class StarSession : IDisposable
     public FrameExchange Frames { get; } = new();
     public Task<SimulationReport> Completion => _completion.Task;
     public MatchState State => Volatile.Read(ref _state);
-    public string Status => Volatile.Read(ref _status);
+    public string Status => Waiting is { } wait
+        ? $"Ожидание игроков {string.Join(", ", wait.Players)} · тик {wait.Tick} · {(int)wait.Milliseconds} мс"
+        : Volatile.Read(ref _status);
+    private NetworkWaitStatus? _waiting;
+    private IReadOnlyList<NetworkPeerLatency> _latencies = Array.AsReadOnly(Array.Empty<NetworkPeerLatency>());
+    public NetworkWaitStatus? Waiting => Volatile.Read(ref _waiting);
+    public IReadOnlyList<NetworkPeerLatency> Latencies => Volatile.Read(ref _latencies);
     public string Fingerprint { get; }
     public string JournalPath { get; }
     public MatchDescriptor Descriptor => Volatile.Read(ref _descriptor);
@@ -50,6 +56,7 @@ public sealed partial class StarSession : IDisposable
         IReadOnlyList<uint>? closedPlayers = null, MatchResumeCredential? resumeCredential = null, MatchAdmissionPolicy? admissionPolicy = null,
         MatchJoinGrant? admission = null, DirectoryIdentity? accountIdentity = null, IReadOnlyList<MatchEndpoint>? endpoints = null)
     {
+        playerCount = admission?.PlayerCount ?? playerCount;
         if (port is < 1 or > 65535 || playerCount is < 2 or > 8 || !host && player != 0 && (player < 2 || player > playerCount))
             throw new ArgumentOutOfRangeException(nameof(playerCount));
         if (string.IsNullOrWhiteSpace(address)) throw new ArgumentException("Address is required.");
@@ -187,6 +194,7 @@ public sealed partial class StarSession : IDisposable
     }
     private void SetState(MatchState state)
     {
+        Volatile.Write(ref _waiting, null);
         Volatile.Write(ref _state, state);
         Volatile.Write(ref _status, state.Phase switch {
             MatchPhase.Lobby => "Лобби · " + string.Join(" · ", state.Slots.Select(p => $"{p.Player}: {(p.Controller == SlotController.Ai ? "ИИ" : p.Controller == SlotController.None ? "нет ввода" : !p.Connected ? "ожидание" : p.Ready ? "готов" : "подключён" )}")),

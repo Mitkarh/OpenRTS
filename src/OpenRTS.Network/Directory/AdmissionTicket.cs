@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace OpenRTS.Network;
 
 internal sealed record AdmissionClaims(int Version, Guid Nonce, Guid Match, string Account, string PublicKey,
-    MatchAccessRole Role, uint Player, DateTimeOffset Issued, DateTimeOffset Expires, int Protocol,
+    MatchAccessRole Role, uint Player, int PlayerCount, DateTimeOffset Issued, DateTimeOffset Expires, int Protocol,
     string Rules, string ContentHash, string Fingerprint, MatchEndpoint[] Endpoints);
 
 public sealed class MatchAdmissionPolicy
@@ -33,8 +33,8 @@ internal static class AdmissionTicket
             if (payload.Length > 4096 || signature.Length != 64 || !key.VerifyData(payload, signature, HashAlgorithmName.SHA256,
                     DSASignatureFormat.IeeeP1363FixedFieldConcatenation)) throw new InvalidDataException();
             var claims = JsonSerializer.Deserialize<AdmissionClaims>(payload, DirectoryJson.Options) ?? throw new InvalidDataException();
-            if (claims.Version != 1 || claims.Nonce == Guid.Empty || claims.Match == Guid.Empty || !Enum.IsDefined(claims.Role) ||
-                claims.Role == MatchAccessRole.Player && claims.Player is < 2 or > 8 || claims.Role == MatchAccessRole.Spectator && claims.Player != 0 ||
+            if (claims.Version != 2 || claims.Nonce == Guid.Empty || claims.Match == Guid.Empty || !Enum.IsDefined(claims.Role) || claims.PlayerCount is < 2 or > 8 ||
+                claims.Role == MatchAccessRole.Player && (claims.Player < 2 || claims.Player > claims.PlayerCount) || claims.Role == MatchAccessRole.Spectator && claims.Player != 0 ||
                 claims.Issued > now.AddSeconds(5) || claims.Expires <= now || claims.Expires <= claims.Issued || claims.Expires - claims.Issued > TimeSpan.FromSeconds(30) ||
                 claims.Account != DirectoryIdentity.Id(claims.PublicKey) || claims.Protocol != StarProtocol.Version ||
                 claims.Endpoints is null || claims.Endpoints.Length is < 1 or > 3) throw new InvalidDataException();
@@ -60,10 +60,10 @@ internal sealed class MatchAdmissionGate(MatchAdmissionPolicy policy, TimeProvid
             throw new InvalidDataException("Не подтверждён ключ владельца билета.");
     }
     // Called only by the owner after transport proof, compatibility and live-slot checks.
-    internal MatchAdmissionReceipt Redeem(string ticket, Guid match, uint player, string pin, string rules, string content)
+    internal MatchAdmissionReceipt Redeem(string ticket, Guid match, uint player, string pin, string rules, string content, int playerCount)
     {
         var claims = Inspect(ticket);
-        if (claims.Match != match || claims.Player != player || claims.Fingerprint != pin || claims.Rules != rules || claims.ContentHash != content)
+        if (claims.Match != match || claims.Player != player || claims.PlayerCount != playerCount || claims.Fingerprint != pin || claims.Rules != rules || claims.ContentHash != content)
             throw new InvalidDataException("Билет выдан для другого матча, места или контента.");
         foreach (var nonce in _spent.Where(p => p.Value <= _clock.GetUtcNow()).Select(p => p.Key).ToArray()) _spent.Remove(nonce);
         if (_spent.Count >= 4096 || !_spent.TryAdd(claims.Nonce, claims.Expires)) throw new InvalidDataException("Билет уже использован либо превышен лимит допуска.");

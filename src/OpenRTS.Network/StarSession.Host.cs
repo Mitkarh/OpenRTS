@@ -22,6 +22,8 @@ public sealed partial class StarSession
         internal MatchAdmissionReceipt? Admission;
         internal long Ack, LastSeen = Stopwatch.GetTimestamp(), RateAt = Stopwatch.GetTimestamp();
         internal int Requests, Chats;
+        internal readonly LatencyProbe Probe = new();
+        internal double? RoundTrip;
         internal void Limit(bool chat)
         {
             if (Stopwatch.GetElapsedTime(RateAt).TotalSeconds >= 1) { RateAt = Stopwatch.GetTimestamp(); Requests = Chats = 0; }
@@ -55,6 +57,8 @@ public sealed partial class StarSession
             catch (Exception e) when (PeerFailure(e)) { lost.Add(player); }
         }
         void Broadcast(byte[] frame) { foreach (var pair in peers) Send(pair.Key, pair.Value, frame); }
+        void PublishLatencies() => Volatile.Write(ref _latencies, Array.AsReadOnly(peers.Where(p => p.Value.RoundTrip.HasValue)
+            .Select(p => new NetworkPeerLatency(p.Key, p.Value.RoundTrip!.Value)).ToArray()));
         void Change(string reason, bool resetReady = false, bool increment = true)
         {
             if (increment) revision++;
@@ -75,7 +79,7 @@ public sealed partial class StarSession
                         throw new DesyncException(world.Tick, world.Report().StateHash, check.Hash);
                     break;
                 }
-                if (reply[0] is not (3 or StarProtocol.Hash or StarProtocol.Ping or StarProtocol.Request or StarProtocol.Chat))
+                if (reply[0] is not (3 or StarProtocol.Hash or StarProtocol.Ping or StarProtocol.Pong or StarProtocol.Request or StarProtocol.Chat))
                     throw new InvalidDataException("Unexpected departing peer message.");
             }
         }
@@ -89,7 +93,7 @@ public sealed partial class StarSession
             if (!peers.TryGetValue(player, out var peer)) return;
             if (player > 8)
             {
-                peers.Remove(player); lost.Remove(player); Change("Зритель отключился");
+                peers.Remove(player); lost.Remove(player); PublishLatencies(); Change("Зритель отключился");
                 try { if (graceful && log is not null) FinishPeer(player, peer); }
                 catch (Exception e) when (PeerFailure(e)) { }
                 finally { peer.Dispose(); }
@@ -99,7 +103,7 @@ public sealed partial class StarSession
                 Controller = phase == MatchPhase.Lobby ? SlotController.Human : SlotController.None };
             if (phase != MatchPhase.Lobby) phase = MatchPhase.Paused;
             Change($"Игрок {player}: {reason}", resetReady: phase == MatchPhase.Lobby);
-            peers.Remove(player); lost.Remove(player); pending[player - 1].Clear();
+            peers.Remove(player); lost.Remove(player); PublishLatencies(); pending[player - 1].Clear();
             try { if (graceful && log is not null) FinishPeer(player, peer); }
             catch (Exception e) when (PeerFailure(e)) { /* The surviving peers retain the same committed prefix. */ }
             finally { peer.Dispose(); }
@@ -125,7 +129,14 @@ public sealed partial class StarSession
                 if (check.Hash != expected) throw new DesyncException(check.Tick, expected, check.Hash);
                 peer.Ack = check.Tick; unconfirmedCredentials.Remove(player); return;
             }
-            if (bytes.AsSpan().SequenceEqual(new byte[] { StarProtocol.Ping }) && player != 1) return;
+            if (bytes[0] == StarProtocol.Ping && player != 1)
+            { Send(player, peers[player], StarProtocol.Probe(StarProtocol.Pong, StarProtocol.ReadProbe(bytes, StarProtocol.Ping))); return; }
+            if (bytes[0] == StarProtocol.Pong && player != 1)
+            {
+                if (peers[player].Probe.Receive(StarProtocol.ReadProbe(bytes, StarProtocol.Pong)) is { } roundTrip)
+                { peers[player].RoundTrip = roundTrip; PublishLatencies(); }
+                return;
+            }
             if (bytes[0] == StarProtocol.SettingsAck && player != 1 && phase == MatchPhase.Lobby && _prepare is not null)
             {
                 var acknowledgement = Wire.Unpack(bytes, r => { r.ReadByte(); return (Digest: Wire.Text(r), Hash: Wire.Text(r)); });
@@ -175,7 +186,11 @@ public sealed partial class StarSession
         void Poll()
         {
             if (clock.Elapsed.TotalMilliseconds >= pingAt)
-            { Broadcast([StarProtocol.Ping]); pingAt = clock.Elapsed.TotalMilliseconds + Math.Min(1000, _timeout.TotalMilliseconds / 3); }
+            {
+                foreach (var pair in peers)
+                    if (!pair.Value.Probe.Pending) Send(pair.Key, pair.Value, StarProtocol.Probe(StarProtocol.Ping, pair.Value.Probe.Start()));
+                pingAt = clock.Elapsed.TotalMilliseconds + Math.Min(1000, _timeout.TotalMilliseconds / 3);
+            }
             foreach (var pair in peers.ToArray())
             {
                 try
@@ -254,7 +269,7 @@ public sealed partial class StarSession
                         for (long t = world.Tick + 1; t < world.Tick + Descriptor.InputDelay; t++)
                             recovery.Peer.Inbox.Add(Wire.Batch(State.Match, player, t, []), world.Tick);
                     }
-                    peers.Add(player, recovery.Peer); recovering.Remove(player); Admitted(recovery.Peer);
+                    peers.Add(player, recovery.Peer); pingAt = 0; recovering.Remove(player); Admitted(recovery.Peer);
                     recovery.Peer.LastSeen = Stopwatch.GetTimestamp(); prepared = -1;
                     Change(player <= 8 ? $"Игрок {player} вернулся · новая эпоха соединения" : "Зритель подключён к текущему матчу");
                 }
@@ -302,11 +317,11 @@ public sealed partial class StarSession
                     uint assigned = p == 0 ? Enumerable.Range(9, 8).Select(i => (uint)i).First(i => !peers.ContainsKey(i) && !recovering.ContainsKey(i)) : p;
                     uint player = assigned;
                     var peer = new Peer(socket, pipe, new TickInbox(State.Match, player, Descriptor.InputDelay, window)) { ResumeWith = credential };
-                    if (hello.Ticket is not null) peer.Admission = _admissionGate!.Redeem(hello.Ticket, State.Match, p, Fingerprint, Descriptor.Rules, Descriptor.ContentHash);
+                    if (hello.Ticket is not null) peer.Admission = _admissionGate!.Redeem(hello.Ticket, State.Match, p, Fingerprint, Descriptor.Rules, Descriptor.ContentHash, count);
                     if (_prepare is not null) peer.Pipe.Send(SettingsFrame());
                     if (phase == MatchPhase.Lobby)
                     {
-                        peers.Add(player, peer);
+                        peers.Add(player, peer); pingAt = 0;
                         if (player <= 8)
                         {
                             credentials[player] = NewCredential(State.Match, player, 1);
@@ -357,6 +372,12 @@ public sealed partial class StarSession
                     tick >= Descriptor.InputDelay && !pair.Value.Inbox.Contains(tick))).Select(pair => pair.Key).ToArray();
                 if (blockers.Length != 0)
                 {
+                    int elapsed = (int)Math.Clamp(clock.Elapsed.TotalMilliseconds - Math.Max(blockedAt, nextDue), 0, 60000);
+                    if (elapsed >= 100 && (Waiting is not { } wait || wait.Tick != tick || !wait.Players.SequenceEqual(blockers)))
+                    {
+                        Volatile.Write(ref _waiting, new(tick, blockers, elapsed));
+                        Broadcast(StarProtocol.WaitFrame(tick, blockers, elapsed));
+                    }
                     if (clock.Elapsed.TotalMilliseconds - blockedAt >= _timeout.TotalMilliseconds)
                         foreach (uint p in blockers) Drop(p, "истёк срок команд/проверки", false);
                     Idle(); continue;
@@ -387,6 +408,7 @@ public sealed partial class StarSession
                     frames.Add(Wire.Batch(State.Match, p, tick, stamped)); commands.AddRange(stamped);
                 }
                 world.Step(commands.ToArray(), _stop.Token);
+                Volatile.Write(ref _waiting, null);
                 string hash = world.Report().StateHash; hashes[tick] = hash;
                 frames.Add(StarProtocol.Check(StarProtocol.Hash, tick, hash));
                 foreach (var frame in frames) { log!.Write(frame); Broadcast(frame); }

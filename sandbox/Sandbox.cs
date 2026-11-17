@@ -74,6 +74,8 @@ public partial class Sandbox : Node3D
                 if (arg.StartsWith("--menu-captures=", StringComparison.Ordinal)) { _menuCaptures = arg[16..]; continue; }
                 if (arg == "--network-net3") { _networkVerifyNet3 = true; continue; }
                 if (arg == "--network-reconnect") { _networkVerifyReconnect = true; continue; }
+                if (arg.StartsWith("--network-spectators=", StringComparison.Ordinal)) { _networkVerifySpectators = int.Parse(arg["--network-spectators=".Length..]); if (_networkVerifySpectators is < 0 or > 1) throw new ArgumentException("Verification supports at most one spectator."); continue; }
+                if (arg.StartsWith("--network-ui-delay-ms=", StringComparison.Ordinal)) { _networkVerifyUiDelay = int.Parse(arg["--network-ui-delay-ms=".Length..]); if (_networkVerifyUiDelay is < 0 or > 10000) throw new ArgumentException("Invalid verification UI delay."); continue; }
                 if (arg.StartsWith("--mod=", StringComparison.Ordinal) && arg.Length > 6) { modPath = arg[6..]; continue; }
                 if (arg.StartsWith("--fog-hold=", StringComparison.Ordinal) && int.TryParse(arg[11..], out int hold) && hold is >= 0 and <= 250) { _fogHoldTicks = hold; continue; }
                 if (arg == "--verify-fog-match") { _verifyFogMatch = _verifyMatchSetup = true; continue; }
@@ -264,7 +266,7 @@ public partial class Sandbox : Node3D
         {
             if (_session.Network is { } network && _networkLabel is not null)
             {
-                _networkLabel.Text = $"{(network.Player == 0 ? "Зритель" : "Игрок " + network.Player)} · {network.Status}" + (_directoryPublication is null ? "" : " · " + _directoryPublication.Status);
+                _networkLabel.Text = $"{(network.Player == 0 ? "Зритель" : "Игрок " + network.Player)} · {NetworkStatusText(network)}" + (_directoryPublication is null ? "" : " · " + _directoryPublication.Status);
                 UpdateNetworkChat(network);
             }
             UpdateReplayControls();

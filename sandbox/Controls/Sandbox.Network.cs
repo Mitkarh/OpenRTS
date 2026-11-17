@@ -20,10 +20,16 @@ public partial class Sandbox
     private Label? _networkLabel;
     private Label? _networkChatLabel;
     private readonly System.Collections.Generic.Queue<string> _networkMessages = new();
+    private static string NetworkStatusText(StarSession network)
+    {
+        var latencies = network.Latencies;
+        return network.Status + (latencies.Count == 0 ? " · RTT —" : $" · RTT{(latencies.Count > 1 ? " max" : "")} {latencies.Max(p => p.RoundTripMilliseconds):0} мс");
+    }
     private void UpdateNetworkChat(StarSession network)
     {
         while (network.TryReadChat(out var message))
         {
+            if (_verifyNetwork && message.Text == "verify-menu-seen") { _networkMenuSeen.Add(message.Player); continue; }
             if (_verifyNetwork && _networkVerifyReconnect && message.Player == 2 && message.Text == "verify-rejoined") { _networkReconnectConfirmed = true; continue; }
             if (_verifyNetwork && _networkVerifyNet3 && message.Text == "verify-pause-seen") { _networkPauseSeen.Add(message.Player); continue; }
             _networkMessages.Enqueue($"{(message.Player == 0 ? "Зритель" : message.Player.ToString())}: {message.Text}");

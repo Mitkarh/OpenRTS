@@ -17,11 +17,28 @@ public partial class Sandbox
     }
     private bool _verifyNetwork;
     private string? _networkVerifyDirectoryUrl;
+    private System.Threading.Tasks.Task? _directoryCapacityFixtures;
+    private void VerifyDirectoryCapacities(OpenRTS.Network.StarSession network)
+    {
+        if (_networkVerifyDirectoryUrl is null || !network.IsHost || _directoryPublication?.Status.StartsWith("Игра опубликована", StringComparison.Ordinal) != true) return;
+        _directoryCapacityFixtures ??= Publish();
+        if (_directoryCapacityFixtures.IsFaulted) { GD.PushError(_directoryCapacityFixtures.Exception!.ToString()); GetTree().Quit(1); }
+        async System.Threading.Tasks.Task Publish()
+        {
+            foreach (int count in new[] { 2, 8 })
+                await _matchSetup!.DirectoryClient!.RegisterAsync(new(Guid.NewGuid(), 1, OpenRTS.Network.StarSession.ProtocolVersion, count,
+                    network.Descriptor.Rules, network.Descriptor.ContentHash, "Capacity fixture " + count, MatchSetupOptions.Parse(network.LobbySettings).Map,
+                    network.Fingerprint, OpenRTS.Network.MatchPhase.Lobby, [2], 1, 0, [new(OpenRTS.Network.MatchEndpointKind.Direct, "127.0.0.1", _networkPort)]));
+        }
+    }
     private bool _networkVerifyNet3, _networkVerifyPaused, _networkPauseRequested;
     private ulong _networkPauseBegan;
     private long _networkReadyRevision;
     private long _networkPauseTick;
     private readonly System.Collections.Generic.HashSet<uint> _networkPauseSeen = new();
+    private readonly System.Collections.Generic.HashSet<uint> _networkMenuSeen = new();
+    private int _networkVerifySpectators, _networkVerifyUiDelay;
+    private ulong? _networkVerifyUiUntil;
     private bool _networkVerifyIssued, _networkVerifyMenu, _networkVerifyMenuClosed, _networkVerifyLeaving;
     private System.Threading.Tasks.Task? _networkCapture;
     private long _networkInputTick, _networkMenuTick;
@@ -68,14 +85,19 @@ public partial class Sandbox
             var clock = System.Diagnostics.Stopwatch.StartNew();
             while (true)
             {
+                if (clock.Elapsed.TotalSeconds > 20) throw new TimeoutException("Directory UI did not list the hosted game and capacity fixtures");
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var unsupported = new[] { "DirectoryUnsupportedJoin2", "DirectoryUnsupportedJoin8", "DirectoryUnsupportedWatch2", "DirectoryUnsupportedWatch8" }
+                    .Select(name => _matchSetup.FindChild(name, owned: false) as Button).ToArray();
+                if (unsupported.Any(b => b is null)) continue;
+                if (unsupported.Any(b => !b!.Disabled)) throw new InvalidOperationException("Unsupported lobby capacity can be joined or watched.");
                 if (_matchSetup.FindChild("DirectoryJoinMatch", owned: false) is Button { Disabled: false } join)
                 {
+                    GD.Print("OPENRTS_DIRECTORY_CAPACITY:2/8 disabled");
                     if (_capturePath is not null && DisplayServer.GetName() != "headless") await CaptureNetworkFrame(_capturePath + ".directory.png");
                     ((Button)_matchSetup.FindChild("DirectoryJoinMatch", owned: false)).EmitSignal(Button.SignalName.Pressed);
                     GD.Print("OPENRTS_DIRECTORY_UI_JOIN:requested"); return;
                 }
-                if (clock.Elapsed.TotalSeconds > 20) throw new TimeoutException("Directory UI did not list the hosted game");
             }
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
@@ -83,6 +105,8 @@ public partial class Sandbox
     private void VerifyNetworkFrame(FrameExchange.FrameLease frame)
     {
         if (!_verifyNetwork) return;
+        _networkVerifyUiUntil ??= Time.GetTicksMsec() + (ulong)_networkVerifyUiDelay;
+        if (Time.GetTicksMsec() < _networkVerifyUiUntil.Value) return;
         var network = _session!.Network!;
         if (!_networkVerifyIssued && frame.Tick >= 2)
         {
@@ -123,10 +147,11 @@ public partial class Sandbox
             _networkVerifyMenuClosed = true;
             ToggleMatchMenu(); // local menu must not stop synchronized time
             GD.Print($"OPENRTS_NETWORK_MENU:{frame.Tick}");
+            network.SendChat("verify-menu-seen");
         }
         if (_networkVerifyNet3 && _networkVerifyMenuClosed)
         {
-            if (network.IsHost && !_networkPauseRequested) { network.Pause(true); _networkPauseRequested = true; }
+            if (network.IsHost && !_networkPauseRequested && _networkMenuSeen.Count == 3 + _networkVerifySpectators) { network.Pause(true); _networkPauseRequested = true; }
             if (network.State.Phase == OpenRTS.Network.MatchPhase.Paused)
             {
                 if (frame.Tick != network.State.Tick) throw new InvalidOperationException("Paused frame/control tick differs.");
@@ -136,7 +161,7 @@ public partial class Sandbox
                     network.SendChat("verify-pause-seen");
                     GD.Print($"OPENRTS_NETWORK_PAUSE:{frame.Tick}");
                 }
-                if (network.IsHost && _networkPauseSeen.Count == 3 + network.State.Spectators && Time.GetTicksMsec() - _networkPauseBegan >= 500) network.Pause(false);
+                if (network.IsHost && _networkPauseSeen.Count == 3 + _networkVerifySpectators && Time.GetTicksMsec() - _networkPauseBegan >= 500) network.Pause(false);
             }
         }
         if (_networkVerifyReconnect)
@@ -152,7 +177,7 @@ public partial class Sandbox
             }
             if (_networkReconnectConfirmed && _networkRejoinedTick < 0) _networkRejoinedTick = frame.Tick;
         }
-        if (!_networkVerifyLeaving && _networkVerifyMenuClosed && (!_networkVerifyReconnect || _networkRejoinedTick >= 0 && frame.Tick >= _networkRejoinedTick + 8) && (!_networkVerifyNet3 || _networkVerifyPaused &&
+        if (!_networkVerifyLeaving && _networkVerifyMenuClosed && _networkMenuSeen.Count == (_networkVerifyNet3 ? 3 : 2) + _networkVerifySpectators && (!_networkVerifyReconnect || _networkRejoinedTick >= 0 && frame.Tick >= _networkRejoinedTick + 8) && (!_networkVerifyNet3 || _networkVerifyPaused &&
             network.State.Phase == OpenRTS.Network.MatchPhase.Playing && frame.Tick >= _networkPauseTick + 4) &&
             frame.Tick >= _networkInputTick + (_networkVerifyNet3 ? 30 : 16))
         {
@@ -161,6 +186,8 @@ public partial class Sandbox
         }
         if (network.Completion.IsCompletedSuccessfully)
         {
+            if (network.Latencies.Count == 0 || _networkLabel?.Text.Contains("RTT", StringComparison.Ordinal) != true)
+                throw new InvalidOperationException("Measured RTT did not reach the native status label.");
             using var log = File.OpenRead(network.JournalPath);
             var replay = OpenRTS.Network.StarJournal.Replay(log, network.Descriptor, () => CreateNetworkWorld(_mapMatch!));
             if (replay != network.Completion.Result) throw new InvalidOperationException("Godot match replay differs.");

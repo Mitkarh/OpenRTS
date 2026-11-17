@@ -25,6 +25,7 @@ public sealed partial class StarSession
         var clock = Stopwatch.StartNew(); double lastSeen = 0, lastTurn = 0, finishAt = 0; long sentSequence = 0, sealedTick = -1;
         long[] sequences = new long[State.Slots.Count];
         StarJournal? log = null; FileStream? output = null; bool finishing = false;
+        var probe = new LatencyProbe(); double pingAt = 0;
         void Seal()
         {
             long target = world.Tick + Descriptor.InputDelay;
@@ -44,22 +45,45 @@ public sealed partial class StarSession
             while (true)
             {
                 _stop.Token.ThrowIfCancellationRequested();
+                if (!finishing && State.Match != Guid.Empty && clock.Elapsed.TotalMilliseconds >= pingAt && !probe.Pending)
+                {
+                    try { pipe.Send(StarProtocol.Probe(StarProtocol.Ping, probe.Start())); }
+                    catch (Exception e) when (LinkFailure(e)) { /* Final buffered messages still precede EOF. */ }
+                    pingAt = clock.Elapsed.TotalMilliseconds + Math.Min(1000, _timeout.TotalMilliseconds / 3);
+                }
                 if ((log is not null && State.Phase == MatchPhase.Playing && clock.Elapsed.TotalMilliseconds - lastTurn > _timeout.TotalMilliseconds) ||
                     finishing && clock.Elapsed.TotalMilliseconds - finishAt > _timeout.TotalMilliseconds)
                     throw new TimeoutException("Coordinator turn/completion deadline exceeded.");
                 if (pipe.TryRead(out var frame))
                 {
                     lastSeen = clock.Elapsed.TotalMilliseconds;
-                    if (frame.AsSpan().SequenceEqual(new byte[] { StarProtocol.Ping }))
+                    if (frame[0] == StarProtocol.Ping)
                     {
-                        try { pipe.Send(frame); } catch (Exception e) when (LinkFailure(e)) { /* Consume any buffered final messages before EOF. */ }
+                        long nonce = StarProtocol.ReadProbe(frame, StarProtocol.Ping);
+                        try { pipe.Send(StarProtocol.Probe(StarProtocol.Pong, nonce)); } catch (Exception e) when (LinkFailure(e)) { /* Consume any buffered final messages before EOF. */ }
                         continue;
+                    }
+                    if (frame[0] == StarProtocol.Pong)
+                    {
+                        if (probe.Receive(StarProtocol.ReadProbe(frame, StarProtocol.Pong)) is { } roundTrip)
+                            Volatile.Write(ref _latencies, Array.AsReadOnly(new[] { new NetworkPeerLatency(1, roundTrip) }));
+                        continue;
+                    }
+                    if (frame[0] == StarProtocol.Waiting)
+                    {
+                        var wait = StarProtocol.ReadWait(frame);
+                        if (log is null || State.Phase != MatchPhase.Playing || wait.Tick != world.Tick + 1 || wait.Players.Any(p => p > State.Slots.Count))
+                            throw new InvalidDataException("Wait report boundary mismatch.");
+                        Volatile.Write(ref _waiting, new(wait.Tick, wait.Players, wait.Milliseconds)); continue;
                     }
                     if (frame[0] == StarProtocol.Chat) { var message = StarProtocol.ReadChat(frame); if (message.Player > State.Slots.Count) throw new InvalidDataException("Invalid chat player."); Chat(message); continue; }
                     return frame;
                 }
                 if (!finishing && State.Phase != MatchPhase.Finished && (Player == 0 || State.Slots[(int)Player - 1].Controller == SlotController.Human)) PumpRequests();
                 pipe.Check();
+                double waiting = clock.Elapsed.TotalMilliseconds - lastTurn - 1000.0 / Descriptor.TickRate;
+                if (log is not null && State.Phase == MatchPhase.Playing && waiting >= 100 && Waiting is null)
+                    Volatile.Write(ref _waiting, new(world.Tick + 1, [1], (int)Math.Min(waiting, 60000)));
                 if (clock.Elapsed.TotalMilliseconds - lastSeen > _timeout.TotalMilliseconds) throw new TimeoutException("Player-host progress deadline exceeded.");
                 Idle();
             }
@@ -153,6 +177,7 @@ public sealed partial class StarSession
                         byte[] checkFrame = Read(); var check = StarProtocol.ReadCheck(checkFrame, StarProtocol.Hash); records.Add(checkFrame);
                         if (check.Tick != tick) throw new InvalidDataException("Turn hash order mismatch.");
                         world.Step(commands.ToArray(), _stop.Token);
+                        Volatile.Write(ref _waiting, null);
                         string hash = world.Report().StateHash;
                         if (hash != check.Hash) throw new DesyncException(tick, hash, check.Hash);
                         foreach (var record in records) log.Write(record);

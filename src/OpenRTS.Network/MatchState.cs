@@ -25,7 +25,29 @@ public sealed record MatchChat(uint Player, string Text);
 
 internal static class StarProtocol
 {
-    internal const int Version = 4;
+    internal const int Version = 5;
+    internal const byte Waiting = 39, Pong = 41;
+    internal static byte[] Probe(byte kind, long nonce) => Wire.Pack(w => {
+        if (kind is not (Ping or Pong) || nonce < 1) throw new InvalidDataException("Invalid latency probe.");
+        w.Write(kind); w.Write(nonce);
+    });
+    internal static long ReadProbe(byte[] bytes, byte kind) => Wire.Unpack(bytes, r => {
+        if (r.ReadByte() != kind || kind is not (Ping or Pong)) throw new InvalidDataException("Invalid latency probe.");
+        long nonce = r.ReadInt64(); if (nonce < 1) throw new InvalidDataException("Invalid latency nonce."); return nonce;
+    });
+    internal static byte[] WaitFrame(long tick, uint[] players, int milliseconds) => Wire.Pack(w => {
+        if (tick < 1 || players.Length is < 1 or > 8 || milliseconds is < 0 or > 60000 ||
+            players.Any(p => p is < 1 or > 8) || !players.SequenceEqual(players.Distinct().Order())) throw new InvalidDataException("Invalid wait report.");
+        w.Write(Waiting); w.Write(tick); w.Write(milliseconds); w.Write((byte)players.Length);
+        foreach (uint player in players) w.Write(player);
+    });
+    internal static (long Tick, uint[] Players, int Milliseconds) ReadWait(byte[] bytes) => Wire.Unpack(bytes, r => {
+        if (r.ReadByte() != Waiting) throw new InvalidDataException("Expected wait report.");
+        long tick = r.ReadInt64(); int milliseconds = r.ReadInt32(), count = r.ReadByte();
+        if (count is < 1 or > 8) throw new InvalidDataException("Invalid wait count.");
+        uint[] players = new uint[count]; for (int i = 0; i < count; i++) players[i] = r.ReadUInt32();
+        _ = WaitFrame(tick, players, milliseconds); return (tick, players, milliseconds);
+    });
     internal const byte AdmissionChallenge = 36, AdmissionProof = 37, Rejected = 38;
     internal const byte Credential = 32, Recovery = 33, RecoveryChunk = 34, RecoveryReady = 35;
     internal const byte Settings = 30, SettingsAck = 31;

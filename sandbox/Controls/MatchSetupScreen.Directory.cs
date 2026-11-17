@@ -111,12 +111,14 @@ public sealed partial class MatchSetupScreen
     private void JoinDirectory(DirectoryMatch match, MatchAccessRole role)
     {
         if (_directoryWork is not null) return;
+        if (match.Game.PlayerCount != 4) { _directoryStatus.Text = "Эта версия клиента поддерживает лобби на четыре стороны."; return; }
         var client = _directoryClient!; string? invite = match.Game.Private ? _inviteCode.Text.Trim() : null;
         Guid request = Guid.NewGuid();
         QueueDirectory(async cancellation => {
             try
             {
                 var grant = await client.JoinAsync(match.Game.Match, new(request, role, Invite: invite), cancellation);
+                if (grant.PlayerCount != 4) throw new System.IO.InvalidDataException("Неподдерживаемое число сторон матча.");
                 return () => {
                     _directoryGrant = grant; var endpoint = grant.Endpoints.OrderBy(e => e.Kind).First();
                     _address.Text = endpoint.Address; _port.Value = endpoint.Port; _pin.Text = grant.Fingerprint;
@@ -140,9 +142,11 @@ public sealed partial class MatchSetupScreen
             var game = match.Game; var row = new HBoxContainer(); _gameRows.AddChild(row);
             string map = _mapChoices.FirstOrDefault(m => m.Map.Id == game.Map).Title ?? game.Map;
             string phase = game.Phase switch { MatchPhase.Lobby => "Ожидание", MatchPhase.Paused => "Пауза", _ => "Игра" };
-            row.AddChild(new Label { Text = $"[Каталог] {game.Title} · {map} · {game.Players} игр. · {phase}\nСвободно: {Math.Max(0, game.AvailablePlayers.Length - match.ReservedPlayers)} · Хост игрока", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
-            var join = Button("Войти", () => JoinDirectory(match, MatchAccessRole.Player), "DirectoryJoinMatch"); join.Disabled = game.Phase != MatchPhase.Lobby || game.AvailablePlayers.Length <= match.ReservedPlayers; row.AddChild(join);
-            var watch = Button("Смотреть", () => JoinDirectory(match, MatchAccessRole.Spectator)); watch.Disabled = game.Phase is not (MatchPhase.Lobby or MatchPhase.Paused); row.AddChild(watch);
+            bool supported = game.PlayerCount == 4;
+            row.AddChild(new Label { Text = $"[Каталог] {game.Title} · {map} · {game.Players}/{game.PlayerCount} игр. · {phase}\n" +
+                (supported ? $"Свободно: {Math.Max(0, game.AvailablePlayers.Length - match.ReservedPlayers)} · Хост игрока" : "Эта версия клиента поддерживает лобби на четыре стороны"), SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+            var join = Button("Войти", () => JoinDirectory(match, MatchAccessRole.Player), supported ? "DirectoryJoinMatch" : "DirectoryUnsupportedJoin" + game.PlayerCount); join.Disabled = !supported || game.Phase != MatchPhase.Lobby || game.AvailablePlayers.Length <= match.ReservedPlayers; row.AddChild(join);
+            var watch = Button("Смотреть", () => JoinDirectory(match, MatchAccessRole.Spectator), supported ? "DirectoryWatchMatch" : "DirectoryUnsupportedWatch" + game.PlayerCount); watch.Disabled = !supported || game.Phase is not (MatchPhase.Lobby or MatchPhase.Paused); row.AddChild(watch);
         }
     }
     public void CancelDirectoryJoin()

@@ -35,13 +35,13 @@ internal static class StarChecks
     {
         private readonly TcpClient _socket = new();
         private readonly System.Net.Security.SslStream _tls;
-        internal RawPeer(Match match, uint player)
+        internal RawPeer(Match match, uint player, int protocol = StarProtocol.Version)
         {
             _socket.Connect(IPAddress.Loopback, match.Port);
             _tls = new(_socket.GetStream(), false, (_, _, _, _) => true);
             _tls.AuthenticateAsClient("openrts.local");
             using var world = World(); world.RestrictCommandsToPlayers();
-            Send(Wire.Pack(w => { w.Write(StarProtocol.Hello); w.Write(StarProtocol.Version); w.Write(player); w.Write(4);
+            Send(Wire.Pack(w => { w.Write(StarProtocol.Hello); w.Write(protocol); w.Write(player); w.Write(4);
                 Wire.Text(w, Wire.Hash(DirectMatch.Descriptor(Descriptor))); Wire.Text(w, world.Report().StateHash);
                 Wire.Text(w, Descriptor.Rules); Wire.Text(w, Descriptor.ContentHash); w.Write(false); w.Write((ushort)0); }));
         }
@@ -88,6 +88,41 @@ internal static class StarChecks
     }
     internal static void Run(Action<string, Action> test)
     {
+        test("NET3 RTT accepts only matching probes and diagnostics reject malformed frames", () => {
+            var clock = new ProbeClock(); var probe = new LatencyProbe(clock); long first = probe.Start();
+            Check(probe.Pending && probe.Receive(first + 1) is null); clock.Advance(37);
+            Check(probe.Receive(first) == 37 && !probe.Pending && probe.Receive(first) is null);
+            long second = probe.Start(); clock.Advance(12); Check(probe.Receive(first) is null && probe.Receive(second) == 12);
+            void Reject(Action action) { try { action(); } catch (Exception e) when (e is InvalidDataException or EndOfStreamException) { return; } throw new Exception("Expected diagnostic rejection"); }
+            Check(StarProtocol.ReadProbe(StarProtocol.Probe(StarProtocol.Ping, 123), StarProtocol.Ping) == 123);
+            Reject(() => StarProtocol.ReadProbe([StarProtocol.Ping], StarProtocol.Ping));
+            Reject(() => StarProtocol.Probe(StarProtocol.Pong, 0));
+            Reject(() => StarProtocol.ReadProbe(StarProtocol.Probe(StarProtocol.Ping, 1), StarProtocol.Pong));
+            var wait = StarProtocol.ReadWait(StarProtocol.WaitFrame(5, [2, 3], 150));
+            Check(wait.Tick == 5 && wait.Players.SequenceEqual(new uint[] { 2, 3 }) && wait.Milliseconds == 150);
+            foreach (var ids in new uint[][] { [], [3, 2], [2, 2], [9] }) Reject(() => StarProtocol.WaitFrame(5, ids, 100));
+            Reject(() => StarProtocol.WaitFrame(0, [2], 0)); Reject(() => StarProtocol.WaitFrame(5, [2], 60001));
+            Reject(() => StarProtocol.ReadWait(StarProtocol.WaitFrame(5, [2], 100).Concat(new byte[] { 0 }).ToArray()));
+        });
+        test("NET3 waiting names the blocking peer on host and client and clears on pause", () => {
+            using var match = new Match(); var host = match.Host; var two = match.Join(2); using var raw = new RawPeer(match, 3);
+            Wait(() => host.State.Slots.Take(3).All(s => s.Connected) && two.State.Revision == host.State.Revision, host, two);
+            host.Ready(host.State.Revision); two.Ready(two.State.Revision); raw.Send(StarProtocol.RequestFrame(StarProtocol.Operation.Ready, host.State.Revision));
+            Wait(() => host.State.Slots.Take(3).All(s => s.Ready), host, two); host.Start();
+            Wait(() => host.Waiting?.Players.SequenceEqual(new uint[] { 3 }) == true && two.Waiting?.Players.SequenceEqual(new uint[] { 3 }) == true, host, two);
+            Check(host.Waiting!.Tick == Descriptor.InputDelay && host.Waiting.Milliseconds >= 100 && host.Status.Contains("Ожидание", StringComparison.Ordinal));
+            Wait(() => host.Latencies.Any(p => p.Player == 2) && two.Latencies.Any(p => p.Player == 1), host, two);
+            Check(host.Latencies.All(p => p.RoundTripMilliseconds >= 0) && Tick(host) == Descriptor.InputDelay - 1);
+            raw.Dispose(); Wait(() => host.State.Phase == MatchPhase.Paused && two.State.Phase == MatchPhase.Paused, host, two);
+            Check(host.Waiting is null && two.Waiting is null); host.Pause(false);
+            Wait(() => Tick(two) >= 8, host, two); host.Stop(); Wait(() => host.Completion.IsCompleted && two.Completion.IsCompleted, host, two);
+            match.Replay(host); match.Replay(two); Check(File.ReadAllBytes(host.JournalPath).SequenceEqual(File.ReadAllBytes(two.JournalPath)));
+        });
+        test("NET3 rejects protocol4 before slot admission", () => {
+            using var match = new Match(); using var old = new RawPeer(match, 3, protocol: 4);
+            Wait(() => match.Host.Status.StartsWith("Подключение отклонено", StringComparison.Ordinal), match.Host);
+            Check(!match.Host.State.Slots[2].Connected && match.Host.State.Phase == MatchPhase.Lobby && !match.Host.Completion.IsCompleted);
+        });
         foreach (string violation in new[] { "spectator control", "guest control", "chat spoof", "invalid UTF8", "frame quota", "chat rate", "sequence gap" })
             test("NET3 isolates peer protocol violation: " + violation, () => {
                 using var match = new Match(); var host = match.Host; var two = match.Join(2);
@@ -422,7 +457,7 @@ internal static class StarChecks
                         while (true)
                         {
                             var frame = await Wire.Receive(tls, cancel.Token);
-                            if (frame.AsSpan().SequenceEqual(new byte[] { StarProtocol.Ping })) { Interlocked.Increment(ref pings); await Wire.Send(tls, frame, cancel.Token); }
+                            if (frame[0] == StarProtocol.Ping) { Interlocked.Increment(ref pings); await Wire.Send(tls, StarProtocol.Probe(StarProtocol.Pong, StarProtocol.ReadProbe(frame, StarProtocol.Ping)), cancel.Token); }
                             if (frame[0] == StarProtocol.State && StarProtocol.ReadState(frame).Phase == MatchPhase.Paused) return;
                         }
                     }
@@ -436,5 +471,13 @@ internal static class StarChecks
             }
             finally { Directory.Delete(directory, true); }
         });
+    }
+
+    private sealed class ProbeClock : TimeProvider
+    {
+        private long _milliseconds;
+        public override long TimestampFrequency => 1000;
+        public override long GetTimestamp() => _milliseconds;
+        internal void Advance(int milliseconds) => _milliseconds += milliseconds;
     }
 }

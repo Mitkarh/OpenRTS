@@ -99,12 +99,13 @@ public partial class Sandbox
                 catch (InvalidOperationException) { }
             }
             if (_directoryPublication is { } publication) _matchSetup!.ShowDirectoryPublication(publication.Status, publication.Invite);
-            _matchSetup!.SetNetworkStatus(network.Status, network.Fingerprint);
+            _matchSetup!.SetNetworkStatus(NetworkStatusText(network), network.Fingerprint);
             _matchSetup.UpdateNetworkLobby(network);
             if (_verifyNetwork && network.State.Match != Guid.Empty && network.State.Phase == OpenRTS.Network.MatchPhase.Lobby)
             {
+                VerifyDirectoryCapacities(network);
                 if (network.Player != 0 && _networkReadyRevision != network.State.Revision) { network.Ready(network.State.Revision); _networkReadyRevision = network.State.Revision; }
-                if (network.IsHost && network.State.Slots.All(p => p.Controller != OpenRTS.Network.SlotController.Human || p.Connected && p.Ready)) network.Start();
+                if (network.IsHost && network.State.Spectators == _networkVerifySpectators && network.State.Slots.All(p => p.Controller != OpenRTS.Network.SlotController.Human || p.Connected && p.Ready)) network.Start();
             }
         }
         using var frame = _session.Frames.AcquireLatest();
