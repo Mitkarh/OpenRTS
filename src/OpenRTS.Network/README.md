@@ -2,6 +2,8 @@
 
 NET1–NET5, включая WAN pipeline и multiplayer lifecycle: прямой клиентский lockstep, .NET10 / MIT. Зависимости Network → Gameplay → Core; Godot/Content не требуются, новых NuGet пакетов нет.
 
+После аудита NET1–NET5 исправлены пункты1–4: ошибочный peer изолируется без завершения здоровых клиентов (настоящий desync остаётся fatal), параметры rejoin не зависят от удалённого экрана, ticket ограничен сроком lease, default reader принимает длинные журналы в прежней байтовой квоте. [Контракт045](../../docs/decisions/045-network-audit-hardening.md), [проверки045](../../docs/verification/045-network-audit.md), [оставшиеся пункты5–8](../../docs/research/networking/roadmap.md). `./tools/dev.sh verify-network --reconnect` разрывает TCP и проверяет настоящую кнопку возврата, новую эпоху и дальнейший replay.
+
 `DirectMatch.Run` принимает подключённый TcpClient, player1/2, immutable MatchDescriptor, фабрику tick-zero SimulationWorld, callback ввода на будущий тик и stream журнала. Run блокирует поток-владелец до EndTick либо согласованного Leave в live режиме; сокет и мир освобождаются им, журналом владеет вызывающий код. Cancel и deadline прерывают сетевое ожидание. Команды передаются pipeline; checkpoints сверяются периодически, финальный hash обязателен; `DesyncException.Tick` обозначает первый проверенный расходящийся тик. `MatchJournal.Replay` воспроизводит завершённый журнал с исходной фабрикой и проверяет все hashes.
 
 Поддержаны обычные RTS player intents, включая способности, производство, стройку, транспорт, upgrade/transform и авиацию; дополнительные поля имеют явный wire format3 (player intent IDs/encoding сохранены из format2). Stamp назначает сетевой owner, а не offline Session.Submit. Неподдержанные поля/команды отвергаются. Детали текущего протокола: [решение038](../../docs/decisions/038-net2-live-direct-matches.md); исходный NET1 — [решение037](../../docs/decisions/037-net1-direct-lockstep.md).
@@ -24,7 +26,7 @@ NET2 двухсторонний pipeline сохранён в DirectMatch/DirectS
 
 Новые StarJournalv3 содержат полный MatchDescriptor и game-owned recipe. `StarJournal.ReadInfo` читает пролог, `Inspect` проверяет структуру целиком, `Replay` проверяет World hash каждого тика. Старый StarJournalv2 читается через Replay только с явно переданными descriptor/factory. Новые файлы sandbox открываются из главного меню → Повторы: Play/Pause, шаг, скорость, seek и POV; управление игровыми сторонами запрещено.
 
-`ReplayCheckpoint.Capture(journal, tick, output)` сохраняет ограниченный префикс завершённого журнала, `Restore(input, factory)` возвращает RecoveredReplay с живым World. Caller владеет Dispose и продолжает работу на том же потоке. Это история O(K), не runtime snapshot; AI policy/соединения не восстанавливаются. По умолчанию64MiB/100000тиков/15с catch-up. [Контракт042](../../docs/decisions/042-net4-replay-recovery.md), [проверки](../../docs/verification/042-net4.md).
+`ReplayCheckpoint.Capture(journal, tick, output)` сохраняет ограниченный префикс завершённого журнала, `Restore(input, factory)` возвращает RecoveredReplay с живым World. Caller владеет Dispose и продолжает работу на том же потоке. Это история O(K), не runtime snapshot; AI policy/соединения не восстанавливаются. По умолчанию64MiB/1000000тиков/15с catch-up. [Контракт042](../../docs/decisions/042-net4-replay-recovery.md), [проверки](../../docs/verification/042-net4.md).
 
 `./tools/dev.sh verify-replay --visible --output=/tmp/openrts-replay` записывает настоящий TLS-матч и проверяет его проигрывание через Godot UI. `dotnet run --project tests/OpenRTS.Network.Tests -- --net4` проверяет recovery/перезапуск/повреждения. Runtime schemas и сетевой reconnect реализованы в NET4.2/4.3 ниже.
 
@@ -34,7 +36,7 @@ NET2 двухсторонний pipeline сохранён в DirectMatch/DirectS
 
 `StarSession.ResumeCredential` содержит секрет Match/Player/Token/Epoch. Его можно передать новому guest через параметр `resumeCredential`. Токен хранится в памяти; его нельзя публиковать или добавлять в журнал. Хост передаёт snapshot и префикс общей истории chunks по32KiB, клиент проверяет их и возвращается на K. Новый ввод начинается с K+D, согласованные sequence numbers продолжаются. Возврат завершается на общей паузе, затем участник нажимает Resume. В sandbox после ошибки сети доступно «Вернуться в матч».
 
-Поздний spectator (player0) может присоединиться на уже установленной паузе; анонимный запрос во время Playing отвергается. Для анализа матчей без остановки потребуется отдельный observer catch-up NET6/NET7. Пределы: snapshot64MiB, префикс64MiB/100000тиков, transfer15с, restore15с, admission30с. Потеря хоста не мигрирует матч; snapshot World не включает внешнюю память AI policy. Replay seek пока остаётся от0.
+Поздний spectator (player0) может присоединиться на уже установленной паузе; анонимный запрос во время Playing отвергается. Для анализа матчей без остановки потребуется отдельный observer catch-up NET6/NET7. Пределы: snapshot64MiB, префикс64MiB/1000000тиков, transfer15с, restore15с, admission30с. Потеря хоста не мигрирует матч; snapshot World не включает внешнюю память AI policy. Replay seek пока остаётся от0.
 
 [Контракт043](../../docs/decisions/043-net4-runtime-snapshot-rejoin.md) · [Проверки043](../../docs/verification/043-net4-runtime-rejoin.md).
 

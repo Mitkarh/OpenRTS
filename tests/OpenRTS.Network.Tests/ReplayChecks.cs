@@ -67,6 +67,32 @@ internal static class ReplayChecks
     }
     internal static void Run(Action<string, Action> test)
     {
+        test("NET4 default replay and recovery accept a match beyond 100000 ticks", () => {
+            const int ticks = 100001;
+            SimulationWorld Empty() => new([new UnitDefinition("unit", 100)], 4096, 4096, 42, tickRate: 40);
+            var descriptor = new MatchDescriptor("long-replay", "unit", "empty", 42, TickRate: 40, EndTick: 0);
+            var state = new MatchState(Guid.NewGuid(), 1, 0, MatchPhase.Playing,
+                [new(1, SlotController.Human, true, true), new(2, SlotController.Human, true, true)], "start");
+            using var world = Empty(); world.RestrictCommandsToPlayers();
+            using var history = new MemoryStream();
+            using (var journal = new StarJournal(history, descriptor, world.Report().StateHash, StarProtocol.WriteState(state)))
+            {
+                for (int tick = 1; tick <= ticks; tick++)
+                {
+                    world.Step(); journal.Write(StarProtocol.TurnFrame(tick, 1));
+                    for (uint player = 1; player <= 2; player++) journal.Write(Wire.Batch(state.Match, player, tick, []));
+                    journal.Write(StarProtocol.Check(StarProtocol.Hash, tick, world.Report().StateHash));
+                }
+                journal.Write(StarProtocol.Check(StarProtocol.Finish, ticks, world.Report().StateHash)); journal.Complete();
+            }
+            history.Position = 0; Check(StarJournal.Inspect(history).EndTick == ticks);
+            history.Position = 0; Check(StarJournal.Replay(history, descriptor, Empty) == world.Report());
+            history.Position = 0; using var checkpoint = new MemoryStream(); ReplayCheckpoint.Capture(history, ticks, checkpoint);
+            checkpoint.Position = 0; using var restored = ReplayCheckpoint.Restore(checkpoint, _ => Empty());
+            Check(restored.World.Report() == world.Report());
+            history.Position = 0; Reject(() => StarJournal.Inspect(history, new(MaximumTicks: 100000)));
+            history.Position = 0; Reject(() => StarJournal.Inspect(history, new(MaximumBytes: history.Length - 1)));
+        });
         foreach (var (recipe, ticks, checkpoint) in new[] { ("production", 100, 12), ("aviation", 420, 185), ("sensors", 48, 12) })
             test("NET4 replay recovery continues every hash: " + recipe, () => {
                 var source = Create(recipe, ticks);

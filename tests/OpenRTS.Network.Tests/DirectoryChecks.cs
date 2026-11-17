@@ -65,6 +65,30 @@ internal static class DirectoryChecks
     }
     internal static void Run(Action<string, Action> test)
     {
+        test("NET5 tickets cannot outlive a lease or overlap re-registration after Close", () => {
+            using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256); var clock = new Clock(); using var service = new MatchDirectory(key, clock);
+            using var hostKey = new DirectoryIdentity(); using var oneKey = new DirectoryIdentity(); using var twoKey = new DirectoryIdentity();
+            var owner = Login(service, hostKey); var one = Login(service, oneKey); var two = Login(service, twoKey);
+            var gate = new MatchAdmissionGate(new(service.Info.SigningKey), clock); var game = Game(); var lease = service.Register(owner.Token, game);
+            clock.Advance(29);
+            var first = service.Join(one.Token, game.Match, new(Guid.NewGuid(), MatchAccessRole.Player));
+            Check(first.Expires == lease.Expires && gate.Inspect(first.Ticket).Expires == lease.Expires);
+            clock.Advance(2); lease = service.Register(owner.Token, game);
+            var second = service.Join(two.Token, game.Match, new(Guid.NewGuid(), MatchAccessRole.Player));
+            Reject(() => gate.Inspect(first.Ticket)); Check(gate.Inspect(second.Ticket).Player == 2);
+            service.Close(owner.Token, game.Match, lease.Token);
+            Check(service.Find(game.Rules, game.ContentHash).Length == 0);
+            Reject(() => service.Join(one.Token, game.Match, new(Guid.NewGuid(), MatchAccessRole.Player)), "match_expired");
+            Reject(() => service.Heartbeat(owner.Token, game.Match, lease.Token, game), "lease_invalid");
+            Reject(() => service.Register(owner.Token, game), "already_registered");
+            Check(gate.Inspect(second.Ticket).Player == 2); // Close cannot revoke an offline capability.
+            clock.Advance(30); Reject(() => gate.Inspect(second.Ticket)); service.Register(owner.Token, game);
+            Check(service.Join(one.Token, game.Match, new(Guid.NewGuid(), MatchAccessRole.Player)).Player == 2);
+            var hidden = Game(hidden: true); var privateLease = service.Register(owner.Token, hidden);
+            service.Join(one.Token, hidden.Match, new(Guid.NewGuid(), MatchAccessRole.Spectator, Invite: privateLease.Invite));
+            service.Close(owner.Token, hidden.Match, privateLease.Token);
+            Reject(() => service.ResolveInvite(one.Token, privateLease.Invite!), "invite_invalid");
+        });
         test("NET5 key-bound session, challenge replay, expiry and lease ownership", () => {
             using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256); var clock = new Clock(); using var service = new MatchDirectory(key, clock);
             using var first = new DirectoryIdentity(); using var other = new DirectoryIdentity();

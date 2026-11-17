@@ -52,7 +52,7 @@ public sealed partial class StarSession
         void Send(uint player, Peer peer, byte[] frame)
         {
             try { if (player > 8) { if (!peer.Pipe.TrySend(frame)) lost.Add(player); } else peer.Pipe.Send(frame); }
-            catch (Exception e) when (LinkFailure(e)) { lost.Add(player); }
+            catch (Exception e) when (PeerFailure(e)) { lost.Add(player); }
         }
         void Broadcast(byte[] frame) { foreach (var pair in peers) Send(pair.Key, pair.Value, frame); }
         void Change(string reason, bool resetReady = false, bool increment = true)
@@ -91,7 +91,7 @@ public sealed partial class StarSession
             {
                 peers.Remove(player); lost.Remove(player); Change("Зритель отключился");
                 try { if (graceful && log is not null) FinishPeer(player, peer); }
-                catch (Exception e) when (LinkFailure(e)) { }
+                catch (Exception e) when (PeerFailure(e)) { }
                 finally { peer.Dispose(); }
                 return;
             }
@@ -101,7 +101,7 @@ public sealed partial class StarSession
             Change($"Игрок {player}: {reason}", resetReady: phase == MatchPhase.Lobby);
             peers.Remove(player); lost.Remove(player); pending[player - 1].Clear();
             try { if (graceful && log is not null) FinishPeer(player, peer); }
-            catch (Exception e) when (LinkFailure(e)) { /* The surviving peers retain the same committed prefix. */ }
+            catch (Exception e) when (PeerFailure(e)) { /* The surviving peers retain the same committed prefix. */ }
             finally { peer.Dispose(); }
         }
         void Process(uint player, byte[] bytes)
@@ -191,7 +191,7 @@ public sealed partial class StarSession
                         if (Stopwatch.GetElapsedTime(pair.Value.LastSeen) > _timeout) lost.Add(pair.Key);
                     }
                 }
-                catch (Exception e) when (LinkFailure(e)) { lost.Add(pair.Key); }
+                catch (Exception e) when (PeerFailure(e)) { lost.Add(pair.Key); }
             }
             foreach (uint player in lost.ToArray()) { lost.Remove(player); Drop(player, "соединение потеряно", false); }
             while (_configuration.TryDequeue(out var configuration))
@@ -362,6 +362,16 @@ public sealed partial class StarSession
                     Idle(); continue;
                 }
                 if (clock.Elapsed.TotalMilliseconds < nextDue) { Idle(); continue; }
+                // Validate every peer before consuming any batch or assigning committed sequences.
+                if (tick >= Descriptor.InputDelay)
+                {
+                    foreach (var pair in peers.Where(p => p.Key <= 8).ToArray())
+                    {
+                        try { pair.Value.Inbox.Validate(tick); }
+                        catch (Exception e) when (PeerFailure(e)) { Drop(pair.Key, "некорректные команды", false); }
+                    }
+                    if (phase == MatchPhase.Paused) continue;
+                }
                 double waiting = clock.Elapsed.TotalMilliseconds - blockedAt;
                 var frames = new List<byte[]> { StarProtocol.TurnFrame(tick, revision) };
                 var commands = new List<WorldCommand>();
@@ -396,7 +406,7 @@ public sealed partial class StarSession
             foreach (var pair in peers)
             {
                 Send(pair.Key, pair.Value, [StarProtocol.Complete]);
-                try { pair.Value.Pipe.Flush(pair.Key > 8 ? TimeSpan.FromMilliseconds(100) : null); } catch (Exception e) when (pair.Key > 8 && LinkFailure(e)) { }
+                try { pair.Value.Pipe.Flush(pair.Key > 8 ? TimeSpan.FromMilliseconds(100) : null); } catch (Exception e) when (pair.Key > 8 && PeerFailure(e)) { }
             }
             log.Complete(); return world.Report();
         }

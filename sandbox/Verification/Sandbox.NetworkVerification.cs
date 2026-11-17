@@ -6,6 +6,15 @@ using OpenRTS.Core.Orders;
 
 public partial class Sandbox
 {
+    private bool _networkVerifyReconnect, _networkBreakRequested, _networkReconnectAttempted, _networkReconnectConfirmed;
+    private long _networkRejoinedTick = -1;
+    private void VerifyReconnectButton(Button button)
+    {
+        if (!_verifyNetwork || !_networkVerifyReconnect || _networkVerifyRole != "join" || _networkReconnectAttempted) return;
+        if (_matchSetup is not null) throw new InvalidOperationException("Reconnect did not use the in-game failure screen.");
+        _networkReconnectAttempted = true; GD.Print("OPENRTS_NETWORK_RECONNECT_BUTTON:pressed");
+        button.CallDeferred(GodotObject.MethodName.EmitSignal, Button.SignalName.Pressed);
+    }
     private bool _verifyNetwork;
     private string? _networkVerifyDirectoryUrl;
     private bool _networkVerifyNet3, _networkVerifyPaused, _networkPauseRequested;
@@ -130,7 +139,20 @@ public partial class Sandbox
                 if (network.IsHost && _networkPauseSeen.Count == 3 + network.State.Spectators && Time.GetTicksMsec() - _networkPauseBegan >= 500) network.Pause(false);
             }
         }
-        if (!_networkVerifyLeaving && _networkVerifyMenuClosed && (!_networkVerifyNet3 || _networkVerifyPaused &&
+        if (_networkVerifyReconnect)
+        {
+            if (!network.IsHost && !_networkBreakRequested && frame.Tick >= _networkInputTick + 12)
+            { _networkBreakRequested = true; GD.Print("OPENRTS_NETWORK_BREAK:requested"); }
+            if (network.IsHost && network.State.Phase == OpenRTS.Network.MatchPhase.Paused && network.State.Slots[1].Connected) network.Pause(false);
+            if (!network.IsHost && _networkReconnectAttempted && !_networkReconnectConfirmed && network.ResumeCredential?.Epoch > 1 &&
+                network.State.Phase == OpenRTS.Network.MatchPhase.Playing && frame.Tick > network.State.Tick)
+            {
+                _networkReconnectConfirmed = true; network.SendChat("verify-rejoined");
+                GD.Print("OPENRTS_NETWORK_REJOIN:" + network.ResumeCredential.Epoch);
+            }
+            if (_networkReconnectConfirmed && _networkRejoinedTick < 0) _networkRejoinedTick = frame.Tick;
+        }
+        if (!_networkVerifyLeaving && _networkVerifyMenuClosed && (!_networkVerifyReconnect || _networkRejoinedTick >= 0 && frame.Tick >= _networkRejoinedTick + 8) && (!_networkVerifyNet3 || _networkVerifyPaused &&
             network.State.Phase == OpenRTS.Network.MatchPhase.Playing && frame.Tick >= _networkPauseTick + 4) &&
             frame.Tick >= _networkInputTick + (_networkVerifyNet3 ? 30 : 16))
         {

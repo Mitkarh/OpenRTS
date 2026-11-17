@@ -3,8 +3,10 @@
 import argparse
 from pathlib import Path
 import socket
+import select
 import subprocess
 import tempfile
+import threading
 import time
 
 parser = argparse.ArgumentParser()
@@ -13,6 +15,7 @@ parser.add_argument('--visible', action='store_true')
 parser.add_argument('--host-fog-hold', type=int, default=0)
 parser.add_argument('--spectator', action='store_true', help='Add a spectator to the NET3 match')
 parser.add_argument('--net3', action='store_true', help='Three human clients plus a host-controlled AI on Crossroads')
+parser.add_argument('--reconnect', action='store_true', help='Break guest transport and return through the real in-game button')
 parser.add_argument('--output', type=Path)
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent
@@ -25,6 +28,42 @@ with socket.socket() as probe:
     port = probe.getsockname()[1]
 processes = []
 logs = []
+relay = None
+if args.reconnect:
+    if args.net3 or args.spectator: parser.error('--reconnect uses the two-player scenario')
+    relay = socket.socket(); relay.bind(('127.0.0.1', 0)); relay.listen(2); relay.settimeout(.2)
+    relay_port = relay.getsockname()[1]
+    relay_stop = threading.Event()
+    relay_connections = []
+    relay_lock = threading.Lock()
+
+    def forward(client):
+        upstream = None
+        try:
+            upstream = socket.create_connection(('127.0.0.1', port), timeout=5)
+            with relay_lock: relay_connections.extend((client, upstream))
+            while not relay_stop.is_set():
+                ready, _, _ = select.select((client, upstream), (), (), .2)
+                for source in ready:
+                    data = source.recv(65536)
+                    if not data: return
+                    (upstream if source is client else client).sendall(data)
+        except OSError:
+            pass
+        finally:
+            with relay_lock:
+                for connection in (client, upstream):
+                    if connection in relay_connections: relay_connections.remove(connection)
+                    if connection is not None: connection.close()
+
+    def accept():
+        while not relay_stop.is_set():
+            try: client, _ = relay.accept()
+            except socket.timeout: continue
+            except OSError: return
+            threading.Thread(target=forward, args=(client,), daemon=True).start()
+
+    threading.Thread(target=accept, daemon=True).start()
 roles = ('host', 'join', 'join3') if args.net3 else ('host', 'join')
 if args.spectator:
     if not args.net3: parser.error('--spectator requires --net3')
@@ -45,7 +84,8 @@ try:
         else:
             command += ['--headless']
         command += ['--path', str(root / 'sandbox'), '--', '--verify-network=' + role,
-                    '--network-port=' + str(port), '--network-pin-file=' + str(pin)]
+                    '--network-port=' + str(relay_port if args.reconnect and role == 'join' else port), '--network-pin-file=' + str(pin)]
+        if args.reconnect: command += ['--network-reconnect']
         if role == 'host' and args.host_fog_hold:
             command += ['--fog-hold=' + str(args.host_fog_hold)]
         if args.net3:
@@ -55,6 +95,15 @@ try:
         log = (output / (role + '.log')).open('w')
         logs.append(log)
         processes.append(subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT))
+    if args.reconnect:
+        deadline = time.monotonic() + 35
+        while 'OPENRTS_NETWORK_BREAK:requested' not in (output / 'join.log').read_text():
+            if time.monotonic() > deadline or any(p.poll() is not None for p in processes): raise RuntimeError('Guest did not reach the disconnect boundary')
+            time.sleep(.05)
+        with relay_lock:
+            for connection in relay_connections:
+                try: connection.shutdown(socket.SHUT_RDWR)
+                except OSError: pass
     for process in processes:
         process.wait(timeout=55)
     hashes = []
@@ -70,10 +119,22 @@ try:
         hashes.extend(results)
     if len(set(hashes)) != 1:
         raise RuntimeError('Final hashes differ: ' + str(hashes))
+    if args.reconnect:
+        text = (output / 'join.log').read_text()
+        if 'OPENRTS_NETWORK_RECONNECT_BUTTON:pressed' not in text or 'OPENRTS_NETWORK_REJOIN:2' not in text:
+            raise RuntimeError('Guest did not return through the native reconnect button:\n' + text)
+        journals = []
+        for role in roles:
+            paths = [line.split(':', 1)[1] for line in (output / (role + '.log')).read_text().splitlines() if line.startswith('OPENRTS_NETWORK_JOURNAL:')]
+            if len(paths) != 1: raise RuntimeError(role + ' did not report exactly one completed journal')
+            journals.append(Path(paths[0]).read_bytes())
+        if journals[0] != journals[1]: raise RuntimeError('Rejoined guest did not retain the common journal')
     print('PASS Godot network:', len(roles), 'TLS peers, lobby Ready/start, local ownership, production, local menu, agreed stop, offline replay' + (', fourth AI slot and agreed pause' if args.net3 else ''))
     print('State hash:', hashes[0])
+    if args.reconnect: print('PASS Godot rejoin: transport break, failure screen, reconnect button, epoch rotation, continued ticks and replay')
     print('Artifacts:', output)
 finally:
+    if relay is not None: relay_stop.set(); relay.close()
     for process in processes:
         if process.poll() is None:
             process.kill()

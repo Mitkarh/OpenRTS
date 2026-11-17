@@ -1,5 +1,7 @@
 # 044. NET5 — поиск матча и допуск
 
+Уточнение17ноября после аудита: expiry ticket ограничен текущим lease. Close скрывает игру немедленно, но удерживает Match ID до expiry выданных неиспользованных capabilities. [Контракт045](045-network-audit-hardening.md), [проверки045](../verification/045-network-audit.md).
+
 **Дата:** 17 ноября 2026. [План](../research/networking/net5.md), [проверки](../verification/044-net5-directory.md), [NET4/rejoin](043-net4-runtime-snapshot-rejoin.md).
 
 ## Границы и зависимости

@@ -195,6 +195,7 @@ public sealed partial class StarSession : IDisposable
     }
     private void Idle() { if (_stop.Token.WaitHandle.WaitOne(5)) _stop.Token.ThrowIfCancellationRequested(); }
     private static bool LinkFailure(Exception e) => e is IOException or TimeoutException or SocketException && e is not (InvalidDataException or DesyncException);
+    private static bool PeerFailure(Exception e) => LinkFailure(e) || e is InvalidDataException or ArgumentException;
     private static async Task Authenticate(SslStream tls, X509Certificate2? certificate, CancellationToken ct)
     {
         if (certificate is not null) await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions {

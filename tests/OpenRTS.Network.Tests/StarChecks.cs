@@ -31,6 +31,24 @@ internal static class StarChecks
         return world;
     }
     private static readonly MatchDescriptor Descriptor = new("net3-test", "unit", "four-players", 42, EndTick: 0, InputDelay: 3, HashInterval: 4);
+    private sealed class RawPeer : IDisposable
+    {
+        private readonly TcpClient _socket = new();
+        private readonly System.Net.Security.SslStream _tls;
+        internal RawPeer(Match match, uint player)
+        {
+            _socket.Connect(IPAddress.Loopback, match.Port);
+            _tls = new(_socket.GetStream(), false, (_, _, _, _) => true);
+            _tls.AuthenticateAsClient("openrts.local");
+            using var world = World(); world.RestrictCommandsToPlayers();
+            Send(Wire.Pack(w => { w.Write(StarProtocol.Hello); w.Write(StarProtocol.Version); w.Write(player); w.Write(4);
+                Wire.Text(w, Wire.Hash(DirectMatch.Descriptor(Descriptor))); Wire.Text(w, world.Report().StateHash);
+                Wire.Text(w, Descriptor.Rules); Wire.Text(w, Descriptor.ContentHash); w.Write(false); w.Write((ushort)0); }));
+        }
+        internal void Send(byte[] frame) => Wire.Send(_tls, frame, default).GetAwaiter().GetResult();
+        internal void OversizedFrame() => _tls.Write(new byte[] { 1, 0, 4, 0 });
+        public void Dispose() { _tls.Dispose(); _socket.Dispose(); }
+    }
     private sealed class Match : IDisposable
     {
         internal readonly string Directory = Path.Combine(Path.GetTempPath(), "openrts-net3-" + Guid.NewGuid().ToString("N"));
@@ -70,6 +88,53 @@ internal static class StarChecks
     }
     internal static void Run(Action<string, Action> test)
     {
+        foreach (string violation in new[] { "spectator control", "guest control", "chat spoof", "invalid UTF8", "frame quota", "chat rate", "sequence gap" })
+            test("NET3 isolates peer protocol violation: " + violation, () => {
+                using var match = new Match(); var host = match.Host; var two = match.Join(2);
+                bool spectator = violation is not ("guest control" or "sequence gap");
+                var three = spectator ? match.Join(3) : null;
+                using var raw = new RawPeer(match, spectator ? 0u : 3u);
+                var survivors = three is null ? new[] { host, two } : new[] { host, two, three };
+                Wait(() => host.State.Slots.Take(3).All(s => s.Connected) && (!spectator || host.State.Spectators == 1) &&
+                    survivors.All(s => s.State.Revision == host.State.Revision), survivors);
+                foreach (var session in survivors) session.Ready(session.State.Revision);
+                if (!spectator) raw.Send(StarProtocol.RequestFrame(StarProtocol.Operation.Ready, host.State.Revision));
+                Wait(() => host.State.Slots.Take(3).All(s => s.Ready), survivors); host.Start();
+                Wait(() => Tick(host) >= 1, survivors);
+                if (violation == "sequence gap") host.Submit(new(0, 0, 0, CommandKind.Move, new(1), new(12000, 2048)));
+                switch (violation)
+                {
+                    case "spectator control": raw.Send(StarProtocol.RequestFrame(StarProtocol.Operation.Ready, host.State.Revision)); break;
+                    case "guest control": raw.Send(StarProtocol.RequestFrame(StarProtocol.Operation.Stop, host.State.Revision)); break;
+                    case "chat spoof": raw.Send(StarProtocol.ChatFrame(2, "spoof")); break;
+                    case "invalid UTF8": raw.Send(Wire.Pack(w => { w.Write(StarProtocol.Chat); w.Write(0u); w.Write((ushort)1); w.Write((byte)255); })); break;
+                    case "frame quota": raw.OversizedFrame(); break;
+                    case "chat rate": for (int i = 0; i < 5; i++) raw.Send(StarProtocol.ChatFrame(0, "hello")); break;
+                    case "sequence gap": raw.Send(Wire.Batch(host.State.Match, 3, Descriptor.InputDelay,
+                        [new(Descriptor.InputDelay, 3, 2, CommandKind.Stop, new(3))])); break;
+                }
+                Wait(() => spectator ? host.State.Spectators == 0 : !host.State.Slots[2].Connected, survivors);
+                Check(host.State.Phase == (spectator ? MatchPhase.Playing : MatchPhase.Paused));
+                if (!spectator) { Check(Tick(host) < Descriptor.InputDelay); host.Pause(false); }
+                Wait(() => survivors.All(s => Tick(s) >= 8), survivors);
+                if (violation == "sequence gap") { using var frame = host.Frames.AcquireLatest(); Check(frame!.Poses[0].Current.X > 4096, "Valid host input was lost while rejecting a peer batch"); }
+                host.Stop();
+                Wait(() => survivors.All(s => s.Completion.IsCompleted), survivors);
+                foreach (var session in survivors)
+                { match.Replay(session); Check(File.ReadAllBytes(host.JournalPath).SequenceEqual(File.ReadAllBytes(session.JournalPath))); }
+            });
+        test("NET3 a real hash mismatch still aborts the match", () => {
+            using var match = new Match(); var host = match.Host; var two = match.Join(2); using var raw = new RawPeer(match, 3);
+            Wait(() => host.State.Slots.Take(3).All(s => s.Connected) && two.State.Revision == host.State.Revision, host, two);
+            host.Ready(host.State.Revision); two.Ready(two.State.Revision); raw.Send(StarProtocol.RequestFrame(StarProtocol.Operation.Ready, host.State.Revision));
+            Wait(() => host.State.Slots.Take(3).All(s => s.Ready), host, two); host.Start();
+            Wait(() => Tick(host) >= 1, host, two);
+            for (int tick = Descriptor.InputDelay; tick <= Descriptor.HashInterval; tick++) raw.Send(Wire.Batch(host.State.Match, 3, tick, []));
+            Wait(() => Tick(host) >= Descriptor.HashInterval, host, two);
+            raw.Send(StarProtocol.Check(StarProtocol.Hash, Descriptor.HashInterval, new string('0', 64)));
+            Wait(() => host.Completion.IsCompleted);
+            Check(host.Completion.Exception?.GetBaseException() is DesyncException { Tick: 4 });
+        });
         test("NET4.3 transfer rejects quotas, wrong offsets and damaged chunks", () => {
             byte[] Begin(int snapshot = 1, int history = 1, bool valid = true) => Wire.Pack(w => {
                 w.Write(StarProtocol.Recovery); w.Write(snapshot); w.Write(history);

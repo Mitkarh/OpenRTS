@@ -12,4 +12,6 @@ NET4.3: pinned TLS Hello с token Match/Player/Epoch → общая пауза K
 
 Зритель подключается после Start только на уже установленной паузе и не входит в tick barrier. Запрос во время Playing не останавливает игру. В sandbox есть «Вернуться в матч» после разрыва; секрет хранится в памяти. Память хостовых AI planners при возврате клиента остаётся на исходном хосте; воспроизведение не запускает AI policy повторно.
 
+Аудит045: параметры подключения сохраняются отдельно от удаляемого экрана лобби; `verify-network --reconnect` проверяет разрыв TCP и реальную кнопку возврата. Default cap журнала/recovery —1млн тиков при прежних64MiB/15с, вместо100000; явные более строгие пределы действуют. Проверен полноценный replay/ReplayCheckpoint restore матча на100001тике. [Контракт045](../../decisions/045-network-audit-hardening.md), [проверки045](../../verification/045-network-audit.md).
+
 Остаются отдельными продолжениями: catch-up наблюдателей без общей паузы (NET6/NET7), дисковый индекс runtime checkpoints для replay seeks, перенос/сохранение внешних AI policies, durable host restart/migration. Текущий replay seek по-прежнему воспроизводит от0. Host loss завершает текущие клиенты. Trusted authoritative server остаётся последним optional NET8/NET9.

@@ -24,6 +24,7 @@ public partial class Sandbox
     {
         while (network.TryReadChat(out var message))
         {
+            if (_verifyNetwork && _networkVerifyReconnect && message.Player == 2 && message.Text == "verify-rejoined") { _networkReconnectConfirmed = true; continue; }
             if (_verifyNetwork && _networkVerifyNet3 && message.Text == "verify-pause-seen") { _networkPauseSeen.Add(message.Player); continue; }
             _networkMessages.Enqueue($"{(message.Player == 0 ? "Зритель" : message.Player.ToString())}: {message.Text}");
             while (_networkMessages.Count > 4) _networkMessages.Dequeue();
@@ -32,6 +33,9 @@ public partial class Sandbox
     }
     private LanGames? _networkAdvertiser;
     private DirectoryListing? _directoryPublication;
+    private sealed record NetworkLobby(string Name, MatchDirectoryClient? Directory, MatchJoinGrant? Grant,
+        bool Publish, string PublicAddress, bool Private, MatchEndpoint? Relay);
+    private NetworkLobby? _networkLobby;
     private void StartNetworkSession(MapMatch map, UnitCatalog catalog)
     {
         var directory = ProjectSettings.GlobalizePath("user://network"); Directory.CreateDirectory(directory);
@@ -57,25 +61,28 @@ public partial class Sandbox
                     ownerOptions.Seats.Take(ownerMap.Map.Slots.Count).Select(s => ownerMap.Map.Slots[s.Start]).ToArray(), initialTick: world.Tick, opponents: ownerOptions.Opponents(player));
             var commands = ai.Plan(world); policies[player] = (ai, world.Tick, commands); return commands;
         }
-        string gameName = _matchSetup!.NetworkGameName;
+        if (_matchSetup is { } setup)
+            _networkLobby = new(setup.NetworkGameName, setup.DirectoryClient, setup.DirectoryGrant, setup.PublishDirectory,
+                setup.PublishDirectory ? setup.PublicEndpoint : "", setup.PrivateDirectory, setup.PublishDirectory ? setup.RelayEndpoint : null);
+        var lobby = _networkLobby ?? throw new InvalidOperationException("Нет параметров подключения к матчу.");
         var network = new StarSession(_networkMode == 1, _networkAddress, _networkPort, _networkPin, Descriptor(ownerOptions, map),
             () => CreateConfiguredWorld(map, ownerOptions), path, playerCount: 4, player: _networkPlayer,
             aiPlayers: _networkAiPlayers, planAi: Plan, lobbySettings: ownerOptions.Serialize(), prepareSettings: Prepare,
             closedPlayers: ownerOptions.Seats.Select((s, i) => (s, i)).Where(p => p.s.Controller == SlotController.None).Select(p => (uint)p.i + 1).ToArray(), resumeCredential: _networkResume,
-            admissionPolicy: _networkMode == 1 && _matchSetup.PublishDirectory ? new(_matchSetup.DirectoryClient!.Info!.SigningKey) : null,
-            admission: _networkMode == 2 && _networkResume is null ? _matchSetup.DirectoryGrant : null,
-            accountIdentity: _matchSetup.DirectoryClient?.Identity,
-            endpoints: _networkResume is not null ? _matchSetup.DirectoryGrant?.Endpoints : null);
+            admissionPolicy: _networkMode == 1 && lobby.Publish ? new(lobby.Directory!.Info!.SigningKey) : null,
+            admission: _networkMode == 2 && _networkResume is null ? lobby.Grant : null,
+            accountIdentity: lobby.Directory?.Identity,
+            endpoints: _networkResume is not null ? lobby.Grant?.Endpoints : null);
         _session = new SandboxSession(network);
         _directoryPublication?.Dispose(); _directoryPublication = null;
-        if (network.IsHost && _matchSetup.PublishDirectory)
-            _directoryPublication = new(_matchSetup.DirectoryClient!, network, gameName, _matchSetup.PublicEndpoint, _networkPort,
-                () => MatchSetupOptions.Parse(network.LobbySettings).Map, _matchSetup.PrivateDirectory, _matchSetup.RelayEndpoint);
+        if (network.IsHost && lobby.Publish)
+            _directoryPublication = new(lobby.Directory!, network, lobby.Name, lobby.PublicAddress, _networkPort,
+                () => MatchSetupOptions.Parse(network.LobbySettings).Map, lobby.Private, lobby.Relay);
         _networkAdvertiser?.Dispose(); _networkAdvertiser = null;
-        if (network.IsHost && !_matchSetup.PublishDirectory)
+        if (network.IsHost && !lobby.Publish)
         {
             try { _networkAdvertiser = new LanGames(() => network.State.Phase != MatchPhase.Lobby ? null :
-                new LanGame("", _networkPort, gameName, MatchSetupOptions.Parse(network.LobbySettings).Map,
+                new LanGame("", _networkPort, lobby.Name, MatchSetupOptions.Parse(network.LobbySettings).Map,
                     network.State.Slots.Count(s => s.Connected), network.State.Slots.Count(s => s.Controller == SlotController.Human && !s.Connected), network.State.Spectators, network.Fingerprint, network.State.Slots.Where(s => s.Controller == SlotController.Human && !s.Connected).Select(s => s.Player).ToArray())); }
             catch (System.Net.Sockets.SocketException error) { GD.Print("LAN discovery: " + error.Message); }
         }
@@ -94,8 +101,12 @@ public partial class Sandbox
         if (_networkResume is not null && _mapMatch is not null && _catalog is not null)
         {
             var reconnect = new Button { Text = "Вернуться в матч" };
-            reconnect.Pressed += () => { layer.QueueFree(); _networkMode = 2; StartSession(); };
+            reconnect.Pressed += () => {
+                layer.QueueFree(); _networkMode = 2;
+                try { StartSession(); } catch (Exception error) { ShowNetworkFailure(error.Message); }
+            };
             panel.AddChild(reconnect);
+            VerifyReconnectButton(reconnect);
         }
         var retry = new Button { Text = "В главное меню" };
         retry.Pressed += () => GetTree().CallDeferred(SceneTree.MethodName.ReloadCurrentScene); panel.AddChild(retry);

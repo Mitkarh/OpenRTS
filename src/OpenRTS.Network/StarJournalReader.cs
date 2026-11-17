@@ -3,7 +3,7 @@ using OpenRTS.Core.Orders;
 
 namespace OpenRTS.Network;
 
-public sealed record ReplayLimits(long MaximumBytes = 64 * 1024 * 1024, long MaximumTicks = 100000,
+public sealed record ReplayLimits(long MaximumBytes = 64 * 1024 * 1024, long MaximumTicks = 1000000,
     TimeSpan? CatchUpTimeout = null)
 {
     internal TimeSpan Timeout => CatchUpTimeout ?? TimeSpan.FromSeconds(15);

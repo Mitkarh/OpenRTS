@@ -73,6 +73,7 @@ public partial class Sandbox : Node3D
                 if (arg == "--verify-menu") { _verifyMenu = true; continue; }
                 if (arg.StartsWith("--menu-captures=", StringComparison.Ordinal)) { _menuCaptures = arg[16..]; continue; }
                 if (arg == "--network-net3") { _networkVerifyNet3 = true; continue; }
+                if (arg == "--network-reconnect") { _networkVerifyReconnect = true; continue; }
                 if (arg.StartsWith("--mod=", StringComparison.Ordinal) && arg.Length > 6) { modPath = arg[6..]; continue; }
                 if (arg.StartsWith("--fog-hold=", StringComparison.Ordinal) && int.TryParse(arg[11..], out int hold) && hold is >= 0 and <= 250) { _fogHoldTicks = hold; continue; }
                 if (arg == "--verify-fog-match") { _verifyFogMatch = _verifyMatchSetup = true; continue; }
@@ -422,7 +423,9 @@ public partial class Sandbox : Node3D
             if (_session.Network is { IsHost: false, ResumeCredential: { } credential }) _networkResume = credential;
             _session.Dispose();
             _session = null;
-            if (_verifyNetwork || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
+            bool verifyReconnect = _verifyNetwork && _networkVerifyReconnect && _networkVerifyRole == "join" && !_networkReconnectAttempted &&
+                _networkResume is not null && error is System.IO.IOException;
+            if ((_verifyNetwork && !verifyReconnect) || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
             else if (replayFailed) ShowNetworkFailure(error.Message, "Ошибка повтора");
             else if (_networkMode != 0) ShowNetworkFailure(error.Message);
             else if (_label is not null)
@@ -579,6 +582,7 @@ public partial class Sandbox : Node3D
         if (_showcase) Input.MouseMode = Input.MouseModeEnum.Visible;
         _session?.Dispose();
         _session = null;
+        _networkLobby?.Directory?.Dispose(); _networkLobby = null;
     }
 
     private void BuildScene(int count, UnitCatalog catalog)
