@@ -1,12 +1,14 @@
 # Этап B — редактор карт Godot и независимая компиляция
 
-**Дата:** 17 ноября 2026 года. **Статус:** проект реализации по выбранному пользователем направлению B. Код плагина и компилятора ещё не написан. Названия документов и операций ниже обозначают обязанности; точная C#-сигнатура и расширения файлов не закрепляются этим текстом.
+**План:** 17 ноября 2026 года; уточнён 18 ноября. **Статус:** B0–B1 реализованы: [контракт 047](../../decisions/047-map-compilation.md), [проверки](../../verification/047-map-compilation.md). B2–B7, plugin и запуск сцены карты ещё впереди. Имена/API/формат реализованного среза закреплены в 047; остальные операции остаются проектом.
 
 [Общий план B/C/D](roadmap.md) · [Network/replay и переиспользование](network-reuse.md). Источники текущего поведения — OpenRTS `afb7aef5a46bb937b39c8b63269e935c2a5b91da`; рабочее дерево при чтении чистое. Ссылки на код приведены рядом с соответствующими ограничениями.
 
 ## Пользовательский результат
 
 Автор создаёт карту в Godot, выбирает тип из каталога, расставляет юниты/здания/neutral props, настраивает владельцев и поддержанные свойства. Видит картинки, тело и footprint, редактирует плоский terrain и старты. Свет, декоративные эффекты, брифинг и другие presentation-only сцены может делать обычными средствами Godot.
+
+**Карта нового формата — полноценная сцена Godot плюс её игровая проекция.** При выборе карты игра запускает соответствующую сцену и скомпилированные из неё данные/поддержанные кэши симуляции. Compiler не заменяет обычные возможности сцены собственной системой оформления. M1 YAML развивается параллельно как простой simulation-facing формат. Самый ранний срез может ограничиться удобной расстановкой и экспортом данных, но B завершён только после scene-based запуска; это не смена цели на вариант A.
 
 «Проверить», «Скомпилировать» и «Играть» используют один pipeline. При ошибке редактор выбирает объект и поле; при успехе карта регистрируется в игре. Готовые игровые данные читаются обычным .NET headless без Godot и без editor plugin. Godot runtime дополнительно загружает совместимое оформление. После playtest исходная расстановка сохраняется; изменившиеся в матче HP/позиции автоматически в неё не записываются.
 
@@ -25,7 +27,7 @@
 | Godot authoring addon | Палитра, markers, Inspector, gizmos, undo, сохранение сцены, извлечение снимка | Godot .NET, Content; runtime preview через адаптер |
 | Независимая подготовка карты | DTO документа, нормализация, каталоги, проверка, compiler/reader, gameplay identity, diagnostics | `OpenRTS.Content` → Gameplay → Core; без Godot/Network |
 | Инициализация Gameplay | Обычный lifecycle и строгая проверка размещений, начальные параметры, receipt соответствия IDs | Существующие Gameplay/Core |
-| Минимальный Godot runtime карты | Загрузка manifest, визуальной сцены/terrain bindings и нынешних Models; команды/кадры | Godot + Content/Gameplay, без включённого editor plugin |
+| Минимальный Godot runtime карты | Загрузка manifest, полноценной entry сцены карты, terrain bindings и нынешних Models; команды/кадры | Godot + Content/Gameplay, без включённого editor plugin |
 | Host playtest/replay | Пауза, шаг, stop/restart, запись/просмотр поддержанного журнала | SimulationSession; Network только при использовании его replay API |
 
 Начать C# addon в стандартном `addons/openrts_editor` существующего Godot-проекта. Source inclusion нынешнего `OpenRTS.Godot` можно сохранить на первом срезе; второй проверяемый game project определит минимальную общую поставку. Не нужны обязательные NuGet-пакеты, общий DI-контейнер и новые пустые сборки. Editor API и его compile/export configuration должны быть отделены от runtime использования: исключение markers из сцены ещё не доказывает отсутствие editor-зависимостей в экспортированной сборке.
@@ -41,7 +43,7 @@ Godot поддерживает C# plugins, требующие сборки до 
 | **Авторская сцена** `.tscn` / `.tres` | Размещения, стабильные IDs, порядок, исходные свойства, terrain brushes, starts, ссылки на оформление | Редактор Godot; первичный источник этой карты |
 | **Независимый исходный документ карты** | Числа/IDs/упорядоченные записи, нормализованные transforms, локальные overrides, версия; без Nodes/Resources | Результат извлечения, вход общего компилятора. Можно сохранить для review и .NET CI, но он производный от сцены |
 | **Скомпилированные игровые данные** | Проверенные terrain, starts/slots, ordered placements, подготовленные варианты/initializers, версии/отпечатки | Compiler Content; достаточны для игры с установленным совместимым контентом |
-| **Пакет представления** | Runtime `.tscn`, Models/visual bindings, необходимые Godot resources | Godot build/export; не часть игрового hash |
+| **Игровая сцена карты** | Полноценная runtime `.tscn`: сохранённые Nodes/scripts/groups, Models, окружение, камера, брифинг и Godot resources | Godot build/export; игровые решения идут через OpenRTS, косметические байты не часть игрового hash |
 | **Manifest поставки и source map** | Связь игровых/визуальных результатов одной сборки, provenance, диагностика ID → source | Build pipeline; source map может поставляться отдельно от игры |
 | **Настройки запуска** | Выбранная карта по digest, starting set, назначения игроков, seed, tick/settings, механики | Хост; не зашиваются в общий compiled terrain |
 | **Snapshot / replay** | Runtime state K либо команды/хеши истории | Существующие recovery/replay APIs, не compiler карты |
@@ -138,7 +140,7 @@ Recipe/replay хранит стабильные references/digests и парам
 
 ## Представление, export и optional plugin
 
-Минимальный runtime loader получает semantic map и presentation manifest. Окружение можно держать отдельной PackedScene; marker preview и authoring references в игровую сцену не включаются. Нынешние `SpriteWorldView`, Models и effects отображают entities, а окружение не пишет в мир. Недостающая visual сцена — отдельная ошибка/явный режим хоста; она не разрешает загрузить другую игровую карту.
+Runtime loader при выборе новой карты открывает её полноценную entry PackedScene и закреплённый semantic artifact из manifest. Сохраняются структура, scripts и композиция исходной сцены; сборка исключает editor-only markers или переводит их в неисполняемые metadata, не создавая второй спавнер. `SpriteWorldView`, Models и effects могут оставаться одной из веток такой сцены. Декомпозиция окружения в subscenes — выбор автора, не обязательное ограничение формата. Отсутствующая entry scene — отдельная ошибка Godot-хоста; headless явно запускает только semantic projection, а не другую карту.
 
 Один preparation path вызывается editor button, Play/F6, build CLI и export. Для внешней сборки предоставляются два понятных шага: Godot .NET extraction и обычная .NET compile/validation; из уже сохранённого независимого документа второй шаг не требует Godot. EditorExportPlugin помогает упаковке/проверке, но его callback сам по себе не покрывает F6 и обычный запуск. [Export plugin](https://docs.godotengine.org/en/stable/classes/class_editorexportplugin.html).
 
@@ -169,9 +171,13 @@ P0 — первый полезный сквозной результат; P1 —
 
 ### B0 — зафиксировать первый контракт и fixtures
 
+**Выполнен:** ground-plane v1, квоты, порядок/IDs и fingerprints зафиксированы в 047. Добавлен независимый tiny fixture, сохранён исходный M1 baseline четырёх карт и 33 состояний каждой; отдельная проверка отвергает неподходящий start set. Измерения Debug — одиночные load/alloc samples, не benchmark масштабирования.
+
 Согласовать поля первой flat-map версии, порядок/ID, единицы и quotas. Подготовить tiny fixture и skirmish с нейтральным объектом, двумя стартами и кистью; ещё один пример — хорошая карта с недопустимым выбранным стартовым набором. Зафиксировать baseline нынешнего M1→World, время/память загрузки и hash журнала. Выход: schema/examples и воспроизводимый baseline, без нового pathfinding и без 3D terrain. Если неоднозначна игровая семантика поля, исключить его из v1 до определения, не угадывать.
 
 ### B1 — независимая подготовка до UI
+
+**Выполнен:** MapSource/MapLayer, общий MapCompiler, канонический JSON source/compiled reader/writer, атомарная запись и headless compile/run. M1 использует тот же builder и прежний MapMatch lifecycle. Здесь ещё нет сцены/manifest, Godot extraction, variants и navigation/AI caches; не считать это готовым продвинутым scene-map форматом игры.
 
 В Content выделить общий типизированный input/builder из реального M1 loader; реализовать семантический reader/writer и map digest, исходную диагностику и exact content dependencies. Существующие M1 источники проходят тот же initialization path. Выход: исходный M1 и compiled input дают один tick0/журнал, повреждённый/неподдержанный файл отвергается, headless не зависит от Godot/Network. Это минимальная MC1; preload маршрутов не входит.
 
@@ -185,7 +191,7 @@ P0 — первый полезный сквозной результат; P1 —
 
 ### B4 — весь путь поставки и игры
 
-Объединить Validate/Compile/Play/F6/CLI/export, generation manifests и регистрацию в карте игры. Загрузить косметическую сцену независимо от semantic input. Выход: опубликованный flat-map bundle открывается из меню/fixture runner и обычным .NET headless, editor plugin выключен; clean import/export проходит. Если автоматический запуск нельзя надёжно остановить до компиляции, использовать явный launcher с проверкой manifest и блокировать stale run, не молча играть старую карту.
+Объединить Validate/Compile/Play/F6/CLI/export, generation manifests и регистрацию в карте игры. При выборе карты загрузить её полноценную entry сцену с сохранением scripts/groups/композиции и закреплённый semantic artifact. Выход: опубликованный flat-map bundle открывается из меню/fixture runner, а его игровая проекция — обычным .NET headless; editor plugin выключен, clean import/export проходит. Если автоматический запуск нельзя надёжно остановить до компиляции, использовать явный launcher с проверкой manifest и блокировать stale run, не молча играть старую карту.
 
 ### B5 — ограниченные редактируемые свойства
 

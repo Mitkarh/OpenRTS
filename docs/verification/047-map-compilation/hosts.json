@@ -1,0 +1,17 @@
+{
+  "m1": {
+    "Tick": 32,
+    "EntityCount": 3,
+    "StateHash": "F32969AC2EBC2531641DD5D0ABD2505CC93C31BF0FCC355017365DF51D3CE864"
+  },
+  "compiled": {
+    "Tick": 32,
+    "EntityCount": 3,
+    "StateHash": "F32969AC2EBC2531641DD5D0ABD2505CC93C31BF0FCC355017365DF51D3CE864"
+  },
+  "godot": {
+    "Tick": 32,
+    "EntityCount": 3,
+    "StateHash": "F32969AC2EBC2531641DD5D0ABD2505CC93C31BF0FCC355017365DF51D3CE864"
+  }
+}

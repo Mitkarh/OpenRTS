@@ -1,0 +1,18 @@
+{
+  "format": "openrts-map-source",
+  "version": 1,
+  "geometry": "ground-plane-v1",
+  "map": {
+    "id": "compilation-fixture",
+    "kind": "fixture",
+    "size": [4, 3],
+    "cellSize": 1024,
+    "terrain": {"palette": ["grass"], "cells": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]},
+    "visual": {"palette": ["grass"], "cells": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]},
+    "slots": [{"id": "blue"}, {"id": "red"}],
+    "objects": [
+      {"id": "blue-scout", "type": "rifleman", "position": [1024, 1536], "owner": "blue"},
+      {"id": "red-scout", "type": "rifleman", "position": [3072, 1536], "owner": "red"}
+    ]
+  }
+}

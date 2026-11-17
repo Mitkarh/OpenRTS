@@ -4,6 +4,8 @@ OpenRTS предоставляет независимую RTS симуляцию
 
 `OpenRTS.Core` владеет Frent, размещением и жизненным циклом сущностей, фиксированным тиком и типизированной потоковой сессией. Сетка и контракт поиска пути доступны отдельно от реализаций. `OpenRTS.Gameplay` собирает встроенный `SimulationWorld` из конкретных правил и публикует свои типизированные кадры. `OpenRTS.Content` готовит definitions Gameplay из YAML для Godot и headless. [Решение 023](decisions/023-core-and-gameplay.md) · [План выделения механик](research/mechanic-modularity/README.md)
 
+Content также владеет независимой подготовкой карт: M1 и численный MapSource проходят общий compiler в `.ortmap.json`, затем прежний MapMatch lifecycle. [Контракт 047](decisions/047-map-compilation.md). Полноценная Godot-сцена вместе с её compiled игровой проекцией — дополнительный целевой формат B; editor/extraction/scene entry loader ещё не реализованы.
+
 Принятые решения:
 
 - Самостоятельная реализация под MIT. Совместимость с OpenRA не требуется.

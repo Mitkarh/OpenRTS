@@ -72,6 +72,7 @@ PlayerChecks.Run(Test);
 SupplyChecks.Run(Test);
 UpgradeChecks.Run(Test);
 MapChecks.Run(Test);
+MapCompilationChecks.Run(Test);
 SkirmishAiChecks.Run(Test);
 BaseConstructionPlannerChecks.Run(Test);
 CaptureMechanicChecks.Run(Test);

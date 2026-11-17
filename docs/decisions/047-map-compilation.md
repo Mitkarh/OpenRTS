@@ -1,0 +1,66 @@
+# 047. Независимая подготовка и компиляция карты B0–B1
+
+**Дата:** 18 ноября 2026. **Статус:** реализован независимый срез B0–B1; Godot addon и запуск сцен карты остаются следующими этапами. [План B](../research/godot-integration/stage-b-design.md), [общая модель](../research/godot-integration/roadmap.md), [проверки](../verification/047-map-compilation.md).
+
+## Карта игры и её игровая проекция
+
+Выбранный вариант B — полноценная авторская/игровая сцена Godot вместе с извлечёнными игровыми данными. При выборе такой карты Godot-хост будет запускать соответствующую сцену и передавать совместимые compiled данные симуляции. Структура сцены, её scripts, повторно используемые группы, камеры, свет и ролики сохраняются; compiler не заменяет сцену самодельным набором картинок. Подготовка runtime-сцены может убрать editor-only markers, но не произвольно пересобрать её поведение.
+
+M1 YAML остаётся самостоятельным упрощённым форматом, близким к симуляции. Оба источника сходятся в одном независимом пути подготовки. B0–B1 реализуют этот путь и файловый игровой артефакт; manifest сцены, извлечение из Godot и её runtime loader ещё не реализованы.
+
+## API и владение
+
+`MapSource` — immutable численный документ: ID/kind/bounds/масштаб, terrain и visual слои, slots/starts и упорядоченные объекты. `MapLayer` копирует palette/cell arrays, `MapSource` — списки slots/objects. DTO не содержит Nodes, Godot ResourceUID, ECS handles или runtime state. `Origin` хранит диагностику, но не сериализуется и не входит в отпечатки.
+
+`MapSource.FromM1` сохраняет строгий YAML frontend: поля/типы, anchors/tags и brush grammar проверяются как раньше, кисти разворачиваются в независимые слои. `MapCompiler.Compile` выполняет общую проверку references, IDs, размеров, координат, owners и palette indices; нормализует palettes и slots. `GameMap.Load` для M1 использует этот же builder. GameMap/MapMatch инициализируют мир прежним lifecycle.
+
+Объекты идут в исходном порядке. Slots канонизируются ordinal по ID, что соответствует существующему Prepare; сначала создаются стартовые силы по slots и порядку starting set, потом объекты карты. Канонизация palette не меняет terrain IDs каталога. Имена объектов/слотов сохранены; переименование Node/scene в будущем не должно менять authoring ID. Выдача receipt ID→EntityId относится к последующему authoring срезу.
+
+Компиляция проверяет **данные**, не все возможные матчи. Геометрия тел/footprint и допустимость конкретного start set/назначения окончательно проверяются `Prepare(...).CreateWorld(...)`. При отказе временный мир освобождается. Успех одной конфигурации не считается доказательством допустимости остальных.
+
+## Форматы v1
+
+Независимый источник — UTF-8 JSON с `format: openrts-map-source`, `version: 1`, `geometry: ground-plane-v1` и объектом `map`. Рекомендуемый suffix — `.mapsource.json`. Поля `map`:
+
+| Поле | Контракт |
+| --- | --- |
+| `id`, `kind` | Непустой ID; `fixture` или `skirmish` |
+| `size`, `cellSize` | `[width,height]`, строго 1024 в v1 |
+| `terrain`, `visual` | Каждый слой: строковая `palette` и целые `cells` по строкам, X быстрее Y; ровно width×height индексов |
+| `slots` | Fixture: `{id}`; skirmish: `{id,position:[x,y],reverse:bool}`. Reverse необязателен, default false |
+| `objects` | `{id,type,position:[x,y],owner}`, owner — slot ID или `neutral`; в skirmish только neutral |
+
+Точные координаты — Int32 world units, не cell indices. Elevation только 0; высоты, SurfaceId, объёмы, overrides/initial HP и ориентации объектов пока не входят в версию. Нет implicit nearest point, смены owner или проекции неподдержанного 3D. Visual ID не задаёт физический terrain.
+
+Compiled файл — тот же проверенный канонический payload с `format: openrts-compiled-map`, `version: 1`, `compilerVersion: 1`, `geometry` и тремя fingerprints. Suffix `.ortmap.json` зарезервирован для него: `GameMap.Load` маршрутизирует такой файл в `MapCompiler.Read`; остальные имена сохраняют M1 frontend. Отдельные `MapSource.Read` и `MapCompiler.Read` не зависят от имени файла.
+
+`MapCompiler.Save` пишет временный файл в том же каталоге и только после полного успеха/проверки отмены заменяет target. Не создаёт runtime caches. Отсутствующий каталог или ошибка записи не являются успешной компиляцией. CLI требует `.ortmap.json`, чтобы не записать результат поверх YAML/source по ошибке.
+
+## Идентичность и проверка файла
+
+- **GameplayFingerprint:** SHA-256 канонической игровой проекции. Включены schema/geometry, ID/kind/bounds/масштаб, terrain, slots/starts, объекты и их порядок; visual слой исключён.
+- **DataFingerprint:** SHA-256 полного канонического независимого документа, включая visual. Это позволяет обнаружить повреждение визуальных данных, не смешивая их с игровым отпечатком.
+- **ContentFingerprint:** действующий UnitCatalog fingerprint. Первая версия консервативно привязана ко всему каталогу. Новые неизвестные типы/terrain и несовместимый каталог отклоняются.
+
+Palettes приводятся к использованным ID в ordinal-порядке с перенумерацией cells; slots сортируются по ID. Изменение порядка объектов остаётся значимым. Пробелы JSON, исходный порядок palette/slots и путь файла не меняют результат. Неизвестные/duplicate поля, trailing JSON, несовместимые версии и неверные digests отвергаются. Это проверка целостности и совместимости, не цифровая подпись.
+
+## Пределы первой версии
+
+Документ — до 64 MiB UTF-8, JSON depth≤16; M1 сохраняет depth≤8. Dimensions/cells ограничены действующим `NavigationGrid.MaximumCells` (16 Mi) и world bounds, slots≤256, objects≤1 млн, palette≤65536, строковые IDs≤1024 UTF-8 bytes. Terrain references дополнительно ограничены реальным каталогом. Все пределы — верхние квоты формата, не подтверждённая способность загрузить их сочетание с приемлемой памятью/скоростью; byte quota может ограничить карту раньше cell quota.
+
+До крупных выделений JSON проверяет dimensions/array counts; сериализация ограничивает выходной буфер. Программный DTO копирует ограниченные входные коллекции. Отмена проверяется в compiler loops и при записи/публикации. Синхронный JSON/YAML parse не прерывается посередине; отмена наблюдается на границе этой ограниченной стадии.
+
+Новые квоты применяются и к общему M1 пути. Штатные M1 карты и traces сохранены; ранее теоретически допустимые неограниченные списки/строки теперь могут быть отвергнуты. Формат не объявляет совместимость таких входов без ограничений.
+
+## Использование
+
+```sh
+./tools/dev.sh headless --map=content/maps/fixture.yaml --compile-map=/tmp/fixture.ortmap.json
+./tools/dev.sh headless --map=/tmp/fixture.ortmap.json --ticks=32
+```
+
+Для исходного `.mapsource.json` первый вызов тот же, с соответствующим `--map`. Compile command не запускает матч и не объявляет все start sets проверенными. Готовый файл можно открыть из API в Godot/headless; регистрация нового scene-map package в меню — задача B4.
+
+## Дальнейшие срезы
+
+B2–B4 добавят authoring сцены/markers, извлечение, preview, scene entry manifest и запуск полноценной сцены. B5 — ограниченные variants/initial state, B6 — exact map identity в Network/replay bootstrap. Нынешние `ScenarioHash`/recipe протоколов здесь не менялись. Расширенные navigation/AI caches и игровой 3D остаются отдельными эпиками после C.

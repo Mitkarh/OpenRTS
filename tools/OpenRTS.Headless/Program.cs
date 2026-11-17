@@ -9,7 +9,7 @@ using OpenRTS.Core;
 try
 {
     var path = "sandbox/content/units/units.yaml";
-    string? mapPath = null, startSetPath = null, aiConfig = null, aiProfile = null, modPath = null;
+    string? mapPath = null, startSetPath = null, aiConfig = null, aiProfile = null, modPath = null, compileMapPath = null;
     bool fogRetentionBenchmark = false, fogGroupsBenchmark = false, fogBenchmark = false, fog = false, skirmishAi = false, ticksSpecified = false, aviation = false;
     uint? aiPlayer = null;
     bool simulate = false, benchmark = false, hasPath = false, navigation = false, reverseJobs = false, showcase = false, buildings = false, sizeBenchmark = false, production = false, ecsBenchmark = false, skirmish = false;
@@ -28,6 +28,7 @@ try
         else if (argument.StartsWith("--ai-config=", StringComparison.Ordinal) && argument.Length > 12) aiConfig = argument[12..];
         else if (argument.StartsWith("--ai-profile=", StringComparison.Ordinal) && argument.Length > 13) aiProfile = argument[13..];
         else if (argument.StartsWith("--map=", StringComparison.Ordinal) && argument.Length > 6) { mapPath = argument[6..]; simulate = true; }
+        else if (argument.StartsWith("--compile-map=", StringComparison.Ordinal) && argument.Length > 14) compileMapPath = argument[14..];
         else if (argument.StartsWith("--start-set=", StringComparison.Ordinal) && argument.Length > 12) { startSetPath = argument[12..]; simulate = true; }
         else if (argument == "--ecs-benchmark") ecsBenchmark = true;
         else if (argument == "--size-benchmark") sizeBenchmark = true;
@@ -42,7 +43,7 @@ try
         else if (argument.StartsWith("--ticks=", StringComparison.Ordinal) && int.TryParse(argument[8..], out value) && value is >= 1 and <= 1000000) { ticks = value; ticksSpecified = true; }
         else if (argument.StartsWith("--workers=", StringComparison.Ordinal) && int.TryParse(argument[10..], out value) && value is >= 1 and <= 64) workers = value;
         else if (!argument.StartsWith("--", StringComparison.Ordinal) && !hasPath) { path = argument; hasPath = true; }
-        else throw new ArgumentException("Usage: OpenRTS.Headless [units.yaml] [--mod=game.yaml] [--simulate|--benchmark|--fog-retention-benchmark|--ecs-benchmark|--size-benchmark|--showcase|--buildings|--production] [--navigation] [--skirmish|--skirmish-ai|--map=path] [--ai-player=1..4] [--ai-config=path] [--ai-profile=id] [--start-set=path] [--workers=1..64] [--reverse-jobs] [--count=1..1000000] [--ticks=1..1000000]");
+        else throw new ArgumentException("Usage: OpenRTS.Headless [units.yaml] [--mod=game.yaml] [--simulate|--benchmark|--fog-retention-benchmark|--ecs-benchmark|--size-benchmark|--showcase|--buildings|--production] [--navigation] [--skirmish|--skirmish-ai|--map=path] [--ai-player=1..4] [--ai-config=path] [--ai-profile=id] [--start-set=path] [--compile-map=output.ortmap.json] [--workers=1..64] [--reverse-jobs] [--count=1..1000000] [--ticks=1..1000000]");
     }
     if (skirmishAi && skirmish)
         throw new ArgumentException("Select either the scripted skirmish or the AI skirmish.");
@@ -50,7 +51,7 @@ try
         throw new ArgumentException("--ai-player, --ai-config and --ai-profile require --skirmish-ai.");
     if (aviation && !ticksSpecified) ticks = AviationScenario.Ticks;
     if (skirmishAi && !ticksSpecified) ticks = SkirmishAiScenario.DefaultTicks;
-    bool mapRequested = skirmish || skirmishAi || mapPath is not null || startSetPath is not null;
+    bool mapRequested = skirmish || skirmishAi || mapPath is not null || startSetPath is not null || compileMapPath is not null;
     if (mapRequested && (buildings || showcase || navigation || benchmark || ecsBenchmark || sizeBenchmark || skirmish && mapPath is not null))
         throw new ArgumentException("Select one map or diagnostic scenario.");
     if (fogRetentionBenchmark) { FogRetentionBenchmark.Run(count,ticks); return 0; }
@@ -78,14 +79,27 @@ try
             File.Exists(weaponPath) ? WeaponCatalog.Load([new(weaponPath, File.ReadAllText(weaponPath))]) : null);
     }
     Console.WriteLine("OPENRTS_CONTENT:" + JsonSerializer.Serialize(catalog.Summary));
+    ContentSource ReadMapSource(string file)
+    {
+        if (manifest is not null && !Path.IsPathRooted(file)) return manifest.Files.Read(file);
+        string fullPath = Path.Combine("sandbox", file);
+        return new(file, File.ReadAllText(fullPath));
+    }
+    if (compileMapPath is not null)
+    {
+        if (!compileMapPath.EndsWith(".ortmap.json", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Compiled map output must end with .ortmap.json; source files are not overwritten.");
+        var input = ReadMapSource(mapPath ?? settings.Match.DefaultMap);
+        var source = input.Name.EndsWith(".mapsource.json", StringComparison.OrdinalIgnoreCase)
+            ? MapSource.Read(input) : MapSource.FromM1(input, catalog);
+        var compiled = MapCompiler.Compile(source, catalog);
+        MapCompiler.Save(compiled, compileMapPath);
+        Console.WriteLine("OPENRTS_MAP:" + JsonSerializer.Serialize(new { compiled.Map.Id, compiled.GameplayFingerprint,
+            compiled.DataFingerprint, compiled.ContentFingerprint, Path = Path.GetFullPath(compileMapPath) }));
+        return 0;
+    }
     if (simulate)
     {
-        ContentSource ReadMapSource(string file)
-        {
-            if (manifest is not null && !Path.IsPathRooted(file)) return manifest.Files.Read(file);
-            string fullPath = Path.Combine("sandbox", file);
-            return new(file, File.ReadAllText(fullPath));
-        }
         var map = aviation ? AviationScenario.Load(catalog, ReadMapSource) : mapRequested ? MapScenario.Load(catalog, ReadMapSource, mapPath ?? settings.Match.DefaultMap, startSetPath, settings.Match.DefaultStartSet) : null;
         SimulationWorld Create() => fog ? FogScenario.Create(catalog) : map is not null ? map.CreateWorld(new(), speedPerTick: settings.Simulation.SpeedPerTick, workers: workers, tickRate: settings.Simulation.TickRate) : buildings ? BuildingScenario.Create(catalog, workers) : showcase ? ShowcaseScenario.Create(catalog) : navigation ? NavigationScenario.Create(catalog, count, workers, reverseJobs) : DiagnosticScenario.Create(catalog, count);
         using var world = Create();

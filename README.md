@@ -157,6 +157,8 @@ MoveGroup собирает толпу около точки и не сохран
 
 Относительные пути отсчитываются от `sandbox/`. После редактирования YAML запустите карту заново. При прямом запуске оба хоста назначают до четырёх игроков по порядку имён слотов. Флаги `--skirmish` и `--map` запускают матч сразу. Для конечного прогона карты в Godot укажите `--verify-simulation --map=… --ticks=…`. [Формат и правила загрузки](docs/research/game-maps/README.md).
 
+B0–B1 добавляют независимую подготовку карты и compiled `.ortmap.json`, сохраняя M1. Например: `./tools/dev.sh headless --map=content/maps/fixture.yaml --compile-map=/tmp/fixture.ortmap.json`, затем `./tools/dev.sh headless --map=/tmp/fixture.ortmap.json --ticks=32`. Входом компилятора также служит `.mapsource.json`; [малый пример](sandbox/content/maps/compilation-fixture.mapsource.json), [контракт и ограничения](docs/decisions/047-map-compilation.md). Полноценный формат «Godot-сцена + её игровые данные» остаётся целью следующих этапов B; plugin/scene loader этим срезом не добавлены.
+
 Туман войны в меню матча: «скрыта», «разведана» или «видима». Видимость объектов задаётся `Vision: {Radius: ...}`. F9 переключает точную сетку и круговую подсветку (включая совмещение), F8 меняет сторону в локальном режиме без ИИ. `--fog` показывает круги поверх разведанных квадратов; [оптимизация групп и границы](docs/research/fog-visibility/group-optimization.md), [проверки](docs/verification/034-fog-groups-and-display.md).
 
 Эксперимент затухающей видимости: `./tools/dev.sh run --fog --fog-hold=12` (12тиков≈0.48с;50тиков=2с при25Гц). По умолчанию0. Это игровое удержание области с визуальным затуханием; [результаты сравнения таймеров и временного кэша](docs/verification/035-fog-retention.md).

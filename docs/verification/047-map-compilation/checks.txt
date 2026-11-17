@@ -1,0 +1,32 @@
+openrts-b1-full-test.log
+81 Network checks passed.
+20 DeclarativeContent checks passed.
+FAIL Weapons: factory repairs automatically beyond engineer range: Factory should repair an ally 3.5 cells beyond its footprint without an order
+FAIL ECS baseline: direct: direct trace changed: 793E42B561579BE0440AB3BBDCEA4776005C1C4F1FCDCA8A7F6AC5B745597FF0
+FAIL ECS baseline: navigation: navigation trace changed: A814E2094A95530F2D0568A4050689F4C22E9C16ECA7D81A9B905C0CB3C3F1B7
+FAIL ECS baseline: combat: combat trace changed: 8D0B30319CF595D202046D0850A4C902E3B1765EDB642839D12D2DC27E3E9D69
+FAIL ECS baseline: buildings: buildings trace changed: 25F591D095D7430735FEE073B71379CC2AB5B0B86694B56D1B89B40E9236D59A
+FAIL ECS baseline: production: production trace changed: 2BB560156B10C83A105F7A6FBDD6B370DC7934E6D7AC1B384CEC8EBDE0C21989
+FAIL Players: skirmish journal captures distant resources and builds for the correct player: Skirmish production/income/power did not complete
+FAIL Supply: a produced truck travels and pays into its own account on the Valley: Oil or depot content no longer meets the supply contract
+354 OpenRTS checks passed; 8 failed.
+openrts-b1-final-maps.log
+81 Network checks passed.
+20 DeclarativeContent checks passed.
+14 OpenRTS checks passed; 0 failed.
+openrts-b1-final-source-maps.log
+PASS Maps: fixed ownership and exact positions share terrain with navigation
+PASS Maps: static brushes compose terrain and independent visuals in placement order
+PASS Maps: shared brush files can be reused and reject duplicate or unknown names
+PASS Maps: decorative selection is presentation data and invulnerable groves reject attack
+PASS Maps: a different start set changes the same map with deterministic player assignment
+PASS Maps: both city maps support every start with either mode and allow open slots
+PASS Maps: malformed files, slot assignments and late placement failures are rejected
+PASS Maps compiled: independent input and artifact preserve exact world and every journal hash
+PASS Maps compiled: canonical palettes and slots ignore authoring layout but retain placement order
+PASS Maps compiled: visuals change integrity but not gameplay identity or simulation
+PASS Maps compiled: invalid input, unsupported geometry, duplicate keys and damaged artifacts fail closed
+PASS Maps compiled: source ownership, late placement failure and cancellation preserve callers and files
+PASS Maps compiled: tiny independent fixture and rejected start configuration remain separate contracts
+PASS Navigation maps are immutable, versioned and bounded
+14 OpenRTS checks passed; 0 failed.
