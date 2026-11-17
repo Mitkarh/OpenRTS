@@ -35,7 +35,7 @@ public partial class Sandbox
         AddChild(_matchSetup);
         _matchSetup.Build(TerminalTheme(), catalog.Locomotion!, maps, modes,
             Array.FindIndex(mapChoices, choice => choice.Path == settings.DefaultMap),
-            Array.FindIndex(setChoices, choice => choice.Path == settings.DefaultStartSet), _manifest.Settings.Simulation.SpeedPerTick, _fogHoldTicks);
+            Array.FindIndex(setChoices, choice => choice.Path == settings.DefaultStartSet), _manifest.Settings.Simulation.SpeedPerTick, _fogHoldTicks, catalog.Summary.Fingerprint);
         _matchSetup.Launch += BeginMatchFromSetup;
         _matchSetup.ReplayRequested += BeginReplay;
         _matchSetup.ConfigurationChanged += () => _pendingLobbySettings = _matchSetup.Options.Serialize();
@@ -72,7 +72,7 @@ public partial class Sandbox
             _matchSetup!.SetLaunching(true, "Подготовка поля боя…");
             StartSession();
         }
-        catch (Exception error) when (error is ContentException or ArgumentException or System.IO.IOException or System.Security.Cryptography.CryptographicException)
+        catch (Exception error) when (error is ContentException or ArgumentException or System.IO.IOException or System.Security.Cryptography.CryptographicException or OpenRTS.Network.MatchDirectoryException)
         {
             MatchSetupFailed(error, canRetry: true);
         }
@@ -98,6 +98,7 @@ public partial class Sandbox
                 try { network.ConfigureLobby(pending, MatchSetupOptions.Parse(pending).Seats.Select(s => s.Controller).ToArray()); _pendingLobbySettings = null; }
                 catch (InvalidOperationException) { }
             }
+            if (_directoryPublication is { } publication) _matchSetup!.ShowDirectoryPublication(publication.Status, publication.Invite);
             _matchSetup!.SetNetworkStatus(network.Status, network.Fingerprint);
             _matchSetup.UpdateNetworkLobby(network);
             if (_verifyNetwork && network.State.Match != Guid.Empty && network.State.Phase == OpenRTS.Network.MatchPhase.Lobby)
@@ -153,7 +154,9 @@ public partial class Sandbox
 
     private void MatchSetupFailed(Exception error, bool canRetry)
     {
+        if (_session?.Network?.ResumeCredential is null) _matchSetup?.CancelDirectoryJoin();
         _session?.Dispose();
+        _directoryPublication?.Dispose(); _directoryPublication = null;
         _networkAdvertiser?.Dispose(); _networkAdvertiser = null;
         _session = null;
         _pendingLobbySettings = null;

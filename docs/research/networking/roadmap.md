@@ -81,7 +81,9 @@ NET5/NET6 — дополнительные сервисы, не зависимо
 
 **Критерий:** save на тикеK, restore и доигрывание доT совпадают с непрерывным запуском на каждом дальнейшем checkpoint. Покрыть RNG, выданные IDs, burst/windup, очереди с progressive payments, partial flight/boarding, navigation local path/yield, construction и сенсорные знания. Проверить недокачанный/повреждённый snapshot, долгий catch-up и два одновременных rejoin. Если равенство нарушено, exact restore считается незавершённым; оставить replay от0 с лимитом длительности.
 
-## NET5 — сервис доступа к матчам
+## NET5 — поиск матча и допуск
+
+**Реализовано:** [первый сервис044](../../decisions/044-net5-match-directory-admission.md): TTL/lease, поиск совместимых публичных игр, private invite, key-bound account session, атомарный Join/request ID, signed ticket с TLS proof-of-possession и offline one-time admission, direct/configured-relay fallback и Godot UI. [Проверки](../../verification/044-net5-directory.md), [границы и продолжение](net5.md). Identity живёт в памяти приложения; каталог не durable. Cancel удерживает уже выданный capability до expiry≤30с. Автоматический NAT/backend и внешние account providers не реализованы.
 
 **Объём:** регистрация/TTL матча, протокол/версия/режим/слоты, private invites, account session и короткоживущий role-bound ticket, direct/relay endpoints. Не хранить доверенный результат лишь на основании заявлений P2P хоста; P2P матч в каталоге обозначен как доверительный.
 

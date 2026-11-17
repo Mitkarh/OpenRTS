@@ -31,6 +31,7 @@ public partial class Sandbox
         if (_networkChatLabel is not null) _networkChatLabel.Text = string.Join("\n", _networkMessages);
     }
     private LanGames? _networkAdvertiser;
+    private DirectoryListing? _directoryPublication;
     private void StartNetworkSession(MapMatch map, UnitCatalog catalog)
     {
         var directory = ProjectSettings.GlobalizePath("user://network"); Directory.CreateDirectory(directory);
@@ -60,10 +61,18 @@ public partial class Sandbox
         var network = new StarSession(_networkMode == 1, _networkAddress, _networkPort, _networkPin, Descriptor(ownerOptions, map),
             () => CreateConfiguredWorld(map, ownerOptions), path, playerCount: 4, player: _networkPlayer,
             aiPlayers: _networkAiPlayers, planAi: Plan, lobbySettings: ownerOptions.Serialize(), prepareSettings: Prepare,
-            closedPlayers: ownerOptions.Seats.Select((s, i) => (s, i)).Where(p => p.s.Controller == SlotController.None).Select(p => (uint)p.i + 1).ToArray(), resumeCredential: _networkResume);
+            closedPlayers: ownerOptions.Seats.Select((s, i) => (s, i)).Where(p => p.s.Controller == SlotController.None).Select(p => (uint)p.i + 1).ToArray(), resumeCredential: _networkResume,
+            admissionPolicy: _networkMode == 1 && _matchSetup.PublishDirectory ? new(_matchSetup.DirectoryClient!.Info!.SigningKey) : null,
+            admission: _networkMode == 2 && _networkResume is null ? _matchSetup.DirectoryGrant : null,
+            accountIdentity: _matchSetup.DirectoryClient?.Identity,
+            endpoints: _networkResume is not null ? _matchSetup.DirectoryGrant?.Endpoints : null);
         _session = new SandboxSession(network);
-        _networkAdvertiser?.Dispose();
-        if (network.IsHost)
+        _directoryPublication?.Dispose(); _directoryPublication = null;
+        if (network.IsHost && _matchSetup.PublishDirectory)
+            _directoryPublication = new(_matchSetup.DirectoryClient!, network, gameName, _matchSetup.PublicEndpoint, _networkPort,
+                () => MatchSetupOptions.Parse(network.LobbySettings).Map, _matchSetup.PrivateDirectory, _matchSetup.RelayEndpoint);
+        _networkAdvertiser?.Dispose(); _networkAdvertiser = null;
+        if (network.IsHost && !_matchSetup.PublishDirectory)
         {
             try { _networkAdvertiser = new LanGames(() => network.State.Phase != MatchPhase.Lobby ? null :
                 new LanGame("", _networkPort, gameName, MatchSetupOptions.Parse(network.LobbySettings).Map,

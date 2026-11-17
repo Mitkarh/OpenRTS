@@ -1,6 +1,6 @@
 # OpenRTS.Network
 
-NET1–NET4.3, включая WAN pipeline и multiplayer lifecycle: прямой клиентский lockstep, .NET10 / MIT. Зависимости Network → Gameplay → Core; Godot/Content не требуются, новых NuGet пакетов нет.
+NET1–NET5, включая WAN pipeline и multiplayer lifecycle: прямой клиентский lockstep, .NET10 / MIT. Зависимости Network → Gameplay → Core; Godot/Content не требуются, новых NuGet пакетов нет.
 
 `DirectMatch.Run` принимает подключённый TcpClient, player1/2, immutable MatchDescriptor, фабрику tick-zero SimulationWorld, callback ввода на будущий тик и stream журнала. Run блокирует поток-владелец до EndTick либо согласованного Leave в live режиме; сокет и мир освобождаются им, журналом владеет вызывающий код. Cancel и deadline прерывают сетевое ожидание. Команды передаются pipeline; checkpoints сверяются периодически, финальный hash обязателен; `DesyncException.Tick` обозначает первый проверенный расходящийся тик. `MatchJournal.Replay` воспроизводит завершённый журнал с исходной фабрикой и проверяет все hashes.
 
@@ -37,6 +37,16 @@ NET2 двухсторонний pipeline сохранён в DirectMatch/DirectS
 Поздний spectator (player0) может присоединиться на уже установленной паузе; анонимный запрос во время Playing отвергается. Для анализа матчей без остановки потребуется отдельный observer catch-up NET6/NET7. Пределы: snapshot64MiB, префикс64MiB/100000тиков, transfer15с, restore15с, admission30с. Потеря хоста не мигрирует матч; snapshot World не включает внешнюю память AI policy. Replay seek пока остаётся от0.
 
 [Контракт043](../../docs/decisions/043-net4-runtime-snapshot-rejoin.md) · [Проверки043](../../docs/verification/043-net4-runtime-rejoin.md).
+
+## NET5: поиск матча и допуск
+
+Запуск сервиса: `./tools/dev.sh match-directory --urls=http://127.0.0.1:17773 --signing-key=/tmp/openrts-directory-key.pem`. В Multiplayer укажите каталог и имя, нажмите «Каталог». Для host включите публикацию, задайте адрес для других игроков; Private создаёт скрытый invite, который можно явно показать/скопировать в лобби. Внешний каталог требует HTTPS. Прямые/LAN игры без публикации сохраняют прежний вход без account session.
+
+`MatchDirectoryClient` получает challenge/session с proof-of-possession P-256 ключа, ищет совместимые матчи и атомарно получает роль. `DirectoryListing` ведёт heartbeat/Confirm вне игрового owner. Host задаёт `admissionPolicy`, guest — `admission` и `accountIdentity`. Ticket связывает Match/role/slot/account/rules/content/pin/endpoints и живёт≤30с. StarProtocol4 требует fresh TLS account proof; owner одноразово гасит nonce. Rejoin остаётся на NET4 resume credential.
+
+Relay fallback использует уже настроенный TCP forwarding endpoint с тем же host pin. Автоматического NAT traversal/port mapping/provider нет. Каталог держит TTL30с, private invites и lease; он не удостоверяет P2P результаты и не нужен для продолжения принятого матча. Данные сервиса в памяти, ключ клиента в памяти приложения. После Cancel выданный offline ticket удерживает место до expiry≤30с.
+
+`./tools/dev.sh verify-directory --visible --output=/tmp/openrts-directory-ui` проверяет native Godot публикацию/поиск/допуск и replay. `dotnet run --project tests/OpenRTS.Network.Tests -- --net5` запускает HTTP/crypto/TLS проверки (перед ним соберите solution). [Контракт044](../../docs/decisions/044-net5-match-directory-admission.md) · [Проверки044](../../docs/verification/044-net5-directory.md).
 
 ## Запуск конечного headless-стенда
 

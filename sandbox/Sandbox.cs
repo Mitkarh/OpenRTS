@@ -65,6 +65,7 @@ public partial class Sandbox : Node3D
             {
                 if (arg == "--jamming") { _jammingScenario = _fogScenario = _buildings = _showcase = true; continue; }
                 if (arg == "--verify") continue;
+                if (arg.StartsWith("--directory-test=", StringComparison.Ordinal)) { _networkVerifyDirectoryUrl = arg[17..]; continue; }
                 if (arg.StartsWith("--verify-network=", StringComparison.Ordinal)) { _verifyNetwork = true; _networkVerifyRole = arg[17..]; continue; }
                 if (arg.StartsWith("--network-port=", StringComparison.Ordinal)) { _networkVerifyPort = int.Parse(arg[15..]); continue; }
                 if (arg.StartsWith("--network-pin-file=", StringComparison.Ordinal)) { _networkVerifyPinFile = arg[19..]; continue; }
@@ -262,7 +263,7 @@ public partial class Sandbox : Node3D
         {
             if (_session.Network is { } network && _networkLabel is not null)
             {
-                _networkLabel.Text = $"{(network.Player == 0 ? "Зритель" : "Игрок " + network.Player)} · {network.Status}";
+                _networkLabel.Text = $"{(network.Player == 0 ? "Зритель" : "Игрок " + network.Player)} · {network.Status}" + (_directoryPublication is null ? "" : " · " + _directoryPublication.Status);
                 UpdateNetworkChat(network);
             }
             UpdateReplayControls();
@@ -573,6 +574,7 @@ public partial class Sandbox : Node3D
 
     public override void _ExitTree()
     {
+        _directoryPublication?.Dispose(); _directoryPublication = null;
         _networkAdvertiser?.Dispose(); _networkAdvertiser = null;
         if (_showcase) Input.MouseMode = Input.MouseModeEnum.Visible;
         _session?.Dispose();

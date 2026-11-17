@@ -93,3 +93,6 @@ FrameExchange публикует независимые массивы EntityPos
 **Туман войны F1:** [решение033](decisions/033-fog-of-war.md), [проверки](verification/033-fog-of-war.md). Gameplay владеет круговым обзором и историей terrain-клеток; Content компилирует VisionRadius; кадры и события поддерживают viewer-фильтрацию. Полный локальный debug-кадр сохраняется, сеть не реализована. Память объектов/радары и knowledge-aware навигация отложены.
 
 F1 дополнен [точной группировкой покрытия и фазовым кэшем общего сдвига](research/fog-visibility/group-optimization.md). Главное меню задаёт FogMode.Hidden/Explored/Visible; последний исключает поля тумана, Explored не ведёт историю. Круговой вид — локальный FogDisplayStyle Godot, не игровая истина; источники для него публикуются только владельцу. [Проверки034](verification/034-fog-groups-and-display.md).
+
+
+NET5: реализован [необязательный каталог и допуск044](decisions/044-net5-match-directory-admission.md): TTL/lease, private invites, key-bound sessions, атомарные места и подписанные одноразовые билеты, UI и direct/configured-relay fallback. Публикация работает вне simulation owner/barrier. Каталог в памяти, внешние login/NAT providers остаются продолжением. [Проверки](verification/044-net5-directory.md).

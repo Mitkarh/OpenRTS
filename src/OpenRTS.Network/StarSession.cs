@@ -47,7 +47,8 @@ public sealed partial class StarSession : IDisposable
         IReadOnlyList<uint>? aiPlayers = null, Func<SimulationWorld, uint, IReadOnlyList<WorldCommand>>? planAi = null,
         TimeSpan? timeout = null, string lobbySettings = "",
         Func<string, (MatchDescriptor Descriptor, SimulationWorld World)>? prepareSettings = null,
-        IReadOnlyList<uint>? closedPlayers = null, MatchResumeCredential? resumeCredential = null)
+        IReadOnlyList<uint>? closedPlayers = null, MatchResumeCredential? resumeCredential = null, MatchAdmissionPolicy? admissionPolicy = null,
+        MatchJoinGrant? admission = null, DirectoryIdentity? accountIdentity = null, IReadOnlyList<MatchEndpoint>? endpoints = null)
     {
         if (port is < 1 or > 65535 || playerCount is < 2 or > 8 || !host && player != 0 && (player < 2 || player > playerCount))
             throw new ArgumentOutOfRangeException(nameof(playerCount));
@@ -62,6 +63,15 @@ public sealed partial class StarSession : IDisposable
         if (resumeCredential is not null && (host || resumeCredential.Player != player || resumeCredential.Match == Guid.Empty ||
             resumeCredential.Epoch < 1 || resumeCredential.Token.Length != 64 || !resumeCredential.Token.All(Uri.IsHexDigit)))
             throw new ArgumentException("Invalid match resume credential.");
+        if (host && admission is not null || !host && admissionPolicy is not null || admission is not null &&
+            (accountIdentity is null || admission.Player != player || admission.Fingerprint != (fingerprint ?? "").Replace(":", "").Replace(" ", "").ToUpperInvariant() ||
+             admission.Expires <= DateTimeOffset.UtcNow || admission.Endpoints is null || admission.Endpoints.Length is < 1 or > 3 || resumeCredential is not null))
+            throw new ArgumentException("Invalid catalogue admission.");
+        if (endpoints is not null && (host || endpoints.Count is < 1 or > 3)) throw new ArgumentException("Invalid endpoints.");
+        _connectionEndpoints = (admission?.Endpoints ?? endpoints?.ToArray())?.ToArray();
+        if (_connectionEndpoints is not null) foreach (var endpoint in _connectionEndpoints) DirectoryValidation.Endpoint(endpoint);
+        if (admission is not null) foreach (var endpoint in admission.Endpoints) DirectoryValidation.Endpoint(endpoint);
+        _admissionGate = admissionPolicy is null ? null : new(admissionPolicy); _joinGrant = admission; _accountIdentity = accountIdentity;
         _resumeCredential = resumeCredential;
         IsHost = host; Player = host ? 1u : player; _descriptor = descriptor; _prepare = prepareSettings; _settings = lobbySettings;
         if (prepareSettings is not null) ValidateSettings(lobbySettings); JournalPath = journalPath; _planAi = planAi;

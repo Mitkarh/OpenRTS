@@ -11,24 +11,16 @@ public sealed partial class StarSession
 {
     private SimulationReport RunClient(string address, int port, SimulationWorld world, Func<SimulationWorld> createWorld)
     {
-        using var socket = new TcpClient { NoDelay = true };
-        using (var connect = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token))
-        {
-            connect.CancelAfter(TimeSpan.FromSeconds(30));
-            socket.ConnectAsync(address, port, connect.Token).AsTask().GetAwaiter().GetResult();
-        }
-        using var tls = new SslStream(socket.GetStream(), false, (_, remote, _, _) => remote is not null &&
-            Convert.ToHexString(SHA256.HashData(remote.GetRawCertData())) == Fingerprint);
-        using (var connect = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token))
-        {
-            // A guest may wait behind other bounded lobby handshakes in the accept queue.
-            connect.CancelAfter(TimeSpan.FromSeconds(30)); Authenticate(tls, null, connect.Token).GetAwaiter().GetResult();
-        }
+        using var connection = ConnectClient(address, port);
+        var tls = connection.Tls;
         using var pipe = new PeerPipeline(tls, _timeout, _stop.Token);
         pipe.Send(Wire.Pack(w => { w.Write(StarProtocol.Hello); w.Write(StarProtocol.Version); w.Write(Player); w.Write(State.Slots.Count);
             Wire.Text(w, Wire.Hash(DirectMatch.Descriptor(Descriptor))); Wire.Text(w, world.Report().StateHash); Wire.Text(w, Descriptor.Rules); Wire.Text(w, Descriptor.ContentHash);
             w.Write(ResumeCredential is not null);
             if (ResumeCredential is { } credential) { byte[] data = CredentialFrame(credential); w.Write(data.Length); w.Write(data); }
+            byte[] ticket = _joinGrant is null ? [] : System.Text.Encoding.UTF8.GetBytes(_joinGrant.Ticket);
+            if (ticket.Length > 8192) throw new InvalidDataException("Admission ticket size limit.");
+            w.Write((ushort)ticket.Length); w.Write(ticket);
         }));
         var clock = Stopwatch.StartNew(); double lastSeen = 0, lastTurn = 0, finishAt = 0; long sentSequence = 0, sealedTick = -1;
         long[] sequences = new long[State.Slots.Count];
@@ -79,6 +71,14 @@ public sealed partial class StarSession
                 byte[] frame = Read();
                 switch (frame[0])
                 {
+                    case StarProtocol.Rejected:
+                        throw new InvalidDataException(Wire.Unpack(frame, r => { r.ReadByte(); return Wire.Text(r); }));
+                    case StarProtocol.AdmissionChallenge:
+                        if (_joinGrant is null || _accountIdentity is null || log is not null) throw new InvalidDataException("Unexpected admission challenge.");
+                        string nonce = Wire.Unpack(frame, r => { r.ReadByte(); return Wire.Text(r); });
+                        if (nonce.Length != 64 || !nonce.All(Uri.IsHexDigit)) throw new InvalidDataException("Invalid admission challenge.");
+                        pipe.Send(Wire.Pack(w => { w.Write(StarProtocol.AdmissionProof); Wire.Text(w, _accountIdentity.SignAdmission(_joinGrant.Ticket, nonce)); }));
+                        break;
                     case StarProtocol.Credential:
                         var credential = ReadCredential(frame);
                         if (credential.Player != Player || State.Match != Guid.Empty && credential.Match != State.Match ||

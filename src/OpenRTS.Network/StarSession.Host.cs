@@ -19,6 +19,7 @@ public sealed partial class StarSession
         internal TickInbox Inbox = inbox;
         internal string? SettingsDigest;
         internal MatchResumeCredential? ResumeWith;
+        internal MatchAdmissionReceipt? Admission;
         internal long Ack, LastSeen = Stopwatch.GetTimestamp(), RateAt = Stopwatch.GetTimestamp();
         internal int Requests, Chats;
         internal void Limit(bool chat)
@@ -38,7 +39,7 @@ public sealed partial class StarSession
         var unconfirmedCredentials = new Dictionary<uint, MatchResumeCredential>();
         var recovering = new Dictionary<uint, (Peer Peer, Task Transfer, long Prefix, long Started)>();
         using var acceptStop = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
-        var handshakes = new List<Task<(TcpClient Socket, PeerPipeline Pipe, byte[] Hello)>>();
+        var handshakes = new List<Task<(TcpClient Socket, PeerPipeline Pipe, HelloData Hello)>>();
         int count = State.Slots.Count, window = 2 * Descriptor.InputDelay + Descriptor.HashInterval;
         var slots = State.Slots.ToArray(); var phase = MatchPhase.Lobby;
         var pending = Enumerable.Range(0, count).Select(_ => new Dictionary<long, WorldCommand[]>()).ToArray();
@@ -253,7 +254,7 @@ public sealed partial class StarSession
                         for (long t = world.Tick + 1; t < world.Tick + Descriptor.InputDelay; t++)
                             recovery.Peer.Inbox.Add(Wire.Batch(State.Match, player, t, []), world.Tick);
                     }
-                    peers.Add(player, recovery.Peer); recovering.Remove(player);
+                    peers.Add(player, recovery.Peer); recovering.Remove(player); Admitted(recovery.Peer);
                     recovery.Peer.LastSeen = Stopwatch.GetTimestamp(); prepared = -1;
                     Change(player <= 8 ? $"Игрок {player} вернулся · новая эпоха соединения" : "Зритель подключён к текущему матчу");
                 }
@@ -274,9 +275,11 @@ public sealed partial class StarSession
                         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(acceptStop.Token); deadline.CancelAfter(TimeSpan.FromSeconds(5));
                         await Authenticate(tls, certificate, deadline.Token);
                         pipe = new PeerPipeline(tls, _timeout, acceptStop.Token);
-                        return (socket, pipe, pipe.Read(TimeSpan.FromSeconds(5)));
+                        var hello = ReadHello(pipe.Read(TimeSpan.FromSeconds(5)));
+                        ProveAdmission(hello, pipe);
+                        return (socket, pipe, hello);
                     }
-                    catch { pipe?.Dispose(); tls?.Dispose(); socket.Dispose(); throw; }
+                    catch (Exception error) { RejectPeer(pipe, error is InvalidDataException ? error.Message : "TLS handshake не завершён."); pipe?.Dispose(); tls?.Dispose(); socket.Dispose(); throw; }
                 }));
             }
             foreach (var task in handshakes.Where(t => t.IsCompleted).ToArray())
@@ -285,14 +288,10 @@ public sealed partial class StarSession
                 try
                 {
                     (socket, pipe, var hello) = task.GetAwaiter().GetResult();
-                    var identity = Wire.Unpack(hello, r => {
-                        if (r.ReadByte() != StarProtocol.Hello || r.ReadInt32() != StarProtocol.Version) throw new InvalidDataException("Network protocol mismatch.");
-                        uint p = r.ReadUInt32(); int n = r.ReadInt32();
-                        string digest = Wire.Text(r), hash = Wire.Text(r), rules = Wire.Text(r), content = Wire.Text(r);
-                        byte flag = r.ReadByte(); if (flag > 1) throw new InvalidDataException("Invalid credential flag.");
-                        MatchResumeCredential? credential = null;
-                        if (flag != 0) { int size = r.ReadInt32(); if (size is < 1 or > 256) throw new InvalidDataException("Credential size limit."); credential = ReadCredential(r.ReadBytes(size)); }
-                        if (phase != MatchPhase.Lobby && recovering.Count >= 2 || credential is not null && credential.Player != p || n != count || rules != Descriptor.Rules || content != Descriptor.ContentHash ||
+                    uint p = hello.Player; int n = hello.Count;
+                    string digest = hello.Digest, hash = hello.Hash, rules = hello.Rules, content = hello.Content;
+                    var credential = hello.Resume;
+                    if (phase != MatchPhase.Lobby && recovering.Count >= 2 || credential is not null && credential.Player != p || n != count || rules != Descriptor.Rules || content != Descriptor.ContentHash ||
                             p != 0 && (p < 2 || p > count || slots[p - 1].Connected || recovering.ContainsKey(p)) ||
                             phase != MatchPhase.Lobby && p == 0 && phase != MatchPhase.Paused ||
                             p == 0 && peers.Keys.Concat(recovering.Keys).Count(k => k > 8) >= 8 ||
@@ -300,11 +299,10 @@ public sealed partial class StarSession
                             phase != MatchPhase.Lobby && p != 0 && (credential is null || !SameCredential(credential, credentials.GetValueOrDefault(p)) && !SameCredential(credential, unconfirmedCredentials.GetValueOrDefault(p))) ||
                             _prepare is null && (digest != Wire.Hash(DirectMatch.Descriptor(Descriptor)) || hash != _initialHash))
                             throw new InvalidDataException("Slot, resume credential, descriptor or initial world mismatch.");
-                        uint assigned = p == 0 ? Enumerable.Range(9, 8).Select(i => (uint)i).First(i => !peers.ContainsKey(i) && !recovering.ContainsKey(i)) : p;
-                        return (Player: assigned, Credential: credential);
-                    });
-                    uint player = identity.Player;
-                    var peer = new Peer(socket, pipe, new TickInbox(State.Match, player, Descriptor.InputDelay, window)) { ResumeWith = identity.Credential };
+                    uint assigned = p == 0 ? Enumerable.Range(9, 8).Select(i => (uint)i).First(i => !peers.ContainsKey(i) && !recovering.ContainsKey(i)) : p;
+                    uint player = assigned;
+                    var peer = new Peer(socket, pipe, new TickInbox(State.Match, player, Descriptor.InputDelay, window)) { ResumeWith = credential };
+                    if (hello.Ticket is not null) peer.Admission = _admissionGate!.Redeem(hello.Ticket, State.Match, p, Fingerprint, Descriptor.Rules, Descriptor.ContentHash);
                     if (_prepare is not null) peer.Pipe.Send(SettingsFrame());
                     if (phase == MatchPhase.Lobby)
                     {
@@ -315,7 +313,7 @@ public sealed partial class StarSession
                             peer.Pipe.Send(CredentialFrame(credentials[player]));
                             slots[player - 1] = slots[player - 1] with { Connected = true };
                         }
-                        Change($"Подключён игрок {player}", resetReady: true);
+                        Change($"Подключён игрок {player}", resetReady: true); Admitted(peer);
                     }
                     else
                     {
@@ -330,7 +328,7 @@ public sealed partial class StarSession
                     socket = null; pipe = null; // Ownership moved to peers/recovering.
                 }
                 catch (Exception e) when (e is IOException or InvalidDataException or AuthenticationException or OperationCanceledException or TimeoutException or ArgumentException or NotSupportedException or SocketException)
-                { pipe?.Dispose(); socket?.Dispose(); if (_stop.IsCancellationRequested) throw; Volatile.Write(ref _status, "Подключение отклонено: " + e.Message); }
+                { RejectPeer(pipe, e is InvalidDataException ? e.Message : "Подключение отклонено."); pipe?.Dispose(); socket?.Dispose(); if (_stop.IsCancellationRequested) throw; Volatile.Write(ref _status, "Подключение отклонено: " + e.Message); }
             }
         }
         try

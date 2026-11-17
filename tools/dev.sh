@@ -38,6 +38,7 @@ case "$action" in
     dotnet run --project tests/DeclarativeContent.Tests --no-build --no-launch-profile
     dotnet run --project tests/OpenRTS.Tests --no-build --no-launch-profile -- "$@"
     ;;
+  match-directory) build tools/OpenRTS.MatchDirectory/OpenRTS.MatchDirectory.csproj; exec dotnet run --project tools/OpenRTS.MatchDirectory --no-build --no-launch-profile -- "$@" ;;
   headless) build; dotnet run --project tools/OpenRTS.Headless --no-build --no-launch-profile -- "$@" ;;
   benchmark)
     build tools/OpenRTS.Headless/OpenRTS.Headless.csproj Release
@@ -55,6 +56,7 @@ case "$action" in
       dotnet run --project tests/OpenRTS.Network.Tests --no-build --no-launch-profile -- --wan "$@"
     fi
     ;;
+  verify-directory) build; import_assets; python3 tools/verify_directory.py "$godot_bin" "$@" ;;
   verify-replay) build; import_assets; python3 tools/verify_replay.py "$godot_bin" "$@" ;;
   verify-menu)
     build; import_assets
@@ -66,5 +68,5 @@ case "$action" in
     ;;
   verify-network) build; import_assets; python3 tools/verify_network.py "$godot_bin" "$@" ;;
   verify) "$0" test; import_assets; python3 tools/verify.py "$godot_bin" ;;
-  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|verify|verify-network|verify-menu|verify-replay|verify-wan]' >&2; exit 2 ;;
+  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|verify|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
 esac

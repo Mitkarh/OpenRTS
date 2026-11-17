@@ -59,8 +59,9 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     private bool Editable => NetworkMode != 2 && (!_busy || NetworkMode == 1 && _networkSession?.State.Phase == MatchPhase.Lobby);
 
     public void Build(Theme theme, LocomotionCatalog terrain, (string Title, string Description, GameMap Map)[] maps,
-        (string Title, StartingSet Set)[] modes, int defaultMap = 0, int defaultMode = 0, int speedPerTick = 128, int fogHoldTicks = 0)
+        (string Title, StartingSet Set)[] modes, int defaultMap = 0, int defaultMode = 0, int speedPerTick = 128, int fogHoldTicks = 0, string contentFingerprint = "")
     {
+        _directoryContent = contentFingerprint;
         Name = "MatchSetup"; Layer = 10; _simulationSpeed = speedPerTick; _retentionTicks = fogHoldTicks; _mapChoices = maps; _modeChoices = modes; _terrain = terrain;
         _root = new Control { Theme = theme }; AddChild(_root); _root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_background); _background.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect); _background.SetMap(maps[Math.Min(1, maps.Length - 1)].Map, terrain);
@@ -141,6 +142,7 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     }
     private void RefreshControls()
     {
+        if (_directoryInvitePanel is not null) _directoryInvitePanel.Visible = NetworkMode == 1 && _publishDirectory.ButtonPressed;
         _opponent.Disabled = NetworkMode != 0 || _modeChoices[_modes.Selected].Set.Id != "supply";
         _opponent.SetPressedNoSignal(_seats[1].Controller == SlotController.Ai);
         _title.Text = NetworkMode == 0 ? "Skirmish" : NetworkMode == 1 ? "Лобби · Host" : NetworkPlayer == 0 ? "Лобби · Зритель" : "Лобби · Игрок " + NetworkPlayer;

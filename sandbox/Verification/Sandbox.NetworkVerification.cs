@@ -7,6 +7,7 @@ using OpenRTS.Core.Orders;
 public partial class Sandbox
 {
     private bool _verifyNetwork;
+    private string? _networkVerifyDirectoryUrl;
     private bool _networkVerifyNet3, _networkVerifyPaused, _networkPauseRequested;
     private ulong _networkPauseBegan;
     private long _networkReadyRevision;
@@ -32,11 +33,43 @@ public partial class Sandbox
         if (_networkVerifyRole == "watch") Choose("JoinRole", 1);
         if (_networkVerifyNet3 && _networkVerifyRole == "host") ((SpinBox)_matchSetup.FindChild("NetworkAi", owned: false)).Value = 1;
         ((SpinBox)_matchSetup!.FindChild("NetworkPort", owned: false)).Value = _networkVerifyPort;
+        if (_networkVerifyDirectoryUrl is not null)
+        {
+            ((LineEdit)_matchSetup.FindChild("DirectoryUrl", owned: false)).Text = _networkVerifyDirectoryUrl;
+            if (_networkVerifyRole == "host")
+            {
+                ((CheckButton)_matchSetup.FindChild("PublishDirectory", owned: false)).ButtonPressed = true;
+                ((Button)_matchSetup.FindChild("CreateGame", owned: false)).EmitSignal(Button.SignalName.Pressed);
+            }
+            else _ = VerifyDirectoryJoin();
+            return;
+        }
         if (_networkVerifyRole != "host")
             ((LineEdit)_matchSetup.FindChild("NetworkPin", owned: false)).Text = File.ReadAllText(_networkVerifyPinFile).Trim();
         ((Button)_matchSetup.FindChild("Launch", owned: false)).EmitSignal(Button.SignalName.Pressed);
         if (_session?.Network is { } session && _networkVerifyRole == "host")
             File.WriteAllText(_networkVerifyPinFile, session.Fingerprint);
+    }
+    private async System.Threading.Tasks.Task VerifyDirectoryJoin()
+    {
+        try
+        {
+            ((Button)_matchSetup!.FindChild("MainMultiplayer", owned: false)).EmitSignal(Button.SignalName.Pressed);
+            ((Button)_matchSetup.FindChild("BrowseDirectory", owned: false)).EmitSignal(Button.SignalName.Pressed);
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (true)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (_matchSetup.FindChild("DirectoryJoinMatch", owned: false) is Button { Disabled: false } join)
+                {
+                    if (_capturePath is not null && DisplayServer.GetName() != "headless") await CaptureNetworkFrame(_capturePath + ".directory.png");
+                    ((Button)_matchSetup.FindChild("DirectoryJoinMatch", owned: false)).EmitSignal(Button.SignalName.Pressed);
+                    GD.Print("OPENRTS_DIRECTORY_UI_JOIN:requested"); return;
+                }
+                if (clock.Elapsed.TotalSeconds > 20) throw new TimeoutException("Directory UI did not list the hosted game");
+            }
+        }
+        catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
     }
     private void VerifyNetworkFrame(FrameExchange.FrameLease frame)
     {

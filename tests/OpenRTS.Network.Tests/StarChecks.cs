@@ -341,7 +341,7 @@ internal static class StarChecks
                 tls.AuthenticateAsClient("openrts.local");
                 using var initial = World(); initial.RestrictCommandsToPlayers();
                 Wire.Send(tls, Wire.Pack(w => { w.Write(StarProtocol.Hello); w.Write(StarProtocol.Version); w.Write(2u); w.Write(4);
-                    Wire.Text(w, Wire.Hash(DirectMatch.Descriptor(Descriptor))); Wire.Text(w, initial.Report().StateHash); Wire.Text(w, Descriptor.Rules); Wire.Text(w, Descriptor.ContentHash); w.Write(false); }), cancel.Token).GetAwaiter().GetResult();
+                    Wire.Text(w, Wire.Hash(DirectMatch.Descriptor(Descriptor))); Wire.Text(w, initial.Report().StateHash); Wire.Text(w, Descriptor.Rules); Wire.Text(w, Descriptor.ContentHash); w.Write(false); w.Write((ushort)0); }), cancel.Token).GetAwaiter().GetResult();
                 long revision = 0;
                 while (revision == 0)
                 {

@@ -50,6 +50,7 @@ public sealed partial class MatchSetupScreen
         if (key == "maps" || key == "advanced") { ShowPage("lobby"); return; }
         if (key == "lobby") { if (_networkSession is not null) { CancelNetwork?.Invoke(); _networkSession = null; _busy = false; } ShowPage(NetworkMode == 0 ? "main" : "browser"); return; }
         if (key == "replays" && _busy) CancelNetwork?.Invoke();
+        _directoryCancellation?.Cancel();
         ShowPage("main");
     }
     private void BuildMain()
@@ -73,6 +74,11 @@ public sealed partial class MatchSetupScreen
         var box = Page("lobby", "Лобби");
         var heading = new HBoxContainer(); box.AddChild(heading); _title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill; heading.AddChild(_title); heading.AddChild(_viewers);
         var body = new HBoxContainer(); body.AddThemeConstantOverride("separation", 20); box.AddChild(body);
+        var invitePanel = new VBoxContainer(); box.AddChild(invitePanel); _directoryInvitePanel = invitePanel; invitePanel.AddChild(_publicationStatus);
+        var invitation = new HBoxContainer(); invitePanel.AddChild(invitation); _ownInvite.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        invitation.AddChild(_ownInvite);
+        invitation.AddChild(Button("Показать приглашение", () => _ownInvite.Secret = !_ownInvite.Secret));
+        invitation.AddChild(Button("Скопировать", () => { if (_ownInvite.Text.Length != 0) DisplayServer.ClipboardSet(_ownInvite.Text); }));
         var left = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill }; body.AddChild(left);
         left.AddChild(_players);
         var fill = new Control { CustomMinimumSize = new(0, 150), SizeFlagsVertical = Control.SizeFlags.ExpandFill }; left.AddChild(fill);
@@ -99,7 +105,7 @@ public sealed partial class MatchSetupScreen
     private Control? _connectionPanel;
     private void BuildBrowser()
     {
-        var box = Page("browser", "Multiplayer");
+        var box = Page("browser", "Multiplayer"); BuildDirectory(box);
         var top = new HBoxContainer(); box.AddChild(top); _gameFilter.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill; top.AddChild(_gameFilter);
         top.AddChild(Button("Обновить", RefreshGames));
         var headers = new Label { Text = "ИГРА                                      КАРТА                         ИГРОКИ       СВОБОДНО       ЗРИТЕЛИ", Modulate = new("#b5bc93") }; box.AddChild(headers);
@@ -114,6 +120,12 @@ public sealed partial class MatchSetupScreen
         box.AddChild(new Label { Text = "Для игры через интернет используйте адрес хоста. Зритель подключается до старта матча.", Modulate = new("#9ba98e") });
     }
     private void OpenNetworkLobby(bool host)
+    {
+        _directoryGrant = null;
+        if (host && _publishDirectory.ButtonPressed) { PrepareDirectoryHost(); return; }
+        BeginNetworkLobby(host);
+    }
+    private void BeginNetworkLobby(bool host)
     {
         _network.Select(host ? 1 : 2); _busy = false; _networkSession = null; _shownState = null; _lastSettings = "";
         if (host) _address.Text = "0.0.0.0";
@@ -131,6 +143,7 @@ public sealed partial class MatchSetupScreen
             row.AddChild(Button("Войти", () => { _address.Text = game.Address; _port.Value = game.Port; _pin.Text = game.Fingerprint; _joinRole.Select(0); _networkPlayer.Show(); if (game.AvailablePlayers is { Length: > 0 }) _networkPlayer.Value = game.AvailablePlayers[0]; OpenNetworkLobby(false); }));
             row.AddChild(Button("Смотреть", () => { _address.Text = game.Address; _port.Value = game.Port; _pin.Text = game.Fingerprint; _joinRole.Select(1); _networkPlayer.Hide(); OpenNetworkLobby(false); }));
         }
+        AddDirectoryGames();
         _gameStatus.Text = games.Count == 0 ? "Игр в локальной сети пока нет. Создайте свою или подключитесь по адресу." : $"Найдено игр: {games.Count}";
     }
     private void BuildMaps()
@@ -163,9 +176,10 @@ public sealed partial class MatchSetupScreen
     }
     public override void _Process(double delta)
     {
+        UpdateDirectory(delta);
         if (_fingerprintView is not null && _fingerprintView.Text != _pin.Text) _fingerprintView.Text = _pin.Text;
         if (_mapTiles is not null) _mapTiles.Columns = GetViewport().GetVisibleRect().Size.X < 1100 ? 2 : 3;
         if (_page == "browser" && (_refreshAt -= delta) <= 0) { _refreshAt = 1; RefreshGames(); }
     }
-    public override void _ExitTree() { _browser?.Dispose(); }
+    public override void _ExitTree() { _directoryCancellation?.Cancel(); _directoryClient?.Dispose(); _browser?.Dispose(); }
 }
