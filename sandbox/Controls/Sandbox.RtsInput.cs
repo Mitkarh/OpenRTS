@@ -188,6 +188,7 @@ public partial class Sandbox
     private bool OnScreen(EntityPose pose) => Playfield().HasPoint(Screen(pose));
     private bool Controls(uint owner)
     {
+        if (_session?.Replay is not null) return false;
         if (_networkMode != 0)
             return _session?.Network is { Player: > 0 } n && !n.Completion.IsCompleted &&
                 n.State.Phase is OpenRTS.Network.MatchPhase.Playing or OpenRTS.Network.MatchPhase.Paused &&

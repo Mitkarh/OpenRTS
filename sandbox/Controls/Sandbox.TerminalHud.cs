@@ -238,7 +238,7 @@ public partial class Sandbox
         menu.AddChild(health);
         AddRangeSettings(menu);
         menu.AddChild(TerminalButton("Консоль разработчика", "F12", () => { ToggleMatchMenu(); _diagnostics!.Visible = !_diagnostics.Visible; }));
-        if (_networkMode == 0) menu.AddChild(TerminalButton("Перезапустить матч", "Сбросить текущий матч", () => { ToggleMatchMenu(); StartSession(); }));
+        if (_networkMode == 0 && _session?.Replay is null) menu.AddChild(TerminalButton("Перезапустить матч", "Сбросить текущий матч", () => { ToggleMatchMenu(); StartSession(); }));
         if (_startedFromSetup)
             menu.AddChild(TerminalButton("Новый матч", "Вернуться к выбору карты и игроков", () => GetTree().CallDeferred(SceneTree.MethodName.ReloadCurrentScene)));
         if (_session?.Network is { } network)

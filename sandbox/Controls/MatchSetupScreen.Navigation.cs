@@ -39,6 +39,7 @@ public sealed partial class MatchSetupScreen
     {
         _page = key;
         foreach (var pair in _pages) pair.Value.Visible = pair.Key == key;
+        if (key == "replays") RefreshReplays();
         if (key == "browser" && _browser is null)
         {
             try { _browser = new LanGames(); } catch (System.Net.Sockets.SocketException error) { _gameStatus.Text = "Поиск недоступен: " + error.Message; }
@@ -48,6 +49,7 @@ public sealed partial class MatchSetupScreen
     {
         if (key == "maps" || key == "advanced") { ShowPage("lobby"); return; }
         if (key == "lobby") { if (_networkSession is not null) { CancelNetwork?.Invoke(); _networkSession = null; _busy = false; } ShowPage(NetworkMode == 0 ? "main" : "browser"); return; }
+        if (key == "replays" && _busy) CancelNetwork?.Invoke();
         ShowPage("main");
     }
     private void BuildMain()
@@ -60,6 +62,7 @@ public sealed partial class MatchSetupScreen
         column.AddChild(new Label { Text = "Выберите поле боя", Modulate = new("#b8c2aa") }); column.AddChild(new HSeparator());
         column.AddChild(Button("Skirmish", OpenSkirmish, "MainSkirmish"));
         column.AddChild(Button("Multiplayer", () => ShowPage("browser"), "MainMultiplayer"));
+        column.AddChild(Button("Повторы", () => ShowPage("replays"), "MainReplays"));
         column.AddChild(Button("Настройки", () => ShowPage("settings"), "MainSettings"));
         column.AddChild(Button("Выход", () => GetTree().Quit(), "MainExit"));
         var credit = new Label { Text = "ПЕРЕКРЁСТОК\nТактическая карта", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, SizeFlagsVertical = Control.SizeFlags.ShrinkEnd, HorizontalAlignment = HorizontalAlignment.Right, Modulate = new("#8d9c81") }; body.AddChild(credit);

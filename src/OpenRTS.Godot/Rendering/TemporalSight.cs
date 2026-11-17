@@ -32,6 +32,7 @@ internal sealed class TemporalSight
         _rects=[new(){Material=_materials[0]},new(){Material=_materials[1]}];
         for(int i=0;i<2;i++){_views[i].AddChild(_rects[i]);parent.AddChild(_views[i]);_materials[i].SetShaderParameter("current_sight",current);}
     }
+    internal void ResetTimeline() => _tick = -1;
     internal void Apply(long tick,uint viewer,int hold,Vector2I size)
     {
         bool reset=_tick<0 || tick<_tick || viewer!=_viewer || hold!=_hold || _views[0].Size!=size;

@@ -97,7 +97,7 @@ public sealed partial class StarSession
                             {
                                 if (previous.Match == Guid.Empty || next.Slots.Any(p => p.Controller == SlotController.Human && (!p.Connected || !p.Ready)))
                                     throw new InvalidDataException("Start without agreed Ready.");
-                                output = File.Create(JournalPath); log = new StarJournal(output, Descriptor, world.Report().StateHash, frame);
+                                output = File.Create(JournalPath); log = new StarJournal(output, Descriptor, world.Report().StateHash, frame, LobbySettings);
                             }
                         }
                         else { StarJournal.ValidateTransition(previous, next, world.Tick); log.Write(frame); }

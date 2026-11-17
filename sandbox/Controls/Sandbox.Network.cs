@@ -36,8 +36,8 @@ public partial class Sandbox
         var path = Path.Combine(directory, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.journal");
         var ownerOptions = _configuredOptions!; var ownerMap = map;
         var policies = new System.Collections.Generic.Dictionary<uint, (SkirmishAi Ai, long Tick, WorldCommand[] Commands)>();
-        MatchDescriptor Descriptor(MatchSetupOptions options, MapMatch match) => new("openrts-lobby-v2", catalog.Summary.Fingerprint,
-            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(options.Serialize() + "|" + _manifest.Settings.Simulation.SpeedPerTick + "|" + _fogHoldTicks))),
+        MatchDescriptor Descriptor(MatchSetupOptions options, MapMatch match) => new("openrts-lobby-v3", catalog.Summary.Fingerprint,
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(options.Serialize()))),
             match.Seed, TickRate: options.TickRate, InputDelay: options.Delay, EndTick: 0);
         (MatchDescriptor, SimulationWorld) Prepare(string data)
         {
@@ -71,7 +71,7 @@ public partial class Sandbox
         }
     }
     private SimulationWorld CreateNetworkWorld(MapMatch map) => CreateConfiguredWorld(map, _configuredOptions!);
-    private void ShowNetworkFailure(string reason)
+    private void ShowNetworkFailure(string reason, string heading = "Соединение прервано")
     {
         var layer = new CanvasLayer { Layer = 40 }; AddChild(layer);
         var backdrop = new ColorRect { Color = new(0, 0, 0, 0.85f), Theme = TerminalTheme() };
@@ -79,9 +79,9 @@ public partial class Sandbox
         var center = new CenterContainer(); backdrop.AddChild(center);
         center.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         var panel = new VBoxContainer { CustomMinimumSize = new(460, 0) }; center.AddChild(panel);
-        panel.AddChild(new Label { Text = "Соединение прервано", HorizontalAlignment = HorizontalAlignment.Center });
+        panel.AddChild(new Label { Text = heading, HorizontalAlignment = HorizontalAlignment.Center });
         panel.AddChild(new Label { Text = reason, AutowrapMode = TextServer.AutowrapMode.WordSmart });
-        var retry = new Button { Text = "К настройке матча" };
+        var retry = new Button { Text = "В главное меню" };
         retry.Pressed += () => GetTree().CallDeferred(SceneTree.MethodName.ReloadCurrentScene); panel.AddChild(retry);
         var quit = new Button { Text = "Выйти" }; quit.Pressed += () => GetTree().Quit(); panel.AddChild(quit);
         Input.MouseMode = Input.MouseModeEnum.Visible;

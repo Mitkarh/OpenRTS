@@ -1,6 +1,6 @@
 # Сетевые контракты и алгоритмы
 
-**Статус:** целевой проект; NET1 реализован с уточнениями в [решении037](../../decisions/037-net1-direct-lockstep.md). **Текущий этап:** NET2 завершён в проверенном профиле; действующий pipeline/periodic hashes и версии — [решение039](../../decisions/039-net2-wan-pipeline.md). NET1/ранний NET2 ниже сохранены как исходный проект; NET3 реализован с уточнениями в [040](../../decisions/040-net3-multiplayer-lifecycle.md); NET4+ остаются предложениями. Основания: [поручение и текущее состояние](README.md), [референсы](references.md), [этапы и проверки](roadmap.md), [граница Core/Gameplay](../../decisions/023-core-and-gameplay.md), [сенсоры и знания](../fog-visibility/signatures-and-knowledge.md).
+**Статус:** целевой проект; NET1 реализован с уточнениями в [решении037](../../decisions/037-net1-direct-lockstep.md). **Текущий этап:** NET2 завершён в проверенном профиле; действующий pipeline/periodic hashes и версии — [решение039](../../decisions/039-net2-wan-pipeline.md). NET1/ранний NET2 ниже сохранены как исходный проект; NET3 реализован с уточнениями в [040](../../decisions/040-net3-multiplayer-lifecycle.md); NET4.1 реализован в [042](../../decisions/042-net4-replay-recovery.md); runtime snapshot, rejoin и NET5+ остаются предложениями. Основания: [поручение и текущее состояние](README.md), [референсы](references.md), [этапы и проверки](roadmap.md), [граница Core/Gameplay](../../decisions/023-core-and-gameplay.md), [сенсоры и знания](../fog-visibility/signatures-and-knowledge.md).
 
 ## Продуктовое направление и выбор режима
 

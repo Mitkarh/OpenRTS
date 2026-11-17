@@ -1,6 +1,6 @@
 # Приоритеты и реализация сетевого слоя
 
-**Статус:** проект от16ноября2026. NET0 и headless-срез NET1 реализованы; [решение037](../../decisions/037-net1-direct-lockstep.md), [проверки](../../verification/037-net1.md). NET2 (LAN/UI и WAN pipeline) реализован: [контракт038](../../decisions/038-net2-live-direct-matches.md), [проверки](../../verification/038-net2.md). [WAN-контракт039](../../decisions/039-net2-wan-pipeline.md) и [проверки RTT/loss/slow clients](../../verification/039-net2-wan.md); NET3: несколько игроков, lifecycle и AI реализованы в [040](../../decisions/040-net3-multiplayer-lifecycle.md), [проверки](../../verification/040-net3.md); NET4–NET9 — будущие этапы. NET1 использует конечный диагностический сценарий и дополнительный hash barrier каждого тика; LAN на разных физических машинах ещё не проверен; UI/realtime и WAN impairment проверены отдельными процессами на одной машине. [Алгоритмы](design.md) · [референсы](references.md) · [контекст](README.md).
+**Статус:** проект от16ноября2026. NET0 и headless-срез NET1 реализованы; [решение037](../../decisions/037-net1-direct-lockstep.md), [проверки](../../verification/037-net1.md). NET2 (LAN/UI и WAN pipeline) реализован: [контракт038](../../decisions/038-net2-live-direct-matches.md), [проверки](../../verification/038-net2.md). [WAN-контракт039](../../decisions/039-net2-wan-pipeline.md) и [проверки RTT/loss/slow clients](../../verification/039-net2-wan.md); NET3: несколько игроков, lifecycle и AI реализованы в [040](../../decisions/040-net3-multiplayer-lifecycle.md), [проверки](../../verification/040-net3.md); NET4.1 реализован в [042](../../decisions/042-net4-replay-recovery.md); NET4.2–NET9 — будущие этапы. NET1 использует конечный диагностический сценарий и дополнительный hash barrier каждого тика; LAN на разных физических машинах ещё не проверен; UI/realtime и WAN impairment проверены отдельными процессами на одной машине. [Алгоритмы](design.md) · [референсы](references.md) · [контекст](README.md).
 
 Приоритеты: **P0** — без этого нельзя выпускать соответствующий режим; **P1** — следующий полезный результат; **P2** — дополнительные возможности после измерений. Защищённый режим — последняя дополнительная возможность, не критерий готовности основной сетевой игры. Этапы не являются оценками календарных сроков.
 
@@ -72,6 +72,8 @@ NET5/NET6 — дополнительные сервисы, не зависимо
 **Критерий:** одинаковый journal/control history у всех при позднем вводе, отключении, одновременном ready/config change. Проверить асимметричный разрыв: только хост принимает membership-решение; оторванный клиент не начинает самостоятельную подтверждённую ветвь. При неспособности сохранить agreement завершать матч явно.
 
 ## NET4 — сохранение, восстановление, replay и первые зрители
+
+**Текущий статус:** NET4.1 реализован: журналv3 с bootstrap, replay UI/POV/seek и bounded ReplayCheckpoint с восстановлением от0. [Контракт042](../../decisions/042-net4-replay-recovery.md), [проверки](../../verification/042-net4.md), [разбиение NET4.1–4.3](net4.md). Это промежуточная история O(K), не canonical snapshot. NET4.2/runtime schemas и NET4.3/rejoin ещё не выполнены.
 
 **Гипотеза:** полный canonical checkpoint позволяет продолжить симуляцию без изменения дальнейшего hash. Это отдельная значимая работа над Gameplay/Core, не сериализация ECS памяти.
 

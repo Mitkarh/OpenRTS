@@ -25,6 +25,12 @@ public static class DirectMatch
         w.Write(d.Seed); w.Write(d.TickRate); w.Write(d.InputDelay); w.Write(d.EndTick); w.Write(d.HashInterval);
     });
 
+    internal static MatchDescriptor ReadDescriptor(byte[] bytes) => Wire.Unpack(bytes, r => {
+        var descriptor = new MatchDescriptor(Wire.Text(r), Wire.Text(r), Wire.Text(r), r.ReadUInt64(),
+            r.ReadInt32(), r.ReadInt32(), r.ReadInt64(), r.ReadInt32());
+        _ = Descriptor(descriptor); return descriptor;
+    });
+
     public static SimulationReport Run(TcpClient connection, uint player, MatchDescriptor descriptor,
         Func<SimulationWorld> createWorld, Func<long, IReadOnlyList<WorldCommand>> collect,
         Stream journal, CancellationToken cancellationToken = default, TimeSpan? timeout = null,

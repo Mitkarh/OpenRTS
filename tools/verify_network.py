@@ -10,6 +10,7 @@ import time
 parser = argparse.ArgumentParser()
 parser.add_argument('godot')
 parser.add_argument('--visible', action='store_true')
+parser.add_argument('--host-fog-hold', type=int, default=0)
 parser.add_argument('--spectator', action='store_true', help='Add a spectator to the NET3 match')
 parser.add_argument('--net3', action='store_true', help='Three human clients plus a host-controlled AI on Crossroads')
 parser.add_argument('--output', type=Path)
@@ -45,6 +46,8 @@ try:
             command += ['--headless']
         command += ['--path', str(root / 'sandbox'), '--', '--verify-network=' + role,
                     '--network-port=' + str(port), '--network-pin-file=' + str(pin)]
+        if role == 'host' and args.host_fog_hold:
+            command += ['--fog-hold=' + str(args.host_fog_hold)]
         if args.net3:
             command += ['--network-net3']
         if args.visible:

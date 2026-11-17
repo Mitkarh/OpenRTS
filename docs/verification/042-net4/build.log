@@ -1,0 +1,19 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  OpenRTS.Core -> /Users/dmzorev/projects/games/OpenRTS/src/OpenRTS.Core/bin/Debug/net10.0/OpenRTS.Core.dll
+  OpenRTS.Gameplay -> /Users/dmzorev/projects/games/OpenRTS/src/OpenRTS.Gameplay/bin/Debug/net10.0/OpenRTS.Gameplay.dll
+  OpenRTS.AI -> /Users/dmzorev/projects/games/OpenRTS/src/OpenRTS.AI/bin/Debug/net10.0/OpenRTS.AI.dll
+  DeclarativeContent -> /Users/dmzorev/projects/games/OpenRTS/libs/DeclarativeContent/bin/Debug/net8.0/DeclarativeContent.dll
+  OpenRTS.Content -> /Users/dmzorev/projects/games/OpenRTS/src/OpenRTS.Content/bin/Debug/net10.0/OpenRTS.Content.dll
+  OpenRTS.Headless -> /Users/dmzorev/projects/games/OpenRTS/tools/OpenRTS.Headless/bin/Debug/net10.0/OpenRTS.Headless.dll
+  DeclarativeContent.Tests -> /Users/dmzorev/projects/games/OpenRTS/tests/DeclarativeContent.Tests/bin/Debug/net10.0/DeclarativeContent.Tests.dll
+  OpenRTS.Tests -> /Users/dmzorev/projects/games/OpenRTS/tests/OpenRTS.Tests/bin/Debug/net10.0/OpenRTS.Tests.dll
+  OpenRTS.Network -> /Users/dmzorev/projects/games/OpenRTS/src/OpenRTS.Network/bin/Debug/net10.0/OpenRTS.Network.dll
+  OpenRTS.Sandbox -> /Users/dmzorev/projects/games/OpenRTS/sandbox/.godot/mono/temp/bin/Debug/OpenRTS.Sandbox.dll
+  OpenRTS.Network.Tests -> /Users/dmzorev/projects/games/OpenRTS/tests/OpenRTS.Network.Tests/bin/Debug/net10.0/OpenRTS.Network.Tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:03.11

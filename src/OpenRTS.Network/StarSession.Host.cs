@@ -145,7 +145,7 @@ public sealed partial class StarSession
                     if (slots.Any(p => p.Controller == SlotController.Human && (!p.Connected || !p.Ready))) break;
                     phase = MatchPhase.Playing; revision++;
                     var initial = Snapshot("Матч начат"); SetState(initial);
-                    output = File.Create(JournalPath); log = new StarJournal(output, Descriptor, world.Report().StateHash, StarProtocol.WriteState(initial));
+                    output = File.Create(JournalPath); log = new StarJournal(output, Descriptor, world.Report().StateHash, StarProtocol.WriteState(initial), LobbySettings);
                     Broadcast(StarProtocol.WriteState(initial)); Publish(world); nextDue = clock.Elapsed.TotalMilliseconds + 1000.0 / Descriptor.TickRate;
                     break;
                 case StarProtocol.Operation.Pause when phase is MatchPhase.Playing or MatchPhase.Paused:

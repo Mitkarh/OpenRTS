@@ -42,7 +42,7 @@ OpenRA выбран за C#, разделение графического/се�
 - Защищённый режим требует серверных расчётов навигации, боя, экономики, сенсоров, RNG и всех взаимодействий со скрытыми объектами. Клиентские расчёты допустимы как подсказки/предсказание без права менять истину.
 - Переход будет отдельным сетевым режимом, а не обещанием совместимости первого wire-протокола. Версии согласуются при подключении, несовместимые режимы отклоняются.
 
-NET3 реализует несколько участников, согласованные membership/disconnect/pause и AI policy: [контракт040](../../decisions/040-net3-multiplayer-lifecycle.md), [проверки](../../verification/040-net3.md). Следующий основной этап — NET4: snapshot/restore и восстановление. NET1 работает в headless-стенде через loopback TCP с барьером тика и desync-проверкой. [WAN-результат039](../../verification/039-net2-wan.md). Подробный backlog и ограничения каждого этапа: [roadmap](roadmap.md).
+NET3 реализует несколько участников, согласованные membership/disconnect/pause и AI policy: [контракт040](../../decisions/040-net3-multiplayer-lifecycle.md), [проверки](../../verification/040-net3.md). NET4.1 начат: [переносимый journal/replay recovery](../../decisions/042-net4-replay-recovery.md); настоящий runtime snapshot и rejoin — следующие срезы [плана NET4](net4.md). NET1 работает в headless-стенде через loopback TCP с барьером тика и desync-проверкой. [WAN-результат039](../../verification/039-net2-wan.md). Подробный backlog и ограничения каждого этапа: [roadmap](roadmap.md).
 
 ## Проверка каркаса
 

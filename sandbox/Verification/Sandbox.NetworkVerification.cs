@@ -109,6 +109,7 @@ public partial class Sandbox
             using var log = File.OpenRead(network.JournalPath);
             var replay = OpenRTS.Network.StarJournal.Replay(log, network.Descriptor, () => CreateNetworkWorld(_mapMatch!));
             if (replay != network.Completion.Result) throw new InvalidOperationException("Godot match replay differs.");
+            GD.Print("OPENRTS_NETWORK_JOURNAL:" + network.JournalPath);
             GD.Print("OPENRTS_NETWORK_PASS:" + network.Completion.Result.StateHash);
             _verificationDone = true; GetTree().Quit();
         }

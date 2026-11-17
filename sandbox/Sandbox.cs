@@ -68,6 +68,7 @@ public partial class Sandbox : Node3D
                 if (arg.StartsWith("--verify-network=", StringComparison.Ordinal)) { _verifyNetwork = true; _networkVerifyRole = arg[17..]; continue; }
                 if (arg.StartsWith("--network-port=", StringComparison.Ordinal)) { _networkVerifyPort = int.Parse(arg[15..]); continue; }
                 if (arg.StartsWith("--network-pin-file=", StringComparison.Ordinal)) { _networkVerifyPinFile = arg[19..]; continue; }
+                if (arg.StartsWith("--verify-replay=", StringComparison.Ordinal)) { _verifyReplayPath = arg[16..]; continue; }
                 if (arg == "--verify-menu") { _verifyMenu = true; continue; }
                 if (arg.StartsWith("--menu-captures=", StringComparison.Ordinal)) { _menuCaptures = arg[16..]; continue; }
                 if (arg == "--network-net3") { _networkVerifyNet3 = true; continue; }
@@ -264,6 +265,7 @@ public partial class Sandbox : Node3D
                 _networkLabel.Text = $"{(network.Player == 0 ? "Зритель" : "Игрок " + network.Player)} · {network.Status}";
                 UpdateNetworkChat(network);
             }
+            UpdateReplayControls();
             bool completed = _session.Completion.IsCompleted;
             if (_networkMode != 0 && completed && !_networkEnded) { _networkEnded = true; _panelDirty = true; }
             if (_session.Completion.IsFaulted) _session.Completion.GetAwaiter().GetResult();
@@ -415,9 +417,11 @@ public partial class Sandbox : Node3D
         catch (Exception error)
         {
             GD.PushError(error.ToString());
+            bool replayFailed = _session.Replay is not null;
             _session.Dispose();
             _session = null;
             if (_verifyNetwork || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
+            else if (replayFailed) ShowNetworkFailure(error.Message, "Ошибка повтора");
             else if (_networkMode != 0) ShowNetworkFailure(error.Message);
             else if (_label is not null)
             {
@@ -435,6 +439,7 @@ public partial class Sandbox : Node3D
             if (input is InputEventKey { Pressed: true, Echo: false } key)
             {
                 Key code = key.PhysicalKeycode == Key.None ? key.Keycode : key.PhysicalKeycode;
+                if (HandleReplayKey(code)) return;
                 if (_networkMode != 0 && code is Key.R or Key.P or Key.N or Key.Period or Key.Comma or Key.Bracketleft or Key.Bracketright or Key.Equal or Key.Plus or Key.KpAdd or Key.Minus or Key.KpSubtract) return;
                 if (PlayerFog && code == Key.F8 && _opponentProfile is null && _networkMode == 0) SwitchFogViewer();
                 else if (PlayerFog && code == Key.F9) _fogStyle = (FogDisplayStyle)(((int)_fogStyle + 1) % 3);

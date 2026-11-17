@@ -36,6 +36,7 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     private Button _mapButton = null!;
     private string _page = "main", _lastSettings = "";
     private bool _applying, _busy;
+    private int _simulationSpeed = 128, _retentionTicks;
     private StarSession? _networkSession;
     private MatchState? _shownState;
     private (string Title, string Description, GameMap Map)[] _mapChoices = [];
@@ -53,14 +54,14 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     public OpenRTS.Core.Visibility.FogMode SelectedFog => (OpenRTS.Core.Visibility.FogMode)_fog.Selected;
     public OpenRTS.Godot.Rendering.FogDisplayStyle SelectedFogStyle => (OpenRTS.Godot.Rendering.FogDisplayStyle)_fogStyle.Selected;
     public OpenRTS.Godot.Rendering.ContactDisplayStyle SelectedRadarStyle => (OpenRTS.Godot.Rendering.ContactDisplayStyle)_radarStyle.Selected;
-    public MatchSetupOptions Options => new(CurrentMap.Id, _modeChoices[_modes.Selected].Set.Id, _fog.Selected, (int)_delay.Value, new[] { 15, 25, 40 }[_speed.Selected], _seats.ToArray());
+    public MatchSetupOptions Options => new(CurrentMap.Id, _modeChoices[_modes.Selected].Set.Id, _fog.Selected, (int)_delay.Value, new[] { 15, 25, 40 }[_speed.Selected], _seats.ToArray(), _simulationSpeed, _retentionTicks);
     private GameMap CurrentMap => _mapChoices[_maps.Selected].Map;
     private bool Editable => NetworkMode != 2 && (!_busy || NetworkMode == 1 && _networkSession?.State.Phase == MatchPhase.Lobby);
 
     public void Build(Theme theme, LocomotionCatalog terrain, (string Title, string Description, GameMap Map)[] maps,
-        (string Title, StartingSet Set)[] modes, int defaultMap = 0, int defaultMode = 0)
+        (string Title, StartingSet Set)[] modes, int defaultMap = 0, int defaultMode = 0, int speedPerTick = 128, int fogHoldTicks = 0)
     {
-        Name = "MatchSetup"; Layer = 10; _mapChoices = maps; _modeChoices = modes; _terrain = terrain;
+        Name = "MatchSetup"; Layer = 10; _simulationSpeed = speedPerTick; _retentionTicks = fogHoldTicks; _mapChoices = maps; _modeChoices = modes; _terrain = terrain;
         _root = new Control { Theme = theme }; AddChild(_root); _root.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         _root.AddChild(_background); _background.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect); _background.SetMap(maps[Math.Min(1, maps.Length - 1)].Map, terrain);
         var shade = new ColorRect { Color = new Color(0.025f, 0.04f, 0.035f, 0.55f), MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -74,7 +75,7 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         foreach (string s in new[] { "Медленно · 15", "Обычно · 25", "Быстро · 40" }) _speed.AddItem(s); _speed.Select(1);
         // Hidden selectors keep diagnostic scenarios on the same public controls as the shell.
         foreach (Control c in new Control[] { _network, _maps, _count, _networkAi, _opponent }) { _root.AddChild(c); c.Hide(); }
-        BuildMain(); BuildBrowser(); BuildLobby(); BuildMaps(); BuildSettings();
+        BuildMain(); BuildBrowser(); BuildLobby(); BuildMaps(); BuildSettings(); BuildReplays();
         _maps.ItemSelected += _ => { SelectMap(); Changed(); };
         _count.ItemSelected += _ => {
             for (int i = 1; i < 4; i++) _seats[i] = _seats[i] with { Controller = i <= _count.Selected ? SlotController.Human : SlotController.None };
@@ -166,7 +167,7 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     }
     public void ApplyOptions(string data)
     {
-        var options = MatchSetupOptions.Parse(data); _applying = true;
+        var options = MatchSetupOptions.Parse(data); _simulationSpeed = options.SpeedPerTick; _retentionTicks = options.FogHoldTicks; _applying = true;
         try
         {
             int map = Array.FindIndex(_mapChoices, m => m.Map.Id == options.Map), mode = Array.FindIndex(_modeChoices, m => m.Set.Id == options.Mode);
@@ -191,5 +192,5 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         }
         RefreshControls();
     }
-    public void SetLaunching(bool busy, string message) { _busy = busy; _status.Text = message; RefreshControls(); }
+    public void SetLaunching(bool busy, string message) { _busy = busy; _status.Text = message; if (_page == "replays") _replayMessage.Text = message; RefreshControls(); }
 }

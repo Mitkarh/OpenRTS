@@ -35,11 +35,13 @@ public partial class Sandbox
         AddChild(_matchSetup);
         _matchSetup.Build(TerminalTheme(), catalog.Locomotion!, maps, modes,
             Array.FindIndex(mapChoices, choice => choice.Path == settings.DefaultMap),
-            Array.FindIndex(setChoices, choice => choice.Path == settings.DefaultStartSet));
+            Array.FindIndex(setChoices, choice => choice.Path == settings.DefaultStartSet), _manifest.Settings.Simulation.SpeedPerTick, _fogHoldTicks);
         _matchSetup.Launch += BeginMatchFromSetup;
+        _matchSetup.ReplayRequested += BeginReplay;
         _matchSetup.ConfigurationChanged += () => _pendingLobbySettings = _matchSetup.Options.Serialize();
-        _matchSetup.CancelNetwork += () => { if (_session?.Network is not null) MatchSetupFailed(new OperationCanceledException("Подключение отменено."), true); };
-        if (_verifyMenu) { _ = VerifyMenuFlow(); }
+        _matchSetup.CancelNetwork += () => { if (_session?.Network is not null || _session?.Replay is not null) MatchSetupFailed(new OperationCanceledException("Подключение отменено."), true); };
+        if (_verifyReplayPath is not null) { _ = VerifyReplayFlow(); }
+        else if (_verifyMenu) { _ = VerifyMenuFlow(); }
         else if (_verifyNetwork) SelectNetworkVerificationMatch();
         else if (_verifyAiMatch) SelectAiVerificationMatch();
         else if (_verifyMatchSetup) SelectVerificationMatch();
@@ -117,7 +119,7 @@ public partial class Sandbox
             }
             _startedFromSetup = true;
             BuildBattleScene(_catalog!);
-            AddNetworkStatus();
+            AddNetworkStatus(); AddReplayControls();
             _focusStartingBase = true;
             _matchSetup!.Hide();
             _matchSetup.QueueFree();
@@ -143,7 +145,7 @@ public partial class Sandbox
     {
         var fog = (OpenRTS.Core.Visibility.FogMode)options.Fog;
         var world = map.CreateWorld(new GameplayMechanics { FogCellSize = fog == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024,
-            FogMode = fog, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick,
+            FogMode = fog, FogVisibilityHoldTicks = options.FogHoldTicks }, speedPerTick: options.SpeedPerTick,
             workers: _workers, restrictPlayerCommands: _networkMode != 0 || options.Seats.Any(s => s.Controller == OpenRTS.Network.SlotController.Ai), tickRate: options.TickRate);
         try { world.SetInitialTeams(options.Seats.Select((s, i) => (s, i)).Where(p => p.s.Controller != OpenRTS.Network.SlotController.None).ToDictionary(p => (uint)p.i + 1, p => p.s.Team)); return world; }
         catch { world.Dispose(); throw; }

@@ -68,6 +68,7 @@ public sealed class FogWorldView
         _plane.MaterialOverride = new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha, AlbedoTexture = Texture, CullMode = BaseMaterial3D.CullModeEnum.Disabled };
     }
+    public void ResetTimeline() { _tick = -1; _trail?.ResetTimeline(); }
     public void Apply(FrameExchange.FrameLease frame, FogDisplayStyle style = FogDisplayStyle.Circles)
     {
         Node.Visible = frame.FogCellSize > 0;

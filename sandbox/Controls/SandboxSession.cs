@@ -9,13 +9,15 @@ internal sealed class SandboxSession : IDisposable
 {
     private readonly SimulationSession? _offline;
     internal StarSession? Network { get; }
+    internal ReplaySession? Replay { get; }
     internal SandboxSession(SimulationSession offline) => _offline = offline;
     internal SandboxSession(StarSession network) => Network = network;
-    public FrameExchange Frames => Network?.Frames ?? _offline!.Frames;
-    public System.Threading.Tasks.Task<SimulationReport> Completion => Network?.Completion ?? _offline!.Completion;
-    public double PlaybackSpeed => _offline?.PlaybackSpeed ?? 1;
-    public bool IsPaused => Network is { } n ? n.State.Phase == MatchPhase.Paused : _offline!.IsPaused;
-    public long Submit(WorldCommand command) => Network?.Submit(command) ?? _offline!.Submit(command);
+    internal SandboxSession(ReplaySession replay) => Replay = replay;
+    public FrameExchange Frames => Replay?.Frames ?? Network?.Frames ?? _offline!.Frames;
+    public System.Threading.Tasks.Task<SimulationReport> Completion => Replay?.Completion ?? Network?.Completion ?? _offline!.Completion;
+    public double PlaybackSpeed => Replay?.PlaybackSpeed ?? _offline?.PlaybackSpeed ?? 1;
+    public bool IsPaused => Replay is { } r ? r.IsPaused : Network is { } n ? n.State.Phase == MatchPhase.Paused : _offline!.IsPaused;
+    public long Submit(WorldCommand command) => Replay is not null ? throw new InvalidOperationException("Повтор доступен только для просмотра.") : Network?.Submit(command) ?? _offline!.Submit(command);
     public long Submit(CommandKind kind, WorldPosition position = default, EntityId entity = default, int unitType = 0,
         uint owner = 0, int animation = 0, int durationTicks = 1, AnimationTrack track = AnimationTrack.Weapon,
         uint states = 0, EntityId targetEntity = default, EntitySet? recipients = null, bool queued = false,
@@ -25,10 +27,10 @@ internal sealed class SandboxSession : IDisposable
     public long Issue(UnitAction action) => Submit(SimulationSession.ToCommand(action));
     public long AttackContact(EntitySet recipients, uint viewer, long contactId, bool queued = false) =>
         Submit(new WorldCommand(0,0,0,CommandKind.AttackContact,recipients.Ids[0],Owner:viewer,Recipients:recipients,Queued:queued) { ContactId=contactId });
-    public float GetInterpolationAlpha(long tick) => Network?.GetInterpolationAlpha(tick) ?? _offline!.GetInterpolationAlpha(tick);
-    public bool TryReadEvent(out WorldEvent e) { if (Network is { } n) return n.TryReadEvent(out e); return _offline!.TryReadEvent(out e); }
-    public void SetPlayback(double speed, bool paused) { if (_offline is not null) _offline.SetPlayback(speed,paused); }
-    public void StepOnce() { if (_offline is not null) _offline.StepOnce(); }
+    public float GetInterpolationAlpha(long tick) => Replay?.GetInterpolationAlpha(tick) ?? Network?.GetInterpolationAlpha(tick) ?? _offline!.GetInterpolationAlpha(tick);
+    public bool TryReadEvent(out WorldEvent e) { if (Replay is { } replay) return replay.TryReadEvent(out e); if (Network is { } n) return n.TryReadEvent(out e); return _offline!.TryReadEvent(out e); }
+    public void SetPlayback(double speed, bool paused) { if (Replay is not null) Replay.SetPlayback(speed, paused); else if (_offline is not null) _offline.SetPlayback(speed,paused); }
+    public void StepOnce() { if (Replay is not null) Replay.StepOnce(); else if (_offline is not null) _offline.StepOnce(); }
     public WorldCommand[] GetCommandLog() => _offline?.GetCommandLog() ?? throw new InvalidOperationException("Сетевой журнал записан в файл матча.");
-    public void Dispose() { Network?.Dispose(); _offline?.Dispose(); }
+    public void Dispose() { Replay?.Dispose(); Network?.Dispose(); _offline?.Dispose(); }
 }

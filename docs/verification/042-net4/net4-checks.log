@@ -1,0 +1,19 @@
+REPLAY_CHECKPOINT production tick=0 bytes=406 restoreMs=1.44
+REPLAY_CHECKPOINT production tick=12 bytes=2936 restoreMs=98.84
+REPLAY_CHECKPOINT production tick=100 bytes=18248 restoreMs=186.12
+REPLAY_RECOVERY production ticks=100 bytes=18192 hash=E27DAAC29CE1081F01D3BA72A1A45518816E66F058257B3F18474F0BD3632BB5
+PASS Network: NET4 replay recovery continues every hash: production
+REPLAY_CHECKPOINT aviation tick=0 bytes=402 restoreMs=3.19
+REPLAY_CHECKPOINT aviation tick=185 bytes=33512 restoreMs=59.47
+REPLAY_CHECKPOINT aviation tick=420 bytes=74536 restoreMs=192.69
+REPLAY_RECOVERY aviation ticks=420 bytes=74480 hash=BBB82DC0EEF470D71274E90D646DB26AE19B892A0CBF73D69E375324CD6F6C88
+PASS Network: NET4 replay recovery continues every hash: aviation
+REPLAY_CHECKPOINT sensors tick=0 bytes=400 restoreMs=0.59
+REPLAY_CHECKPOINT sensors tick=12 bytes=2555 restoreMs=2.67
+REPLAY_CHECKPOINT sensors tick=48 bytes=8819 restoreMs=9.26
+REPLAY_RECOVERY sensors ticks=48 bytes=8763 hash=822825172050638B307297E1905FDDBB2B961E3A290F394BC4F6AC4F39E6DE08
+PASS Network: NET4 replay recovery continues every hash: sensors
+PASS Network: NET4 restart in another process restores the selected boundary
+PASS Network: NET4 rejects truncation, corruption, quotas, wrong world and cancelled recovery
+PASS Network: NET4 retains explicit v2 replay and detects a changed middle checkpoint
+PASS Network: NET4 owner playback pauses, steps, seeks backwards and validates end
