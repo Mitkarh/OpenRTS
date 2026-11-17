@@ -10,6 +10,7 @@
     <Compile Include="Controls/**/*.cs" />
     <Compile Include="Scenarios/**/*.cs" />
     <Compile Include="Verification/**/*.cs" />
+    <Compile Include="addons/openrts_editor/**/*.cs" />
     <Compile Include="../src/OpenRTS.Godot/**/*.cs" />
     <ProjectReference Include="../src/OpenRTS.Content/OpenRTS.Content.csproj" />
     <ProjectReference Include="../src/OpenRTS.Network/OpenRTS.Network.csproj" />

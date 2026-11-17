@@ -1,0 +1,50 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://addons/openrts_editor/OpenRtsMap.cs" id="1"]
+[ext_resource type="Script" path="res://addons/openrts_editor/OpenRtsMapStart.cs" id="2"]
+[ext_resource type="PackedScene" path="res://examples/maps/AuthoringSquad.tscn" id="3"]
+
+[sub_resource type="StandardMaterial3D" id="GroundMaterial"]
+albedo_color = Color(0.16, 0.3, 0.2, 1)
+
+[sub_resource type="PlaneMesh" id="Ground"]
+material = SubResource("GroundMaterial")
+size = Vector2(32, 24)
+
+[sub_resource type="Environment" id="Environment"]
+background_mode = 1
+background_color = Color(0.12, 0.18, 0.25, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.8, 0.9, 1, 1)
+ambient_light_energy = 0.7
+
+[node name="AuthoringMap" type="Node3D"]
+script = ExtResource("1")
+MapId = "scene-authoring-sample"
+CompiledPath = "res://artifacts/maps/scene-authoring-sample.ortmap.json"
+
+[node name="West" type="Node3D" parent="."]
+position = Vector3(5.5, 0, 5)
+script = ExtResource("2")
+StartId = "west"
+
+[node name="East" type="Node3D" parent="."]
+position = Vector3(26.5, 0, 19)
+script = ExtResource("2")
+StartId = "east"
+Reverse = true
+
+[node name="Patrol" parent="." instance=ExtResource("3")]
+position = Vector3(12, 0, 12)
+
+[node name="Decoration" type="Node3D" parent="."]
+
+[node name="Ground" type="MeshInstance3D" parent="Decoration"]
+position = Vector3(16, -0.05, 12)
+mesh = SubResource("Ground")
+
+[node name="Sun" type="DirectionalLight3D" parent="Decoration"]
+rotation_degrees = Vector3(-55, -25, 0)
+
+[node name="Environment" type="WorldEnvironment" parent="Decoration"]
+environment = SubResource("Environment")

@@ -1,0 +1,18 @@
+openrts-b2-final-verify.log
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+OPENRTS_AUTHORING_CHECKS:25 passed
+ERROR: Parameter "t" is null.
+ERROR: OpenRTS authoring: res://artifacts/maps/editor-saved.tscn::Patrol/Tank:1:1 [objects.patrol/tank.type]: Unknown unit 'missing'.
+OPENRTS_MAP_EDITOR_CHECKS:24 passed
+openrts-b2-maps.log
+14 OpenRTS checks passed; 0 failed.
+openrts-b2-export-build.log
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+openrts-b2-headless.log
+OPENRTS_SIMULATION:{"Tick":32,"EntityCount":9,"StateHash":"AF97B861E70E99ECF32088C9B8C516AB2A0163EE6960D49A090AC225EB50490C"}
+openrts-b2-simulation-stdout.log
+OPENRTS_SIMULATION:{"Tick":32,"EntityCount":9,"StateHash":"AF97B861E70E99ECF32088C9B8C516AB2A0163EE6960D49A090AC225EB50490C"}

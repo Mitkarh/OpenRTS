@@ -1,0 +1,32 @@
+{
+  "baseRevision": "8f20068b68be1088442ace4543e49043dc43e210",
+  "variant": "B2 working tree",
+  "sdk": "10.0.105",
+  "godot": "4.7.2 .NET",
+  "configuration": "Debug",
+  "catalogFingerprint": "DF7923058812D42A0E92873BAD2243ACFB71D71470EC42F5A8F2FDE63884574B",
+  "gameplayFingerprint": "4204FF1B7BB75334FD5F23EF5C75F761E5E5CF14A771AE1568F5E75CA0E3C682",
+  "dataFingerprint": "5565A6A0D1AEDF45653CB8FBC02DCF6406A0493E2C1AFAA1A5960211EA2BC2EC",
+  "hosts": {
+    "headless": {
+      "Tick": 32,
+      "EntityCount": 9,
+      "StateHash": "AF97B861E70E99ECF32088C9B8C516AB2A0163EE6960D49A090AC225EB50490C"
+    },
+    "godot": {
+      "Tick": 32,
+      "EntityCount": 9,
+      "StateHash": "AF97B861E70E99ECF32088C9B8C516AB2A0163EE6960D49A090AC225EB50490C"
+    }
+  },
+  "checks": {
+    "sceneExtraction": 25,
+    "editor": 24,
+    "mapsRegression": 14
+  },
+  "limitations": [
+    "No full runtime export or scene entry loader",
+    "No completed visual dock/gizmo QA",
+    "No new large-map performance measurements"
+  ]
+}

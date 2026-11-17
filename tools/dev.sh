@@ -46,6 +46,15 @@ case "$action" in
     ;;
   run) build; import_assets; exec "$godot_bin" --path "$PWD/sandbox" -- "$@" ;;
   editor) build; exec "$godot_bin" --path "$PWD/sandbox" --editor ;;
+  verify-authoring)
+    if ! grep -q '^enabled=.*"res://addons/openrts_editor/plugin.cfg"' sandbox/project.godot; then
+      echo 'Enable OpenRTS Map Authoring in Sandbox Project Settings > Plugins before verify-authoring.' >&2
+      exit 1
+    fi
+    build; import_assets
+    "$godot_bin" --headless --path "$PWD/sandbox" res://Verification/MapAuthoringChecks.tscn
+    "$godot_bin" --headless --editor --path "$PWD/sandbox" res://examples/maps/AuthoringMap.tscn -- --verify-map-editor
+    ;;
   verify-wan)
     build
     if [[ "${1:-}" == "--netem" ]]; then
@@ -68,5 +77,5 @@ case "$action" in
     ;;
   verify-network) build; import_assets; python3 tools/verify_network.py "$godot_bin" "$@" ;;
   verify) "$0" test; import_assets; python3 tools/verify.py "$godot_bin" ;;
-  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|verify|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
+  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|verify|verify-authoring|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
 esac

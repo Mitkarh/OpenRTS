@@ -1,0 +1,29 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://addons/openrts_editor/OpenRtsMapGroup.cs" id="1"]
+[ext_resource type="Script" path="res://addons/openrts_editor/OpenRtsMapObject.cs" id="2"]
+
+[node name="Squad" type="Node3D"]
+script = ExtResource("1")
+InstanceId = "patrol"
+Order = 10
+
+[node name="Rifleman" type="Node3D" parent="."]
+script = ExtResource("2")
+ObjectId = "rifle"
+Order = 0
+TypeId = "rifleman"
+
+[node name="Tank" type="Node3D" parent="."]
+position = Vector3(2, 0, 0)
+script = ExtResource("2")
+ObjectId = "tank"
+Order = 1
+TypeId = "tank"
+
+[node name="Engineer" type="Node3D" parent="."]
+position = Vector3(4, 0, 0)
+script = ExtResource("2")
+ObjectId = "engineer"
+Order = 2
+TypeId = "engineer"
