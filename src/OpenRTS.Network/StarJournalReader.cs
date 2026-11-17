@@ -29,6 +29,8 @@ internal sealed class StarJournalReader : IDisposable
     private readonly Action<byte[]>? _record;
     private long _bytes;
     private bool _final, _complete;
+    private readonly bool _openPrefix;
+    internal long[] Sequences => _sequences.ToArray();
     private readonly long[] _sequences;
     internal ReplayInfo Info { get; }
     internal MatchState State { get; private set; }
@@ -37,8 +39,9 @@ internal sealed class StarJournalReader : IDisposable
     internal long Bytes => _bytes;
 
     internal StarJournalReader(Stream input, MatchDescriptor? expected = null, ReplayLimits? limits = null,
-        CancellationToken stop = default, Action<byte[]>? record = null)
+        CancellationToken stop = default, Action<byte[]>? record = null, bool openPrefix = false)
     {
+        _openPrefix = openPrefix;
         _input = input; _reader = new(input, Encoding.UTF8, true); _limits = limits ?? new(); _limits.Validate(); _stop = stop; _record = record;
         var header = Wire.Unpack(Read(), r => {
             if (r.ReadByte() != 40) throw new InvalidDataException("Not a StarJournal.");
@@ -82,6 +85,7 @@ internal sealed class StarJournalReader : IDisposable
         if (_complete) return null;
         while (true)
         {
+            if (_openPrefix && _input.Position == _input.Length) return null;
             byte[] frame = Read();
             if (frame[0] == StarProtocol.State && !_final)
                 State = StarJournal.ValidateTransition(State, StarProtocol.ReadState(frame), Tick);

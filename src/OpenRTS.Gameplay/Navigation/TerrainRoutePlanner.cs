@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace OpenRTS.Core.Navigation;
 
 // Global terrain routes. The world owns targets, route cursors and physical movement.
-internal sealed class TerrainRoutePlanner
+internal sealed partial class TerrainRoutePlanner
 {
     private readonly IGridPathfinder _pointPaths;
     private readonly WeightedNavigator? _weighted;

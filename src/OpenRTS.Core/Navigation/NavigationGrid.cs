@@ -5,7 +5,7 @@ public readonly record struct GridCell(int X, int Y);
 public readonly record struct SurfaceSample(int Elevation = 0, int Slope = 0, int Depth = 0);
 
 /// <summary>Immutable terrain sampling layer, independent of exact body positions and collision bins.</summary>
-public sealed class NavigationGrid
+public sealed partial class NavigationGrid
 {
     public const int MaximumCells = 16 * 1024 * 1024;
     private readonly uint[] _blocked;

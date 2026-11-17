@@ -99,7 +99,7 @@ if (Value("--host=") is { } host || Value("--join=") is not null)
 }
 if (ReplayChecks.Tool(args)) return;
 int passed = 0;
-if (args.Contains("--net4")) { ReplayChecks.Run(Test); Console.WriteLine($"{passed} NET4 checks passed."); return; }
+if (args.Contains("--net4")) { RuntimeSnapshotChecks.Run(Test); ReplayChecks.Run(Test); Console.WriteLine($"{passed} NET4 checks passed."); return; }
 if (args.Contains("--net3")) { StarChecks.Run(Test); Console.WriteLine($"{passed} NET3 checks passed."); return; }
 void Test(string name, Action action) { if (Value("--filter=") is { } filter && !name.Contains(filter, StringComparison.OrdinalIgnoreCase)) return; action(); passed++; Console.WriteLine("PASS Network: " + name); }
 void Check(bool condition) { if (!condition) throw new Exception("Assertion failed"); }
@@ -331,6 +331,7 @@ Test("extended wire fields survive production, ability and transform intents", (
 });
 WanChecks.Run(Test);
 StarChecks.Run(Test);
+RuntimeSnapshotChecks.Run(Test);
 ReplayChecks.Run(Test);
 Console.WriteLine($"{passed} Network checks passed.");
 

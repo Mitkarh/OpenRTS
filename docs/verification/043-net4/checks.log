@@ -1,0 +1,127 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  OpenRTS.Core -> /Users/dmzorev/projects/games/OpenRTS/src/OpenRTS.Core/bin/Debug/net10.0/OpenRTS.Core.dll
+  OpenRTS.Gameplay -> /Users/dmzorev/projects/games/OpenRTS/src/OpenRTS.Gameplay/bin/Debug/net10.0/OpenRTS.Gameplay.dll
+  OpenRTS.AI -> /Users/dmzorev/projects/games/OpenRTS/src/OpenRTS.AI/bin/Debug/net10.0/OpenRTS.AI.dll
+  DeclarativeContent -> /Users/dmzorev/projects/games/OpenRTS/libs/DeclarativeContent/bin/Debug/net8.0/DeclarativeContent.dll
+  OpenRTS.Content -> /Users/dmzorev/projects/games/OpenRTS/src/OpenRTS.Content/bin/Debug/net10.0/OpenRTS.Content.dll
+  OpenRTS.Headless -> /Users/dmzorev/projects/games/OpenRTS/tools/OpenRTS.Headless/bin/Debug/net10.0/OpenRTS.Headless.dll
+  DeclarativeContent.Tests -> /Users/dmzorev/projects/games/OpenRTS/tests/DeclarativeContent.Tests/bin/Debug/net10.0/DeclarativeContent.Tests.dll
+  OpenRTS.Tests -> /Users/dmzorev/projects/games/OpenRTS/tests/OpenRTS.Tests/bin/Debug/net10.0/OpenRTS.Tests.dll
+  OpenRTS.Network -> /Users/dmzorev/projects/games/OpenRTS/src/OpenRTS.Network/bin/Debug/net10.0/OpenRTS.Network.dll
+  OpenRTS.Sandbox -> /Users/dmzorev/projects/games/OpenRTS/sandbox/.godot/mono/temp/bin/Debug/OpenRTS.Sandbox.dll
+  OpenRTS.Network.Tests -> /Users/dmzorev/projects/games/OpenRTS/tests/OpenRTS.Network.Tests/bin/Debug/net10.0/OpenRTS.Network.Tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:05.58
+PASS Network: canonical codec, large selection, all supported intents, unsupported fields
+PASS Network: future reorder, identical/conflicting duplicate, expired identity and sequence gap
+PASS Network: framing partial reads, coalesced frames, oversized and truncated payload
+PASS Network: two owners, different workers, every-tick hash, offline replay and incomplete log
+PASS Network: delay boundaries bootstrap and close empty ticks
+PASS Network: decoder rejects corrupt kind, issuer, count, invalid flags and sequence
+PASS Network: foreign actor input is denied by gameplay on the agreed tick
+PASS Network: missing input stops after the agreed bootstrap, cancel and EOF stop promptly
+PASS Network: mismatched descriptor and initial seed reject before first Step
+PASS Network: first divergent tick stops the match and records failure
+PASS Network: missing peer cancels bounded wait and releases world/socket
+PASS Network: deadline is reported as timeout rather than user cancellation
+PASS Network: two operating-system processes connect and independently replay
+PASS Network: TLS live peers pace ticks, submit complete player intents, leave and replay
+PASS Network: TLS rejects a wrong host fingerprint and disposing a listener is bounded
+PASS Network: extended wire fields survive production, ability and transform intents
+PASS Network: checkpoint cadence is bounded and bound into match identity
+{"rtt":150,"jitter":20,"loss":5,"delay":8,"slow":false,"bandwidth":1000000,"ticks":100,"steadyHz":25.01,"elapsedMs":4377,"waitP50":0.0276,"waitP95":0.0836,"sealedToApplyP50":319.8754,"sealedToApplyP95":321.9479,"stalls":0,"maxLead":1,"sendQueueHighWater":2,"receiveQueueHighWater":6,"segments":207,"modeledRetransmissions":10,"bytes":10786,"hash":"7B8BD60B23C4569CE14DED8F783655EBEEF682FCF868A9387A19BD685E91F2CD"}
+PASS Network: pipeline preserves commands/replay at RTT150 with jitter and modeled loss
+{"rtt":50,"jitter":0,"loss":0,"delay":6,"slow":true,"bandwidth":1000000,"ticks":100,"steadyHz":22.49,"elapsedMs":4740.9,"waitP50":2.0505,"waitP95":98.5005,"sealedToApplyP50":240.2341,"sealedToApplyP95":499.4778,"stalls":8,"maxLead":6,"sendQueueHighWater":2,"receiveQueueHighWater":2,"segments":221,"modeledRetransmissions":0,"bytes":10934,"hash":"7B8BD60B23C4569CE14DED8F783655EBEEF682FCF868A9387A19BD685E91F2CD"}
+PASS Network: slow simulation stays bounded and converges after recovery
+PASS Network: withheld checkpoints cannot advance beyond the verification window
+PASS Network: buffered traffic cannot bypass an expired progress deadline
+PASS Network: read-side EOF racing the final writer continuation does not discard a flushed ACK
+PASS Network: a peer that stops reading times out within bounded queue capacity
+PASS Network: NET4.3 transfer rejects quotas, wrong offsets and damaged chunks
+PASS Network: NET4.3 two simultaneous authenticated returns preserve the common journal
+PASS Network: NET4.3 an authenticated human takes back the AI-controlled side at a common boundary
+PASS Network: NET4.3 rejects wrong and retired tokens without replacing the active connection
+PASS Network: NET4.3 mid-game spectator loads a runtime boundary and follows live turns
+PASS Network: NET3 stale Ready, config reset, three TLS players and shared pause
+PASS Network: NET3 agreed leave, host AI takeover and survivor histories
+PASS Network: NET3 spectator loss keeps playing; guest loss pauses; host loss aborts clients
+PASS Network: NET3 rejects slot collision and bad pin without killing lobby
+PASS Network: NET3 control revision, frame limits and command ownership envelope
+PASS Network: NET3 asymmetric WAN delay/loss retains bounded verification and identical journals
+PASS Network: Lobby host configuration replaces guest defaults; NET4.3 restores the host recipe
+PASS Network: LAN directory discovers a real lobby and its TLS fingerprint
+PASS Network: NET3 eight human slots at minimum input delay
+PASS Network: NET3 heartbeat cannot extend missing-command deadline
+PASS Network: NET4.2 RNG, allocator and packed removal survive runtime restore
+PASS Network: NET4.2 transport, upgrade, condition expiry and subsequent events survive restore
+PASS Network: NET4.2 capture work and actor transformations survive restore
+PASS Network: NET4.2 navigation field budget and FIFO survive restore
+PASS Network: NET4.2 supply stock, cargo, dock reservations and income survive restore
+PASS Network: NET4.2 malformed allocator is bounded and partial worlds are disposed
+PASS Network: NET4.2 registered mechanic has an explicit versioned snapshot reader
+REPLAY_CHECKPOINT production tick=0 bytes=406 restoreMs=1.43
+REPLAY_CHECKPOINT production tick=12 bytes=2936 restoreMs=110.86
+REPLAY_CHECKPOINT production tick=100 bytes=18248 restoreMs=217.51
+REPLAY_RECOVERY production ticks=100 bytes=18192 hash=E27DAAC29CE1081F01D3BA72A1A45518816E66F058257B3F18474F0BD3632BB5
+PASS Network: NET4 replay recovery continues every hash: production
+REPLAY_CHECKPOINT aviation tick=0 bytes=402 restoreMs=3.27
+REPLAY_CHECKPOINT aviation tick=185 bytes=33512 restoreMs=57.59
+REPLAY_CHECKPOINT aviation tick=420 bytes=74536 restoreMs=195.66
+REPLAY_RECOVERY aviation ticks=420 bytes=74480 hash=BBB82DC0EEF470D71274E90D646DB26AE19B892A0CBF73D69E375324CD6F6C88
+PASS Network: NET4 replay recovery continues every hash: aviation
+REPLAY_CHECKPOINT sensors tick=0 bytes=400 restoreMs=0.74
+REPLAY_CHECKPOINT sensors tick=12 bytes=2555 restoreMs=3.12
+REPLAY_CHECKPOINT sensors tick=48 bytes=8819 restoreMs=9.48
+REPLAY_RECOVERY sensors ticks=48 bytes=8763 hash=822825172050638B307297E1905FDDBB2B961E3A290F394BC4F6AC4F39E6DE08
+PASS Network: NET4 replay recovery continues every hash: sensors
+RUNTIME_SNAPSHOT production tick=0 bytes=27591
+RUNTIME_SNAPSHOT production tick=12 bytes=27839
+RUNTIME_SNAPSHOT production tick=320 bytes=30647
+PASS Network: NET4.2 runtime snapshot continues every hash: production
+RUNTIME_SNAPSHOT aviation tick=0 bytes=23244
+RUNTIME_SNAPSHOT aviation tick=185 bytes=24002
+RUNTIME_SNAPSHOT aviation tick=420 bytes=23593
+PASS Network: NET4.2 runtime snapshot continues every hash: aviation
+RUNTIME_SNAPSHOT sensors tick=0 bytes=54158
+RUNTIME_SNAPSHOT sensors tick=12 bytes=54246
+RUNTIME_SNAPSHOT sensors tick=48 bytes=54246
+PASS Network: NET4.2 runtime snapshot continues every hash: sensors
+PASS Network: NET4.2 runtime snapshot restores in a fresh operating-system process
+PASS Network: NET4 restart in another process restores the selected boundary
+PASS Network: NET4 rejects truncation, corruption, quotas, wrong world and cancelled recovery
+PASS Network: NET4 retains explicit v2 replay and detects a changed middle checkpoint
+PASS Network: NET4 owner playback pauses, steps, seeks backwards and validates end
+56 Network checks passed.
+PASS Local overrides win even when Inherits is written last; origin survives
+PASS Cross-file inheritance and multiple-parent precedence
+PASS Removal, nested removal, and independent named instances
+PASS Sequences replace instead of silently concatenate
+PASS Quoted # and colon, Unicode, comments, block text
+PASS Unknown parent gives location
+PASS Cycles show inheritance chain
+PASS Duplicate definitions across files rejected
+PASS Duplicate YAML fields rejected
+PASS Missing removal is an error
+PASS Anchors and aliases rejected deliberately
+PASS Custom CLR tags rejected
+PASS Tabs and multiple documents rejected
+PASS Missing and unknown option fields fail loudly
+PASS Validation uses invariant finite numbers and strict named enums
+PASS Named traits get distinct mutable instances per entity
+PASS Required traits, singleton multiplicity and unknown trait checks
+PASS Factories follow dependencies, not YAML order
+PASS Trait dependency cycles rejected before spawning
+PASS Generated schema contains enums, limits and field help
+20 DeclarativeContent checks passed.
+PASS Orders: immutable recipients, FIFO and valid replacement behave identically through Session
+PASS Actions: typed ability input crosses the live session boundary with one caster
+PASS Production: task and ability commands replay unchanged through a threaded session
+PASS ECS: session releases its world before success or failure becomes observable
+PASS AI1 session plans on each simulation tick even when publication drops frames
+PASS Immutable terrain snapshots survive edits and parallel sessions stop promptly
+6 OpenRTS checks passed; 0 failed.

@@ -25,7 +25,8 @@ public sealed record MatchChat(uint Player, string Text);
 
 internal static class StarProtocol
 {
-    internal const int Version = 2;
+    internal const int Version = 3;
+    internal const byte Credential = 32, Recovery = 33, RecoveryChunk = 34, RecoveryReady = 35;
     internal const byte Settings = 30, SettingsAck = 31;
     internal const byte State = 20, Hello = 21, Request = 22, Chat = 23, Turn = 24,
         Hash = 25, Finish = 26, Ack = 27, Complete = 28, Ping = 29;

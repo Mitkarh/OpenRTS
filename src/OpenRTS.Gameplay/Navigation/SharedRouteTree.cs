@@ -6,6 +6,7 @@ namespace OpenRTS.Core.Navigation;
 internal sealed class SharedRouteTree
 {
     public NavigationGrid Grid { get; }
+    internal int Root { get; }
     public int VisitedCells { get; private set; }
     internal int Depth(int cell) => _depth[cell];
     private readonly int[] _parent, _depth;
@@ -15,7 +16,7 @@ internal sealed class SharedRouteTree
 
     internal SharedRouteTree(NavigationGrid grid, int root, CancellationToken token, Locomotor? profile = null, RouteGeometry? geometry = null)
     {
-        Grid = grid; _profile = profile; _geometry = geometry ?? new(grid, profile ?? Locomotor.Default);
+        Root = root; Grid = grid; _profile = profile; _geometry = geometry ?? new(grid, profile ?? Locomotor.Default);
         var nodes = _geometry.Nodes;
         _parent = new int[nodes.CellCount]; _depth = new int[nodes.CellCount];
         Array.Fill(_depth, -1);

@@ -3,6 +3,7 @@ namespace OpenRTS.Core;
 public sealed partial class SimulationWorld
 {
     private bool _restrictPlayerCommands;
+    public bool PlayerCommandsRestricted => _restrictPlayerCommands;
 
     /// <summary>For matches where the trusted host binds nonzero issuers to player IDs. Issuer zero is reserved for scripts.</summary>
     public void RestrictCommandsToPlayers()

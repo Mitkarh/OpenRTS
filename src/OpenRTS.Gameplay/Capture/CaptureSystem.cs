@@ -17,7 +17,7 @@ internal interface ICaptureWorld
     void ChangeOwner(EntityId target, uint owner);
 }
 
-internal sealed class CaptureSystem(ICaptureWorld world, ICaptureMechanic mechanic)
+internal sealed partial class CaptureSystem(ICaptureWorld world, ICaptureMechanic mechanic)
 {
     private readonly ICaptureMechanic _mechanic = mechanic;
 

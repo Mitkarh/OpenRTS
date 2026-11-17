@@ -18,6 +18,7 @@ public sealed class StarJournal : IDisposable
             w.Write(data.Length); w.Write(data); Wire.Text(w, initialHash); w.Write((ushort)settings.Length); w.Write(settings); }));
         Write(initialState);
     }
+    internal StarJournal(Stream output, long existingBytes) { _writer = new(output, Encoding.UTF8, true); _bytes = existingBytes; }
     internal void Write(byte[] frame)
     {
         if ((_bytes += frame.Length + 4) > 64 * 1024 * 1024) throw new IOException("Journal quota exceeded.");
@@ -62,9 +63,10 @@ public sealed class StarJournal : IDisposable
         if (next.Match != previous.Match || next.Slots.Count != previous.Slots.Count || next.Revision != previous.Revision + 1 ||
             next.Tick != tick || next.Phase == MatchPhase.Lobby || previous.Phase == MatchPhase.Finished)
             throw new InvalidDataException("Control revision/order mismatch.");
-        // New human inputs require snapshot/rejoin support, which belongs to NET4.
+        // Runtime admission occurs at a paused boundary; only the coordinator can emit this transition.
         for (int i = 0; i < next.Slots.Count; i++)
-            if (next.Slots[i].Controller == SlotController.Human && previous.Slots[i].Controller != SlotController.Human)
+            if (next.Slots[i].Controller == SlotController.Human && previous.Slots[i].Controller != SlotController.Human &&
+                (previous.Phase != MatchPhase.Paused || next.Phase != MatchPhase.Paused || !next.Slots[i].Connected || !next.Slots[i].Ready))
                 throw new InvalidDataException("Mid-game human join is unsupported.");
         return next;
     }

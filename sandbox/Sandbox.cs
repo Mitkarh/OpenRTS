@@ -418,6 +418,7 @@ public partial class Sandbox : Node3D
         {
             GD.PushError(error.ToString());
             bool replayFailed = _session.Replay is not null;
+            if (_session.Network is { IsHost: false, ResumeCredential: { } credential }) _networkResume = credential;
             _session.Dispose();
             _session = null;
             if (_verifyNetwork || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);

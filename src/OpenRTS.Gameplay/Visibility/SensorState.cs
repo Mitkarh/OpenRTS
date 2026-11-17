@@ -2,7 +2,7 @@ using OpenRTS.Core.Navigation;
 
 namespace OpenRTS.Core.Visibility;
 
-internal sealed class SensorState
+internal sealed partial class SensorState
 {
     internal readonly record struct Concealment(int Channel, int Counter, byte? Terrain);
     internal sealed record Detector(int Channel, int Signature, int Range, SensorDisplay Display,

@@ -1,7 +1,7 @@
 namespace OpenRTS.Core;
 
 // The pilot grants WeaponsDisabled. Each token owns its own lifetime.
-internal sealed class ConditionGrants
+internal sealed partial class ConditionGrants
 {
     private readonly record struct Grant(EntityId Entity, long ExpiresAt);
 

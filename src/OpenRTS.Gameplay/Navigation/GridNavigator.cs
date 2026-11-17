@@ -4,7 +4,7 @@ using System.Diagnostics;
 namespace OpenRTS.Core.Navigation;
 
 /// <summary>Shared reverse-BFS fields with a deterministic work budget and ordered publication.</summary>
-public sealed class GridNavigator : IGridPathfinder
+public sealed partial class GridNavigator : IGridPathfinder
 {
     private sealed class Field
     {

@@ -12,6 +12,7 @@ using OpenRTS.Core.Orders;
 public partial class Sandbox
 {
     private int _networkMode;
+    private MatchResumeCredential? _networkResume;
     private string _networkAddress = "127.0.0.1", _networkPin = "";
     private int _networkPort = 17771, _networkDelay = 6;
     private uint _networkPlayer = 2;
@@ -59,7 +60,7 @@ public partial class Sandbox
         var network = new StarSession(_networkMode == 1, _networkAddress, _networkPort, _networkPin, Descriptor(ownerOptions, map),
             () => CreateConfiguredWorld(map, ownerOptions), path, playerCount: 4, player: _networkPlayer,
             aiPlayers: _networkAiPlayers, planAi: Plan, lobbySettings: ownerOptions.Serialize(), prepareSettings: Prepare,
-            closedPlayers: ownerOptions.Seats.Select((s, i) => (s, i)).Where(p => p.s.Controller == SlotController.None).Select(p => (uint)p.i + 1).ToArray());
+            closedPlayers: ownerOptions.Seats.Select((s, i) => (s, i)).Where(p => p.s.Controller == SlotController.None).Select(p => (uint)p.i + 1).ToArray(), resumeCredential: _networkResume);
         _session = new SandboxSession(network);
         _networkAdvertiser?.Dispose();
         if (network.IsHost)
@@ -81,6 +82,12 @@ public partial class Sandbox
         var panel = new VBoxContainer { CustomMinimumSize = new(460, 0) }; center.AddChild(panel);
         panel.AddChild(new Label { Text = heading, HorizontalAlignment = HorizontalAlignment.Center });
         panel.AddChild(new Label { Text = reason, AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        if (_networkResume is not null && _mapMatch is not null && _catalog is not null)
+        {
+            var reconnect = new Button { Text = "Вернуться в матч" };
+            reconnect.Pressed += () => { layer.QueueFree(); _networkMode = 2; StartSession(); };
+            panel.AddChild(reconnect);
+        }
         var retry = new Button { Text = "В главное меню" };
         retry.Pressed += () => GetTree().CallDeferred(SceneTree.MethodName.ReloadCurrentScene); panel.AddChild(retry);
         var quit = new Button { Text = "Выйти" }; quit.Pressed += () => GetTree().Quit(); panel.AddChild(quit);

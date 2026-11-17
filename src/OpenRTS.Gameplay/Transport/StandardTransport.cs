@@ -3,7 +3,7 @@ using Frent;
 
 namespace OpenRTS.Core.Transport;
 
-internal sealed class StandardTransport : ITransportMechanic
+internal sealed partial class StandardTransport : ITransportMechanic
 {
     private struct PassengerState { public EntityId Carrier; }
 

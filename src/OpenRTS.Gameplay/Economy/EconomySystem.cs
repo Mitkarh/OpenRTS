@@ -3,7 +3,7 @@ using OpenRTS.Core.Simulation;
 
 namespace OpenRTS.Core.Economy;
 
-internal sealed class EconomySystem
+internal sealed partial class EconomySystem
 {
     internal const long MaximumCredits = 1000000000000000;
 

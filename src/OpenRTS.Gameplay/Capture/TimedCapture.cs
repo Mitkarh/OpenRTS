@@ -3,7 +3,7 @@ using OpenRTS.Core.Simulation;
 
 namespace OpenRTS.Core.Capture;
 
-internal sealed class TimedCapture : ICaptureMechanic
+internal sealed partial class TimedCapture : ICaptureMechanic
 {
     private struct CapturableState
     {

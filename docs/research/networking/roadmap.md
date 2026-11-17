@@ -73,7 +73,7 @@ NET5/NET6 — дополнительные сервисы, не зависимо
 
 ## NET4 — сохранение, восстановление, replay и первые зрители
 
-**Текущий статус:** NET4.1 реализован: журналv3 с bootstrap, replay UI/POV/seek и bounded ReplayCheckpoint с восстановлением от0. [Контракт042](../../decisions/042-net4-replay-recovery.md), [проверки](../../verification/042-net4.md), [разбиение NET4.1–4.3](net4.md). Это промежуточная история O(K), не canonical snapshot. NET4.2/runtime schemas и NET4.3/rejoin ещё не выполнены.
+**Текущий статус:** NET4.1 реализован: журналv3 с bootstrap, replay UI/POV/seek и bounded ReplayCheckpoint с восстановлением от0. [Контракт042](../../decisions/042-net4-replay-recovery.md), [проверки](../../verification/042-net4.md), [разбиение NET4.1–4.3](net4.md). ReplayCheckpoint остаётся историей O(K). NET4.2 добавляет runtime snapshot со схемами состояния, NET4.3 — token/epoch, chunks, возврат двух участников и позднего зрителя на общей паузе; [контракт043](../../decisions/043-net4-runtime-snapshot-rejoin.md), [проверки](../../verification/043-net4-runtime-rejoin.md). Непрерывный observer catch-up и индекс checkpoints для replay seek остаются продолжением.
 
 **Гипотеза:** полный canonical checkpoint позволяет продолжить симуляцию без изменения дальнейшего hash. Это отдельная значимая работа над Gameplay/Core, не сериализация ECS памяти.
 

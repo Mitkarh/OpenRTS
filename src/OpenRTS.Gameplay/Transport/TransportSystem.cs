@@ -4,7 +4,7 @@ using OpenRTS.Core.Orders;
 
 namespace OpenRTS.Core.Transport;
 
-internal sealed class TransportSystem(ITransportWorld world, ITransportMechanic mechanic)
+internal sealed partial class TransportSystem(ITransportWorld world, ITransportMechanic mechanic)
 {
     private readonly ITransportWorld _world = world;
     private readonly ITransportMechanic _mechanic = mechanic;

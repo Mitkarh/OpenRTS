@@ -1,0 +1,6 @@
+PASS Network: NET4.3 transfer rejects quotas, wrong offsets and damaged chunks
+PASS Network: NET4.3 two simultaneous authenticated returns preserve the common journal
+PASS Network: NET4.3 an authenticated human takes back the AI-controlled side at a common boundary
+PASS Network: NET4.3 rejects wrong and retired tokens without replacing the active connection
+PASS Network: NET4.3 mid-game spectator loads a runtime boundary and follows live turns
+PASS Network: Lobby host configuration replaces guest defaults; NET4.3 restores the host recipe

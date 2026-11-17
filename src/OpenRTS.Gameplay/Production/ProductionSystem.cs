@@ -5,7 +5,7 @@ using OpenRTS.Core.Simulation;
 
 namespace OpenRTS.Core.Production;
 
-internal sealed class ProductionSystem(IProductionWorld world, UnitDefinition[] types, BuildRecipes recipes,
+internal sealed partial class ProductionSystem(IProductionWorld world, UnitDefinition[] types, BuildRecipes recipes,
     EconomySystem economy, ProductionRateRule? rateRule, object storageGate)
 {
     private long _nextTaskId = 1;

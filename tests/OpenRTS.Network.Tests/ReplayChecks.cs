@@ -53,6 +53,12 @@ internal static class ReplayChecks
     }
     internal static bool Tool(string[] args)
     {
+        string? runtimePath = args.FirstOrDefault(a => a.StartsWith("--restore-runtime="))?[18..];
+        if (runtimePath is not null)
+        {
+            using var world = SimulationWorld.RestoreSnapshot(File.ReadAllBytes(runtimePath), () => World("production", 2));
+            Console.WriteLine($"RUNTIME_RESTORED {world.Tick} {world.Report().StateHash}"); return true;
+        }
         string? path = args.FirstOrDefault(a => a.StartsWith("--restore-checkpoint="))?[21..];
         if (path is null) return false;
         using var input = File.OpenRead(path);
@@ -76,6 +82,43 @@ internal static class ReplayChecks
                 }
                 Console.WriteLine($"REPLAY_RECOVERY {recipe} ticks={ticks} bytes={source.Journal.Length} hash={source.Hashes[ticks]}");
             });
+        foreach (var (recipe, ticks, boundary) in new[] { ("production", 320, 12), ("aviation", 420, 185), ("sensors", 48, 12) })
+            test("NET4.2 runtime snapshot continues every hash: " + recipe, () => {
+                var history = Create(recipe, ticks);
+                foreach (int at in new[] { 0, boundary, ticks })
+                {
+                    using var original = World(recipe); original.RestrictCommandsToPlayers();
+                    for (int tick = 1; tick <= at; tick++) original.Step(history.Commands[tick]);
+                    byte[] data = original.CaptureSnapshot();
+                    Check(data.AsSpan().SequenceEqual(original.CaptureSnapshot()), "Snapshot is not canonical");
+                    using var restored = SimulationWorld.RestoreSnapshot(data, () => World(recipe, 2));
+                    Check(restored.Report() == original.Report());
+                    Console.WriteLine($"RUNTIME_SNAPSHOT {recipe} tick={at} bytes={data.Length}");
+                    for (int tick = at + 1; tick <= ticks; tick++)
+                    { restored.Step(history.Commands[tick]); Check(restored.Report().StateHash == history.Hashes[tick], $"Runtime {recipe} continuation differs at {tick}"); }
+                    Reject(() => SimulationWorld.RestoreSnapshot(data[..^1], () => World(recipe)));
+                    byte[] bad = data.ToArray(); bad[^1] ^= 1;
+                    Reject(() => SimulationWorld.RestoreSnapshot(bad, () => World(recipe)));
+                    Reject(() => SimulationWorld.RestoreSnapshot(data, () => World(recipe == "aviation" ? "production" : "aviation")));
+                }
+            });
+        test("NET4.2 runtime snapshot restores in a fresh operating-system process", () => {
+            var history = Create("production", 30); using var world = World("production"); world.RestrictCommandsToPlayers();
+            for (int tick = 1; tick <= 12; tick++) world.Step(history.Commands[tick]);
+            string path = Path.Combine(Path.GetTempPath(), "openrts-runtime-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                File.WriteAllBytes(path, world.CaptureSnapshot());
+                var start = new ProcessStartInfo(Environment.ProcessPath!) { RedirectStandardOutput = true, RedirectStandardError = true };
+                if (Path.GetFileNameWithoutExtension(Environment.ProcessPath) == "dotnet") start.ArgumentList.Add(typeof(ReplayChecks).Assembly.Location);
+                start.ArgumentList.Add("--restore-runtime=" + path);
+                using var child = Process.Start(start)!;
+                if (!child.WaitForExit(15000)) { child.Kill(entireProcessTree: true); throw new TimeoutException("Runtime restore process timed out"); }
+                string output = child.StandardOutput.ReadToEnd(), errors = child.StandardError.ReadToEnd();
+                Check(child.ExitCode == 0 && output.Contains($"RUNTIME_RESTORED 12 {history.Hashes[12]}"), errors + output);
+            }
+            finally { File.Delete(path); }
+        });
         test("NET4 restart in another process restores the selected boundary", () => {
             var history = Create("production", 32); string path = Path.Combine(Path.GetTempPath(), "openrts-recovery-" + Guid.NewGuid().ToString("N"));
             try

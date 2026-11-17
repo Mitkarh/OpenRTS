@@ -113,6 +113,43 @@ public abstract class Simulation<TCommand, TEvent> : IDisposable where TCommand 
 
     protected void ReleaseEntityId(EntityId id) => _reservedIds.Remove(id);
 
+    protected void RequireCompletedBoundary()
+    {
+        ThrowIfDisposed();
+        if (_stepping || _failed) throw new InvalidOperationException("Snapshot requires a completed tick boundary.");
+    }
+
+    protected void WriteRuntimeCore(BinaryWriter writer)
+    {
+        RequireCompletedBoundary();
+        writer.Write(Tick); writer.Write(_nextId); writer.Write(_random.State);
+        writer.Write(_reservedIds.Count);
+        foreach (var id in _reservedIds.OrderBy(id => id.Value)) writer.Write(id.Value);
+    }
+
+    protected void RestoreRuntimeCore(BinaryReader reader)
+    {
+        RequireCompletedBoundary();
+        long tick = reader.ReadInt64(); uint next = reader.ReadUInt32(); ulong random = reader.ReadUInt64();
+        int count = reader.ReadInt32();
+        if (tick < 0 || next == 0 || count is < 0 or > 65536) throw new InvalidDataException("Invalid snapshot allocator.");
+        _reservedIds.Clear();
+        for (int i = 0; i < count; i++)
+        {
+            uint id = reader.ReadUInt32();
+            if (id == 0 || id >= next || !_reservedIds.Add(new(id))) throw new InvalidDataException("Invalid reserved ID.");
+        }
+        if (_storage is not null) lock (StorageGate) _storage.Dispose();
+        _storage = null; _indices.Clear(); Array.Clear(_entityHandles); Count = 0; _events.Clear();
+        Tick = tick; _nextId = next; _random = new(random);
+    }
+
+    protected void ReserveRestoredEntityId(EntityId id)
+    {
+        if (id.Value == 0 || id.Value >= _nextId || _indices.ContainsKey(id) || !_reservedIds.Add(id))
+            throw new InvalidDataException("Invalid restored entity ID.");
+    }
+
     /// <summary>Places a spatial entity within world bounds. A game may check terrain and occupancy before placement.</summary>
     protected Entity PlaceEntity(WorldPosition position, int type = 0)
     {

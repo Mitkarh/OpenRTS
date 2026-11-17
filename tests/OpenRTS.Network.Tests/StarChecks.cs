@@ -46,11 +46,11 @@ internal static class StarChecks
             // The listener is started before the owner's lobby publication.
             Wait(() => Host.Status.StartsWith("Лобби", StringComparison.Ordinal), Host);
         }
-        internal StarSession Join(uint player, string? pin = null, int? relayPort = null)
+        internal StarSession Join(uint player, string? pin = null, int? relayPort = null, MatchResumeCredential? resume = null)
         {
             var session = new StarSession(false, "127.0.0.1", relayPort ?? Port, pin ?? Host.Fingerprint, Descriptor, () => World(2),
-                Path.Combine(Directory, player + ".journal"), playerCount: 4, player: player,
-                planAi: (_, _) => throw new Exception("A client attempted to run AI"));
+                Path.Combine(Directory, player + (resume is null ? "" : "-resume-" + Guid.NewGuid().ToString("N")) + ".journal"), playerCount: 4, player: player,
+                planAi: (_, _) => throw new Exception("A client attempted to run AI"), resumeCredential: resume);
             Sessions.Add(session); return session;
         }
         internal void Start(StarSession two, StarSession three)
@@ -70,6 +70,91 @@ internal static class StarChecks
     }
     internal static void Run(Action<string, Action> test)
     {
+        test("NET4.3 transfer rejects quotas, wrong offsets and damaged chunks", () => {
+            byte[] Begin(int snapshot = 1, int history = 1, bool valid = true) => Wire.Pack(w => {
+                w.Write(StarProtocol.Recovery); w.Write(snapshot); w.Write(history);
+                w.Write(valid ? System.Security.Cryptography.SHA256.HashData(new byte[] { 1 }) : new byte[32]);
+                w.Write(System.Security.Cryptography.SHA256.HashData(new byte[] { 2 }));
+            });
+            void Reject(Action action)
+            { try { action(); } catch (Exception e) when (e is InvalidDataException or IOException) { return; } throw new Exception("Expected transfer rejection"); }
+            Reject(() => StarSession.RecoveryTransfer.Receive(Begin(int.MaxValue), null!, TimeSpan.FromSeconds(1), default));
+            byte[] Chunk(byte artifact, int offset, byte value) => Wire.Pack(w => { w.Write(StarProtocol.RecoveryChunk); w.Write(artifact); w.Write(offset); w.Write(1); w.Write(value); });
+            foreach (bool wrongOffset in new[] { true, false })
+            {
+                var stream = new MemoryStream(); var writer = new BinaryWriter(stream);
+                foreach (var frame in new[] { Chunk(0, wrongOffset ? 1 : 0, 1), Chunk(1, 0, 2) }) { writer.Write(frame.Length); writer.Write(frame); }
+                stream.Position = 0;
+                using var pipe = new PeerPipeline(stream, TimeSpan.FromSeconds(1), default);
+                Reject(() => StarSession.RecoveryTransfer.Receive(Begin(valid: false), pipe, TimeSpan.FromSeconds(1), default));
+            }
+        });
+        test("NET4.3 two simultaneous authenticated returns preserve the common journal", () => {
+            using var match = new Match(); var host = match.Host;
+            var two = match.Join(2); var three = match.Join(3); match.Start(two, three);
+            Wait(() => Tick(host) >= 8 && two.ResumeCredential is not null && three.ResumeCredential is not null, host, two, three);
+            var tokenTwo = two.ResumeCredential!; var tokenThree = three.ResumeCredential!;
+            two.Dispose(); three.Dispose();
+            Wait(() => host.State.Phase == MatchPhase.Paused && !host.State.Slots[1].Connected && !host.State.Slots[2].Connected, host);
+            var returnedTwo = match.Join(2, resume: tokenTwo); var returnedThree = match.Join(3, resume: tokenThree);
+            Wait(() => host.State.Slots.Take(3).All(s => s.Connected) && returnedTwo.ResumeCredential?.Epoch == 2 && returnedThree.ResumeCredential?.Epoch == 2 &&
+                returnedTwo.State.Revision == host.State.Revision && returnedThree.State.Revision == host.State.Revision, host, returnedTwo, returnedThree);
+            long boundary = Tick(host); Check(Tick(returnedTwo) == boundary && Tick(returnedThree) == boundary);
+            host.Pause(false); Wait(() => Tick(host) >= boundary + 12, host, returnedTwo, returnedThree); host.Stop();
+            Wait(() => new[] { host, returnedTwo, returnedThree }.All(s => s.Completion.IsCompleted), host, returnedTwo, returnedThree);
+            foreach (var session in new[] { host, returnedTwo, returnedThree })
+            { match.Replay(session); Check(File.ReadAllBytes(host.JournalPath).SequenceEqual(File.ReadAllBytes(session.JournalPath)), "Rejoin journal differs"); }
+        });
+        test("NET4.3 an authenticated human takes back the AI-controlled side at a common boundary", () => {
+            using var match = new Match(); var host = match.Host; var two = match.Join(2); var three = match.Join(3);
+            match.Start(two, three); Wait(() => Tick(host) >= 6 && two.ResumeCredential is not null, host, two, three);
+            var credential = two.ResumeCredential!; two.Dispose();
+            Wait(() => !host.State.Slots[1].Connected && host.State.Phase == MatchPhase.Paused, host, three);
+            host.SetAi(2, true); Wait(() => host.State.Slots[1].Controller == SlotController.Ai, host, three);
+            long boundary = Tick(host); host.Pause(false); Wait(() => Tick(host) > boundary + 6, host, three);
+            var returned = match.Join(2, resume: credential);
+            Wait(() => host.State.Slots[1].Controller == SlotController.Human && returned.ResumeCredential?.Epoch == 2 && returned.State.Revision == host.State.Revision, host, three, returned);
+            Check(host.State.Phase == MatchPhase.Paused && Tick(host) == Tick(returned));
+            boundary = Tick(host); host.Pause(false); Wait(() => Tick(returned) > boundary + 6, host, three, returned); host.Stop();
+            Wait(() => new[] { host, three, returned }.All(s => s.Completion.IsCompleted), host, three, returned); match.Replay(returned);
+        });
+        test("NET4.3 rejects wrong and retired tokens without replacing the active connection", () => {
+            using var match = new Match(); var host = match.Host; var two = match.Join(2); var three = match.Join(3);
+            match.Start(two, three); Wait(() => Tick(host) >= 5 && two.ResumeCredential is not null, host, two, three);
+            var old = two.ResumeCredential!; two.Dispose();
+            Wait(() => !host.State.Slots[1].Connected && host.State.Phase == MatchPhase.Paused, host, three);
+            var bad = match.Join(2, resume: old with { Token = new string('0', 64) });
+            Wait(() => bad.Completion.IsCompleted, host, three); Check(bad.Completion.IsFaulted && !host.State.Slots[1].Connected);
+            var returned = match.Join(2, resume: old);
+            Wait(() => host.State.Slots[1].Connected && returned.ResumeCredential?.Epoch == 2, host, three, returned);
+            var newer = returned.ResumeCredential!;
+            long resumedAt = Tick(host); host.Pause(false);
+            Wait(() => Tick(host) > resumedAt + Descriptor.HashInterval * 2, host, three, returned);
+            host.Pause(true); Wait(() => host.State.Phase == MatchPhase.Paused && returned.State.Revision == host.State.Revision, host, three, returned);
+            returned.Dispose();
+            Wait(() => !host.State.Slots[1].Connected, host, three);
+            var stale = match.Join(2, resume: old); Wait(() => stale.Completion.IsCompleted, host, three);
+            Check(stale.Completion.IsFaulted && !host.State.Slots[1].Connected);
+            var latest = match.Join(2, resume: newer);
+            Wait(() => latest.ResumeCredential?.Epoch == 3 && host.State.Slots[1].Connected, host, three, latest);
+            var duplicate = match.Join(2, resume: latest.ResumeCredential);
+            Wait(() => duplicate.Completion.IsCompleted, host, three, latest); Check(duplicate.Completion.IsFaulted && host.State.Slots[1].Connected);
+            host.Stop(); Wait(() => new[] { host, three, latest }.All(s => s.Completion.IsCompleted), host, three, latest);
+            match.Replay(latest);
+        });
+        test("NET4.3 mid-game spectator loads a runtime boundary and follows live turns", () => {
+            using var match = new Match(); var host = match.Host; var two = match.Join(2); var three = match.Join(3);
+            match.Start(two, three); Wait(() => Tick(host) >= 8, host, two, three);
+            var uninvited = match.Join(0); Wait(() => uninvited.Completion.IsCompleted, host, two, three);
+            Check(uninvited.Completion.IsFaulted && host.State.Phase == MatchPhase.Playing, "An observer paused a running game");
+            host.Pause(true); Wait(() => host.State.Phase == MatchPhase.Paused, host, two, three);
+            var observer = match.Join(0);
+            Wait(() => observer.State.Spectators == 1 && observer.State.Revision == host.State.Revision && Tick(observer) == Tick(host), host, two, three, observer);
+            Check(host.State.Phase == MatchPhase.Paused); long boundary = Tick(host); host.Pause(false);
+            Wait(() => Tick(observer) > boundary + 8, host, two, three, observer); host.Stop();
+            Wait(() => new[] { host, two, three, observer }.All(s => s.Completion.IsCompleted), host, two, three, observer);
+            match.Replay(observer); Check(File.ReadAllBytes(host.JournalPath).SequenceEqual(File.ReadAllBytes(observer.JournalPath)));
+        });
         test("NET3 stale Ready, config reset, three TLS players and shared pause", () => {
             using var match = new Match(); var host = match.Host;
             var two = match.Join(2); var three = match.Join(3);
@@ -166,7 +251,7 @@ internal static class StarChecks
             foreach (var session in match.Sessions) { Check(session.Completion.Result == host.Completion.Result); match.Replay(session); }
             Check(File.ReadAllBytes(host.JournalPath).AsSpan().SequenceEqual(File.ReadAllBytes(three.JournalPath)));
         });
-        test("Lobby host configuration replaces guest defaults; spectators do not issue input", () => {
+        test("Lobby host configuration replaces guest defaults; NET4.3 restores the host recipe", () => {
             string directory = Path.Combine(Path.GetTempPath(), "openrts-lobby-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(directory);
             int port = Port();
             (MatchDescriptor Descriptor, SimulationWorld World) Prepare(string data)
@@ -193,9 +278,16 @@ internal static class StarChecks
                 Reject(() => spectator.Submit(new(0, 0, 0, CommandKind.Stop, new(1))));
                 host.Ready(host.State.Revision); guest.Ready(guest.State.Revision);
                 Wait(() => host.State.Slots.Take(2).All(p => p.Ready), host, guest, spectator); host.Start();
-                Wait(() => Tick(spectator) >= 12, host, guest, spectator); host.Stop();
-                Wait(() => host.Completion.IsCompleted && guest.Completion.IsCompleted && spectator.Completion.IsCompleted, host, guest, spectator);
-                foreach (var session in new[] { host, guest, spectator })
+                Wait(() => Tick(spectator) >= 12 && guest.ResumeCredential is not null, host, guest, spectator);
+                var credential = guest.ResumeCredential!; guest.Dispose();
+                Wait(() => host.State.Phase == MatchPhase.Paused && !host.State.Slots[1].Connected, host, spectator);
+                using var returned = new StarSession(false, "127.0.0.1", port, host.Fingerprint, Descriptor with { ScenarioHash = "different-local-map" }, () => World(), Path.Combine(directory, "returned"),
+                    playerCount: 4, player: 2, lobbySettings: "different-local-map", prepareSettings: Prepare, resumeCredential: credential);
+                Wait(() => returned.ResumeCredential?.Epoch == 2 && returned.State.Revision == host.State.Revision, host, returned, spectator);
+                Check(returned.LobbySettings == "host-revised", "Rejoin lost authoritative recipe");
+                long boundary = Tick(host); host.Pause(false); Wait(() => Tick(returned) >= boundary + 8, host, returned, spectator); host.Stop();
+                Wait(() => host.Completion.IsCompleted && returned.Completion.IsCompleted && spectator.Completion.IsCompleted, host, returned, spectator);
+                foreach (var session in new[] { host, returned, spectator })
                 {
                     Check(session.Completion.Result == host.Completion.Result);
                     using var log = File.OpenRead(session.JournalPath); Check(StarJournal.Replay(log, session.Descriptor, () => Prepare("host-revised").World) == host.Completion.Result);
@@ -249,7 +341,7 @@ internal static class StarChecks
                 tls.AuthenticateAsClient("openrts.local");
                 using var initial = World(); initial.RestrictCommandsToPlayers();
                 Wire.Send(tls, Wire.Pack(w => { w.Write(StarProtocol.Hello); w.Write(StarProtocol.Version); w.Write(2u); w.Write(4);
-                    Wire.Text(w, Wire.Hash(DirectMatch.Descriptor(Descriptor))); Wire.Text(w, initial.Report().StateHash); Wire.Text(w, Descriptor.Rules); Wire.Text(w, Descriptor.ContentHash); }), cancel.Token).GetAwaiter().GetResult();
+                    Wire.Text(w, Wire.Hash(DirectMatch.Descriptor(Descriptor))); Wire.Text(w, initial.Report().StateHash); Wire.Text(w, Descriptor.Rules); Wire.Text(w, Descriptor.ContentHash); w.Write(false); }), cancel.Token).GetAwaiter().GetResult();
                 long revision = 0;
                 while (revision == 0)
                 {

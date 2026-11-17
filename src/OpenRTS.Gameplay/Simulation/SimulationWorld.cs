@@ -168,6 +168,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
 
     protected override void PrepareStep()
     {
+        _snapshotOrigin ??= Report().StateHash;
         CaptureCommandVision();
         _conditionGrants?.Expire(Tick + 1);
         _sensors?.Expire(Tick + 1);

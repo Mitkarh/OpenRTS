@@ -39,3 +39,6 @@ Seek пересоздаёт мир, применяет команды0..K без
 Production100, aviation420 и sensors48 проверены восстановлением на0/K/T и совпадением каждого дальнейшего hash при тех же командах; restart проверен отдельным процессом. Это проверка replay recovery небольших сценариев, не полный аудит всех механик/сохранений и не benchmark10000объектов. RNG seed входит в исходное состояние; изменяющий RNG Scatter не является разрешённым сетевым intent и в этой матрице не используется.
 
 Следующий этап NET4.2 должен дать настоящие схемы runtime snapshot, включая зарегистрированные механики и внешнюю AI policy либо явный согласованный reset. Затем NET4.3 — resume credentials/epochs, chunked transfer, bounded catch-up и включение в barrier. Mid-game join/rejoin, два одновременных rejoin и host migration сейчас не реализованы. Trusted authoritative mode остаётся последним дополнительным NET8/NET9.
+
+
+**Продолжение от 17 ноября:** runtime schemas и rejoin реализованы следующим срезом [043](043-net4-runtime-snapshot-rejoin.md). Ограничения выше описывают именно исторический NET4.1.

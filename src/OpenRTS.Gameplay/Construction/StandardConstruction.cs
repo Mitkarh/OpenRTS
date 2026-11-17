@@ -2,7 +2,7 @@ using Frent;
 
 namespace OpenRTS.Core.Construction;
 
-internal sealed class StandardConstruction : IConstructionMechanic
+internal sealed partial class StandardConstruction : IConstructionMechanic
 {
     private struct ConstructionState(int required, int startingHealth, long startedAt)
     {

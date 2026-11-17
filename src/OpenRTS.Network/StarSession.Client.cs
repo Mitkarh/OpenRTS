@@ -9,7 +9,7 @@ namespace OpenRTS.Network;
 
 public sealed partial class StarSession
 {
-    private SimulationReport RunClient(string address, int port, SimulationWorld world)
+    private SimulationReport RunClient(string address, int port, SimulationWorld world, Func<SimulationWorld> createWorld)
     {
         using var socket = new TcpClient { NoDelay = true };
         using (var connect = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token))
@@ -26,7 +26,10 @@ public sealed partial class StarSession
         }
         using var pipe = new PeerPipeline(tls, _timeout, _stop.Token);
         pipe.Send(Wire.Pack(w => { w.Write(StarProtocol.Hello); w.Write(StarProtocol.Version); w.Write(Player); w.Write(State.Slots.Count);
-            Wire.Text(w, Wire.Hash(DirectMatch.Descriptor(Descriptor))); Wire.Text(w, world.Report().StateHash); Wire.Text(w, Descriptor.Rules); Wire.Text(w, Descriptor.ContentHash); }));
+            Wire.Text(w, Wire.Hash(DirectMatch.Descriptor(Descriptor))); Wire.Text(w, world.Report().StateHash); Wire.Text(w, Descriptor.Rules); Wire.Text(w, Descriptor.ContentHash);
+            w.Write(ResumeCredential is not null);
+            if (ResumeCredential is { } credential) { byte[] data = CredentialFrame(credential); w.Write(data.Length); w.Write(data); }
+        }));
         var clock = Stopwatch.StartNew(); double lastSeen = 0, lastTurn = 0, finishAt = 0; long sentSequence = 0, sealedTick = -1;
         long[] sequences = new long[State.Slots.Count];
         StarJournal? log = null; FileStream? output = null; bool finishing = false;
@@ -76,6 +79,38 @@ public sealed partial class StarSession
                 byte[] frame = Read();
                 switch (frame[0])
                 {
+                    case StarProtocol.Credential:
+                        var credential = ReadCredential(frame);
+                        if (credential.Player != Player || State.Match != Guid.Empty && credential.Match != State.Match ||
+                            ResumeCredential is { } old && (credential.Match != old.Match || credential.Epoch <= old.Epoch))
+                            throw new InvalidDataException("Resume credential identity/epoch mismatch.");
+                        Volatile.Write(ref _resumeCredential, credential);
+                        break;
+                    case StarProtocol.Recovery:
+                        if (log is not null || Player != 0 && ResumeCredential is null) throw new InvalidDataException("Unexpected recovery transfer.");
+                        Volatile.Write(ref _status, "Загрузка состояния матча…");
+                        var transfer = RecoveryTransfer.Receive(frame, pipe, _timeout, _stop.Token);
+                        using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token))
+                        using (var history = new MemoryStream(transfer.History, false))
+                        using (var reader = new StarJournalReader(history, Descriptor, stop: deadline.Token, openPrefix: true))
+                        {
+                            deadline.CancelAfter(TimeSpan.FromSeconds(15));
+                            while (reader.Next() is not null) { }
+                            if (reader.State.Phase != MatchPhase.Paused || reader.Info.Recipe != LobbySettings || reader.Info.InitialHash != _initialHash ||
+                                Player != 0 && ResumeCredential!.Match != reader.State.Match)
+                                throw new InvalidDataException("Recovery history identity/boundary mismatch.");
+                            var restored = SimulationWorld.RestoreSnapshot(transfer.Snapshot,
+                                () => _prepare is null ? createWorld() : _prepare(LobbySettings).World, deadline.Token);
+                            if (!restored.PlayerCommandsRestricted || restored.Tick != reader.Tick || restored.Report().StateHash != reader.Hash)
+                            { restored.Dispose(); throw new InvalidDataException("Snapshot/history boundary mismatch."); }
+                            world.Dispose(); world = restored; _ownedWorld = restored;
+                            sequences = reader.Sequences; SetState(reader.State);
+                        }
+                        output = File.Create(JournalPath); output.Write(transfer.History);
+                        log = new StarJournal(output, transfer.History.Length);
+                        pipe.Send(StarProtocol.Check(StarProtocol.RecoveryReady, world.Tick, world.Report().StateHash));
+                        Publish(world); lastTurn = lastSeen = clock.Elapsed.TotalMilliseconds;
+                        break;
                     case StarProtocol.Settings:
                         if (_prepare is null || log is not null) throw new InvalidDataException("Unexpected lobby configuration.");
                         var configuration = ReadSettings(frame);
@@ -103,7 +138,7 @@ public sealed partial class StarSession
                         else { StarJournal.ValidateTransition(previous, next, world.Tick); log.Write(frame); }
                         SetState(next);
                         lastTurn = clock.Elapsed.TotalMilliseconds;
-                        if (log is not null && world.Tick == 0) { Seal(); Publish(world); }
+                        if (log is not null) { Seal(); if (world.Tick == 0) Publish(world); }
                         break;
                     case StarProtocol.Turn:
                         if (log is null || finishing) throw new InvalidDataException("Unexpected turn.");

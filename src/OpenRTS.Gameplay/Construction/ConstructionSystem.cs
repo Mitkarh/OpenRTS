@@ -4,7 +4,7 @@ using OpenRTS.Core.Simulation;
 
 namespace OpenRTS.Core.Construction;
 
-internal sealed class ConstructionSystem
+internal sealed partial class ConstructionSystem
 {
     private const int MaximumPlayerProjects = 256;
     private const int ClearanceTimeout = 250;

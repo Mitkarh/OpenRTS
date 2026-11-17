@@ -47,7 +47,7 @@ public sealed partial class StarSession : IDisposable
         IReadOnlyList<uint>? aiPlayers = null, Func<SimulationWorld, uint, IReadOnlyList<WorldCommand>>? planAi = null,
         TimeSpan? timeout = null, string lobbySettings = "",
         Func<string, (MatchDescriptor Descriptor, SimulationWorld World)>? prepareSettings = null,
-        IReadOnlyList<uint>? closedPlayers = null)
+        IReadOnlyList<uint>? closedPlayers = null, MatchResumeCredential? resumeCredential = null)
     {
         if (port is < 1 or > 65535 || playerCount is < 2 or > 8 || !host && player != 0 && (player < 2 || player > playerCount))
             throw new ArgumentOutOfRangeException(nameof(playerCount));
@@ -59,6 +59,10 @@ public sealed partial class StarSession : IDisposable
         var ai = aiPlayers?.ToHashSet() ?? [];
         if (ai.Any(p => p < 2 || p > playerCount) || host && ai.Count != 0 && planAi is null)
             throw new ArgumentException("AI slots require a host policy and valid non-host players.");
+        if (resumeCredential is not null && (host || resumeCredential.Player != player || resumeCredential.Match == Guid.Empty ||
+            resumeCredential.Epoch < 1 || resumeCredential.Token.Length != 64 || !resumeCredential.Token.All(Uri.IsHexDigit)))
+            throw new ArgumentException("Invalid match resume credential.");
+        _resumeCredential = resumeCredential;
         IsHost = host; Player = host ? 1u : player; _descriptor = descriptor; _prepare = prepareSettings; _settings = lobbySettings;
         if (prepareSettings is not null) ValidateSettings(lobbySettings); JournalPath = journalPath; _planAi = planAi;
         _state = new(host ? Guid.NewGuid() : Guid.Empty, 1, 0, MatchPhase.Lobby,
@@ -89,7 +93,7 @@ public sealed partial class StarSession : IDisposable
             {
                 if (world.Tick != 0 || world.TickRate != Descriptor.TickRate) throw new ArgumentException("Expected matching tick-zero world.");
                 world.RestrictCommandsToPlayers(); _ownedWorld = world; _initialHash = world.Report().StateHash;
-                report = IsHost ? RunHost(address, port, certificate!, world) : RunClient(address, port, world);
+                report = IsHost ? RunHost(address, port, certificate!, world) : RunClient(address, port, world, createWorld);
             }
             _ownedWorld?.Dispose();
             Volatile.Write(ref _status, "Матч завершён"); _completion.TrySetResult(report);

@@ -5,11 +5,12 @@ namespace OpenRTS.Core.Navigation;
 public readonly record struct RouteRequest(int Profile, int Goal);
 
 /// <summary>Profile-keyed reverse Dijkstra fields, deterministic FIFO publication and static components.</summary>
-public sealed class WeightedNavigator
+public sealed partial class WeightedNavigator
 {
     private sealed class Field { internal RouteRequest Key = new(-1, -1); internal long[] Costs = []; public int Visited; }
     private readonly Locomotor[] _profiles;
     private readonly bool _exact;
+    internal Locomotor ProfileAt(int index) => _profiles[index];
     internal RouteGeometry Geometry(int profile) => Resolver(profile).Geometry;
     internal WorldPosition Point(int cell) => _exact ? new WorldPosition(cell % _routeWidth * RouteGeometry.ExactStep + RouteGeometry.ExactStep / 2, cell / _routeWidth * RouteGeometry.ExactStep + RouteGeometry.ExactStep / 2) : Grid.Center(cell);
     private readonly int _routeCount, _routeWidth;

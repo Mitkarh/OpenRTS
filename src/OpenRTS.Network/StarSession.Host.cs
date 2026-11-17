@@ -4,6 +4,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Cryptography;
 using OpenRTS.Core;
 using OpenRTS.Core.Orders;
 
@@ -17,6 +18,7 @@ public sealed partial class StarSession
         internal readonly PeerPipeline Pipe = pipeline;
         internal TickInbox Inbox = inbox;
         internal string? SettingsDigest;
+        internal MatchResumeCredential? ResumeWith;
         internal long Ack, LastSeen = Stopwatch.GetTimestamp(), RateAt = Stopwatch.GetTimestamp();
         internal int Requests, Chats;
         internal void Limit(bool chat)
@@ -31,6 +33,12 @@ public sealed partial class StarSession
         var listener = new TcpListener(IPAddress.Parse(address), port); listener.Start();
         var peers = new SortedDictionary<uint, Peer>();
         var lost = new HashSet<uint>();
+        byte[]? recoverySnapshot = null; long recoverySnapshotTick = -1;
+        var credentials = new Dictionary<uint, MatchResumeCredential>();
+        var unconfirmedCredentials = new Dictionary<uint, MatchResumeCredential>();
+        var recovering = new Dictionary<uint, (Peer Peer, Task Transfer, long Prefix, long Started)>();
+        using var acceptStop = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+        var handshakes = new List<Task<(TcpClient Socket, PeerPipeline Pipe, byte[] Hello)>>();
         int count = State.Slots.Count, window = 2 * Descriptor.InputDelay + Descriptor.HashInterval;
         var slots = State.Slots.ToArray(); var phase = MatchPhase.Lobby;
         var pending = Enumerable.Range(0, count).Select(_ => new Dictionary<long, WorldCommand[]>()).ToArray();
@@ -114,7 +122,7 @@ public sealed partial class StarSession
                 if (check.Tick != peer.Ack + Descriptor.HashInterval || !hashes.TryGetValue(check.Tick, out var expected))
                     throw new InvalidDataException("Peer checkpoint cadence/window mismatch.");
                 if (check.Hash != expected) throw new DesyncException(check.Tick, expected, check.Hash);
-                peer.Ack = check.Tick; return;
+                peer.Ack = check.Tick; unconfirmedCredentials.Remove(player); return;
             }
             if (bytes.AsSpan().SequenceEqual(new byte[] { StarProtocol.Ping }) && player != 1) return;
             if (bytes[0] == StarProtocol.SettingsAck && player != 1 && phase == MatchPhase.Lobby && _prepare is not null)
@@ -145,17 +153,17 @@ public sealed partial class StarSession
                     if (slots.Any(p => p.Controller == SlotController.Human && (!p.Connected || !p.Ready))) break;
                     phase = MatchPhase.Playing; revision++;
                     var initial = Snapshot("Матч начат"); SetState(initial);
-                    output = File.Create(JournalPath); log = new StarJournal(output, Descriptor, world.Report().StateHash, StarProtocol.WriteState(initial), LobbySettings);
+                    output = new FileStream(JournalPath, FileMode.Create, FileAccess.ReadWrite, FileShare.Read); log = new StarJournal(output, Descriptor, world.Report().StateHash, StarProtocol.WriteState(initial), LobbySettings);
                     Broadcast(StarProtocol.WriteState(initial)); Publish(world); nextDue = clock.Elapsed.TotalMilliseconds + 1000.0 / Descriptor.TickRate;
                     break;
-                case StarProtocol.Operation.Pause when phase is MatchPhase.Playing or MatchPhase.Paused:
+                case StarProtocol.Operation.Pause when recovering.Count == 0 && phase is (MatchPhase.Playing or MatchPhase.Paused):
                     var desired = request.Enabled ? MatchPhase.Paused : MatchPhase.Playing;
                     if (phase != desired) { phase = desired; Change($"Игрок {player}"); nextDue = clock.Elapsed.TotalMilliseconds + 1000.0 / Descriptor.TickRate; }
                     break;
                 case StarProtocol.Operation.Ai:
                     uint target = request.Player;
                     if (target < 2 || target > count || request.Enabled && _planAi is null) throw new InvalidDataException("Invalid AI assignment.");
-                    if (slots[target - 1].Connected || phase is MatchPhase.Playing or MatchPhase.Finished) break;
+                    if (recovering.Count != 0 || slots[target - 1].Connected || phase is MatchPhase.Playing or MatchPhase.Finished) break;
                     slots[target - 1] = slots[target - 1] with { Controller = request.Enabled ? SlotController.Ai : phase == MatchPhase.Lobby ? SlotController.Human : SlotController.None };
                     pending[target - 1].Clear(); prepared = -1;
                     Change($"Управление игроком {target}", resetReady: phase == MatchPhase.Lobby); break;
@@ -204,45 +212,137 @@ public sealed partial class StarSession
             for (int i = 0; i < requests && _requests.TryDequeue(out var frame); i++)
             { Interlocked.Decrement(ref _requestCount); Process(1, frame); }
         }
+        byte[] History(long offset = 0)
+        {
+            output!.Flush(); long end = output.Position;
+            if (end - offset > 64 * 1024 * 1024) throw new InvalidDataException("Recovery history quota exceeded.");
+            byte[] bytes = new byte[checked((int)(end - offset))];
+            output.Position = offset; output.ReadExactly(bytes); output.Position = end; return bytes;
+        }
+        void Recoveries()
+        {
+            foreach (var (player, recovery) in recovering.ToArray())
+            {
+                try
+                {
+                    if (Stopwatch.GetElapsedTime(recovery.Started) > TimeSpan.FromSeconds(30)) throw new TimeoutException("Recovery admission deadline exceeded.");
+                    if (!recovery.Transfer.IsCompleted) continue;
+                    recovery.Transfer.GetAwaiter().GetResult();
+                    recovery.Peer.Pipe.Check();
+                    if (!recovery.Peer.Pipe.TryRead(out var ready)) continue;
+                    if (ready[0] == StarProtocol.SettingsAck && _prepare is not null)
+                    {
+                        var ack = Wire.Unpack(ready, r => { r.ReadByte(); return (Digest: Wire.Text(r), Hash: Wire.Text(r)); });
+                        if (ack.Digest != SettingsDigest || ack.Hash != _initialHash) throw new InvalidDataException("Recovery recipe acknowledgement mismatch.");
+                        continue;
+                    }
+                    var check = StarProtocol.ReadCheck(ready, StarProtocol.RecoveryReady);
+                    if (check.Tick != world.Tick || check.Hash != world.Report().StateHash) throw new InvalidDataException("Recovery boundary hash mismatch.");
+                    // Catch up controls committed during transfer before admitting the new connection.
+                    using (var tail = new MemoryStream(History(recovery.Prefix)))
+                    using (var reader = new BinaryReader(tail))
+                        while (tail.Position < tail.Length) { int n = reader.ReadInt32(); recovery.Peer.Pipe.Send(reader.ReadBytes(n)); }
+                    if (player <= 8)
+                    {
+                        var credential = NewCredential(State.Match, player, checked(credentials[player].Epoch + 1));
+                        unconfirmedCredentials[player] = recovery.Peer.ResumeWith ?? credentials[player];
+                        credentials[player] = credential; recovery.Peer.Pipe.Send(CredentialFrame(credential));
+                        slots[player - 1] = slots[player - 1] with { Controller = SlotController.Human, Connected = true, Ready = true };
+                        pending[player - 1].Clear();
+                        recovery.Peer.Ack = world.Tick - world.Tick % Descriptor.HashInterval;
+                        for (long t = world.Tick + 1; t < world.Tick + Descriptor.InputDelay; t++)
+                            recovery.Peer.Inbox.Add(Wire.Batch(State.Match, player, t, []), world.Tick);
+                    }
+                    peers.Add(player, recovery.Peer); recovering.Remove(player);
+                    recovery.Peer.LastSeen = Stopwatch.GetTimestamp(); prepared = -1;
+                    Change(player <= 8 ? $"Игрок {player} вернулся · новая эпоха соединения" : "Зритель подключён к текущему матчу");
+                }
+                catch (Exception e) when (e is IOException or InvalidDataException or TimeoutException or OperationCanceledException or SocketException)
+                { recovering.Remove(player); recovery.Peer.Dispose(); Volatile.Write(ref _status, "Возврат отклонён: " + e.Message); }
+            }
+        }
         void Accept()
         {
-            if (!listener.Pending()) return;
-            TcpClient socket = listener.AcceptTcpClient(); PeerPipeline? pipe = null; SslStream? tls = null;
-            try
+            if (listener.Pending() && handshakes.Count < 8)
             {
-                socket.NoDelay = true;
-                tls = new SslStream(socket.GetStream());
-                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token); deadline.CancelAfter(TimeSpan.FromSeconds(5));
-                Authenticate(tls, certificate, deadline.Token).GetAwaiter().GetResult();
-                pipe = new PeerPipeline(tls, _timeout, _stop.Token);
-                uint player = Wire.Unpack(pipe.Read(TimeSpan.FromSeconds(5)), r => {
-                    if (r.ReadByte() != StarProtocol.Hello || r.ReadInt32() != StarProtocol.Version) throw new InvalidDataException("NET3 protocol mismatch.");
-                    uint p = r.ReadUInt32(); int n = r.ReadInt32();
-                    string digest = Wire.Text(r), hash = Wire.Text(r), rules = Wire.Text(r), content = Wire.Text(r);
-                    if (n != count || p != 0 && (p < 2 || p > count || slots[p - 1].Controller != SlotController.Human || slots[p - 1].Connected) ||
-                        p == 0 && peers.Keys.Count(k => k > 8) >= 8 || rules != Descriptor.Rules || content != Descriptor.ContentHash ||
-                        _prepare is null && (digest != Wire.Hash(DirectMatch.Descriptor(Descriptor)) || hash != _initialHash))
-                        throw new InvalidDataException("Lobby slot, descriptor or initial world mismatch.");
-                    return p == 0 ? Enumerable.Range(9, 8).Select(i => (uint)i).First(i => !peers.ContainsKey(i)) : p;
-                });
-                peers.Add(player, new Peer(socket, pipe, new TickInbox(State.Match, player, Descriptor.InputDelay, window)));
-                if (player <= 8) slots[player - 1] = slots[player - 1] with { Connected = true };
-                if (_prepare is not null) Send(player, peers[player], SettingsFrame());
-                Change($"Подключён игрок {player}", resetReady: true);
+                TcpClient socket = listener.AcceptTcpClient();
+                handshakes.Add(Task.Run(async () => {
+                    SslStream? tls = null; PeerPipeline? pipe = null;
+                    try
+                    {
+                        socket.NoDelay = true; tls = new SslStream(socket.GetStream());
+                        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(acceptStop.Token); deadline.CancelAfter(TimeSpan.FromSeconds(5));
+                        await Authenticate(tls, certificate, deadline.Token);
+                        pipe = new PeerPipeline(tls, _timeout, acceptStop.Token);
+                        return (socket, pipe, pipe.Read(TimeSpan.FromSeconds(5)));
+                    }
+                    catch { pipe?.Dispose(); tls?.Dispose(); socket.Dispose(); throw; }
+                }));
             }
-            catch (Exception e) when (e is IOException or InvalidDataException or AuthenticationException or OperationCanceledException or TimeoutException or ArgumentException)
-            { pipe?.Dispose(); tls?.Dispose(); socket.Dispose(); if (_stop.IsCancellationRequested) throw; Volatile.Write(ref _status, "Подключение отклонено: " + e.Message); }
+            foreach (var task in handshakes.Where(t => t.IsCompleted).ToArray())
+            {
+                handshakes.Remove(task); TcpClient? socket = null; PeerPipeline? pipe = null;
+                try
+                {
+                    (socket, pipe, var hello) = task.GetAwaiter().GetResult();
+                    var identity = Wire.Unpack(hello, r => {
+                        if (r.ReadByte() != StarProtocol.Hello || r.ReadInt32() != StarProtocol.Version) throw new InvalidDataException("Network protocol mismatch.");
+                        uint p = r.ReadUInt32(); int n = r.ReadInt32();
+                        string digest = Wire.Text(r), hash = Wire.Text(r), rules = Wire.Text(r), content = Wire.Text(r);
+                        byte flag = r.ReadByte(); if (flag > 1) throw new InvalidDataException("Invalid credential flag.");
+                        MatchResumeCredential? credential = null;
+                        if (flag != 0) { int size = r.ReadInt32(); if (size is < 1 or > 256) throw new InvalidDataException("Credential size limit."); credential = ReadCredential(r.ReadBytes(size)); }
+                        if (phase != MatchPhase.Lobby && recovering.Count >= 2 || credential is not null && credential.Player != p || n != count || rules != Descriptor.Rules || content != Descriptor.ContentHash ||
+                            p != 0 && (p < 2 || p > count || slots[p - 1].Connected || recovering.ContainsKey(p)) ||
+                            phase != MatchPhase.Lobby && p == 0 && phase != MatchPhase.Paused ||
+                            p == 0 && peers.Keys.Concat(recovering.Keys).Count(k => k > 8) >= 8 ||
+                            phase == MatchPhase.Lobby && (credential is not null || p != 0 && slots[p - 1].Controller != SlotController.Human) ||
+                            phase != MatchPhase.Lobby && p != 0 && (credential is null || !SameCredential(credential, credentials.GetValueOrDefault(p)) && !SameCredential(credential, unconfirmedCredentials.GetValueOrDefault(p))) ||
+                            _prepare is null && (digest != Wire.Hash(DirectMatch.Descriptor(Descriptor)) || hash != _initialHash))
+                            throw new InvalidDataException("Slot, resume credential, descriptor or initial world mismatch.");
+                        uint assigned = p == 0 ? Enumerable.Range(9, 8).Select(i => (uint)i).First(i => !peers.ContainsKey(i) && !recovering.ContainsKey(i)) : p;
+                        return (Player: assigned, Credential: credential);
+                    });
+                    uint player = identity.Player;
+                    var peer = new Peer(socket, pipe, new TickInbox(State.Match, player, Descriptor.InputDelay, window)) { ResumeWith = identity.Credential };
+                    if (_prepare is not null) peer.Pipe.Send(SettingsFrame());
+                    if (phase == MatchPhase.Lobby)
+                    {
+                        peers.Add(player, peer);
+                        if (player <= 8)
+                        {
+                            credentials[player] = NewCredential(State.Match, player, 1);
+                            peer.Pipe.Send(CredentialFrame(credentials[player]));
+                            slots[player - 1] = slots[player - 1] with { Connected = true };
+                        }
+                        Change($"Подключён игрок {player}", resetReady: true);
+                    }
+                    else
+                    {
+                        // All simulations stay at K while transfer runs; admission is the K+1 barrier.
+                        phase = MatchPhase.Paused; Change("Восстановление участника · общая пауза");
+                        if (recoverySnapshot is null || recoverySnapshotTick != world.Tick)
+                        { recoverySnapshot = world.CaptureSnapshot(_stop.Token); recoverySnapshotTick = world.Tick; }
+                        byte[] snapshot = recoverySnapshot, history = History();
+                        var transfer = Task.Run(() => RecoveryTransfer.Send(peer.Pipe, snapshot, history, acceptStop.Token), acceptStop.Token);
+                        recovering.Add(player, (peer, transfer, history.Length, Stopwatch.GetTimestamp()));
+                    }
+                    socket = null; pipe = null; // Ownership moved to peers/recovering.
+                }
+                catch (Exception e) when (e is IOException or InvalidDataException or AuthenticationException or OperationCanceledException or TimeoutException or ArgumentException or NotSupportedException or SocketException)
+                { pipe?.Dispose(); socket?.Dispose(); if (_stop.IsCancellationRequested) throw; Volatile.Write(ref _status, "Подключение отклонено: " + e.Message); }
+            }
         }
         try
         {
             SetState(Snapshot("Лобби"));
             while (phase == MatchPhase.Lobby) { _stop.Token.ThrowIfCancellationRequested(); Accept(); Poll(); Idle(); }
-            listener.Stop();
             while (phase != MatchPhase.Finished)
             {
-                _stop.Token.ThrowIfCancellationRequested(); Poll();
+                _stop.Token.ThrowIfCancellationRequested(); Accept(); Recoveries(); Poll();
                 if (phase == MatchPhase.Finished) break;
                 if (phase == MatchPhase.Paused) { blockedAt = clock.Elapsed.TotalMilliseconds; Idle(); continue; }
+                recoverySnapshot = null;
                 if (prepared != world.Tick)
                 {
                     long target = world.Tick + Descriptor.InputDelay;
@@ -304,7 +404,11 @@ public sealed partial class StarSession
         }
         finally
         {
-            listener.Stop();
+            listener.Stop(); acceptStop.Cancel();
+            foreach (var recovery in recovering.Values)
+            { recovery.Peer.Dispose(); try { recovery.Transfer.GetAwaiter().GetResult(); } catch { } }
+            foreach (var handshake in handshakes)
+            { try { var accepted = handshake.GetAwaiter().GetResult(); accepted.Pipe.Dispose(); accepted.Socket.Dispose(); } catch { } }
             foreach (var peer in peers.Values) peer.Dispose();
             log?.Dispose(); output?.Dispose();
         }

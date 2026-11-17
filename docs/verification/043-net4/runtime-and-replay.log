@@ -1,0 +1,39 @@
+PASS Network: NET4.2 RNG, allocator and packed removal survive runtime restore
+PASS Network: NET4.2 transport, upgrade, condition expiry and subsequent events survive restore
+PASS Network: NET4.2 capture work and actor transformations survive restore
+PASS Network: NET4.2 navigation field budget and FIFO survive restore
+PASS Network: NET4.2 supply stock, cargo, dock reservations and income survive restore
+PASS Network: NET4.2 malformed allocator is bounded and partial worlds are disposed
+PASS Network: NET4.2 registered mechanic has an explicit versioned snapshot reader
+REPLAY_CHECKPOINT production tick=0 bytes=406 restoreMs=1.43
+REPLAY_CHECKPOINT production tick=12 bytes=2936 restoreMs=110.86
+REPLAY_CHECKPOINT production tick=100 bytes=18248 restoreMs=217.51
+REPLAY_RECOVERY production ticks=100 bytes=18192 hash=E27DAAC29CE1081F01D3BA72A1A45518816E66F058257B3F18474F0BD3632BB5
+PASS Network: NET4 replay recovery continues every hash: production
+REPLAY_CHECKPOINT aviation tick=0 bytes=402 restoreMs=3.27
+REPLAY_CHECKPOINT aviation tick=185 bytes=33512 restoreMs=57.59
+REPLAY_CHECKPOINT aviation tick=420 bytes=74536 restoreMs=195.66
+REPLAY_RECOVERY aviation ticks=420 bytes=74480 hash=BBB82DC0EEF470D71274E90D646DB26AE19B892A0CBF73D69E375324CD6F6C88
+PASS Network: NET4 replay recovery continues every hash: aviation
+REPLAY_CHECKPOINT sensors tick=0 bytes=400 restoreMs=0.74
+REPLAY_CHECKPOINT sensors tick=12 bytes=2555 restoreMs=3.12
+REPLAY_CHECKPOINT sensors tick=48 bytes=8819 restoreMs=9.48
+REPLAY_RECOVERY sensors ticks=48 bytes=8763 hash=822825172050638B307297E1905FDDBB2B961E3A290F394BC4F6AC4F39E6DE08
+PASS Network: NET4 replay recovery continues every hash: sensors
+RUNTIME_SNAPSHOT production tick=0 bytes=27591
+RUNTIME_SNAPSHOT production tick=12 bytes=27839
+RUNTIME_SNAPSHOT production tick=320 bytes=30647
+PASS Network: NET4.2 runtime snapshot continues every hash: production
+RUNTIME_SNAPSHOT aviation tick=0 bytes=23244
+RUNTIME_SNAPSHOT aviation tick=185 bytes=24002
+RUNTIME_SNAPSHOT aviation tick=420 bytes=23593
+PASS Network: NET4.2 runtime snapshot continues every hash: aviation
+RUNTIME_SNAPSHOT sensors tick=0 bytes=54158
+RUNTIME_SNAPSHOT sensors tick=12 bytes=54246
+RUNTIME_SNAPSHOT sensors tick=48 bytes=54246
+PASS Network: NET4.2 runtime snapshot continues every hash: sensors
+PASS Network: NET4.2 runtime snapshot restores in a fresh operating-system process
+PASS Network: NET4 restart in another process restores the selected boundary
+PASS Network: NET4 rejects truncation, corruption, quotas, wrong world and cancelled recovery
+PASS Network: NET4 retains explicit v2 replay and detects a changed middle checkpoint
+PASS Network: NET4 owner playback pauses, steps, seeks backwards and validates end
