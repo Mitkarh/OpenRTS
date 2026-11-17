@@ -2,6 +2,14 @@
 
 [Обзор исследования](README.md). Дата чтения внешних материалов и исходников: **12 ноября 2026 года**. Ниже отделены факты источников, наши выводы и будущие проверки.
 
+## Дополнение 17 ноября 2026 года
+
+Направление пользователя — B → C → опциональный частичный D — зафиксировано в [новом плане](roadmap.md), [проекте B](stage-b-design.md) и [разборе переиспользования Network](network-reuse.md). Основа нового чтения — чистый OpenRTS `afb7aef5a46bb937b39c8b63269e935c2a5b91da`. Изучены исследования [компиляции карт](../map-compilation/README.md) с MC1/MC8 и [3D terrain](../3d-terrain/README.md) с требованиями эволюции геометрии; их продвинутые этапы по поручению пользователя отложены до завершения C.
+
+Повторно прочитаны GameMap/MapMatch/TerrainLayout, GameplayMechanics/IGridPathfinder, ModelCatalog, session/frame boundary и новые исходники Network/recovery. Ключевые source locators и отделение действующих APIs от нужных дополнений находятся в [network-reuse.md](network-reuse.md). Это статическое чтение и ручные трассы, не новый запуск проверок или измерений. Исходные выводы ниже сохраняют свою дату; результаты исторических probes не объявляются новыми.
+
+Дополнительно открыты официальные [Making plugins](https://docs.godotengine.org/en/stable/tutorials/plugins/editor/making_plugins.html), [C# exports](https://docs.godotengine.org/en/stable/tutorials/scripting/c_sharp/c_sharp_exports.html), [EditorExportPlugin](https://docs.godotengine.org/en/stable/classes/class_editorexportplugin.html) и [EditorUndoRedoManager](https://docs.godotengine.org/en/stable/classes/class_editorundoredomanager.html). Они подтверждают доступные точки расширения, но не готовность нового addon и его export/reload configuration. Повторный обзор новых версий ECS-проектов не проводился: смена Frent не входит в задачу.
+
 ## Метод и исходная основа
 
 Изучены действующая граница сборок, map/content loader, начальное размещение, session/frame boundary, sprite/terrain renderer и способ подключения адаптера во внешней игре. Затем проверены официальные Godot API для authoring, ресурсов, export, потоков, rendering и navigation. Для ECS сопоставлены три разные модели интеграции — Node/Resource addon, модуль движка и native GDExtension — с уже выбранным .NET ECS.
