@@ -13,6 +13,9 @@ Match:
     - Path: content/maps/riverside-station.yaml
       Title: Береговая станция
       Description: Два посёлка разделены рекой. Дороги сходятся к двум переправам.
+    - Path: content/scene-maps/terrain-authoring-sample.scenemap.json
+      Title: Учебная карта Godot
+      Description: Карта со сценой Godot, дорожными кистями и нейтральным заводом.
   StartingSets:
     - Path: content/start-sets/supply.yaml
       Title: Снабжение · центр, инженер и грузовик

@@ -14,10 +14,17 @@ public partial class OpenRtsMap : Node3D
         set { _size = value; if (Engine.IsEditorHint() && IsInsideTree()) UpdateGizmos(); }
     }
     [Export] public string TerrainId { get; set; } = "grass";
+    [Export] public bool DrawCompiledTerrain { get; set; } = true;
     [Export] public string VisualId { get; set; } = "grass";
     [Export] public global::Godot.Collections.Array<OpenRtsTerrainStroke> TerrainStrokes { get; set; } = new();
     [Export] public global::Godot.Collections.Dictionary<string, Texture2D> VisualTextures { get; set; } = new();
     [Export] public string[] FixtureSlots { get; set; } = ["blue", "red"];
     [Export(PropertyHint.File, "*.yaml")] public string ContentManifest { get; set; } = "res://game.yaml";
     [Export(PropertyHint.SaveFile, "*.ortmap.json")] public string CompiledPath { get; set; } = "res://artifacts/maps/new-map.ortmap.json";
+    public override void _Ready()
+    {
+        if (Engine.IsEditorHint() || GetParent() != GetTree().Root) return;
+        GD.PushError("Run this map using OpenRTS → Build and play map, or select its published bundle in the game.");
+        GetTree().Quit(1);
+    }
 }

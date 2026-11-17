@@ -1,8 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://addons/openrts_editor/OpenRtsMap.cs" id="1"]
 [ext_resource type="Script" path="res://addons/openrts_editor/OpenRtsMapStart.cs" id="2"]
 [ext_resource type="PackedScene" path="res://examples/maps/AuthoringSquad.tscn" id="3"]
+
+[ext_resource type="Script" path="res://examples/maps/SceneDecoration.gd" id="4"]
 
 [sub_resource type="StandardMaterial3D" id="GroundMaterial"]
 albedo_color = Color(0.16, 0.3, 0.2, 1)
@@ -37,7 +39,8 @@ Reverse = true
 [node name="Patrol" parent="." instance=ExtResource("3")]
 position = Vector3(12, 0, 12)
 
-[node name="Decoration" type="Node3D" parent="."]
+[node name="Decoration" type="Node3D" parent="." groups=["scene_map_decoration"]]
+script = ExtResource("4")
 
 [node name="Ground" type="MeshInstance3D" parent="Decoration"]
 position = Vector3(16, -0.05, 12)

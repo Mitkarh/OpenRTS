@@ -58,6 +58,7 @@ public partial class Sandbox : Node3D
     public override void _Ready()
     {
         bool verify = Array.Exists(OS.GetCmdlineUserArgs(), a => a == "--verify");
+        bool checkBundles = false;
         try
         {
             string? mapPath = null, startSetPath = null, modPath = null;
@@ -95,6 +96,8 @@ public partial class Sandbox : Node3D
                 if (arg.StartsWith("--map=", StringComparison.Ordinal) && arg.Length > 6) { mapPath = arg[6..]; continue; }
                 if (arg.StartsWith("--start-set=", StringComparison.Ordinal) && arg.Length > 12) { startSetPath = arg[12..]; continue; }
                 if (arg == "--skirmish") { _skirmish = _buildings = _showcase = true; continue; }
+                if (arg == "--check-scene-maps") { checkBundles = true; continue; }
+                if (arg == "--verify-scene-map-menu") { _verifySceneMapMenu = _verifyMatchSetup = true; continue; }
                 if (arg == "--verify-match-setup") { _verifyMatchSetup = true; continue; }
                 if (arg == "--verify-ai-match") { _verifyAiMatch = _verifyMatchSetup = true; continue; }
                 if (arg.StartsWith("--ai-profile=", StringComparison.Ordinal) && arg.Length > 13) { _aiProfileId = arg[13..]; continue; }
@@ -135,7 +138,13 @@ public partial class Sandbox : Node3D
             if (_verifyBuildings) { _verifySimulation = true; _ticks = BuildingScenario.VerificationTicks; }
             if (_verifyPresentation) { _verifySimulation = true; _ticks = 12; }
             if ((verify ? 1 : 0) + (_verifySimulation ? 1 : 0) + (_verifyControls ? 1 : 0) > 1) throw new ArgumentException("Выберите один режим проверки.");
-            _manifest = LoadManifest(modPath ?? (_buildings ? "res://game.yaml" : "res://diagnostic-game.yaml"));
+            if (mapPath is not null && SceneMapBundle.IsPath(mapPath))
+            {
+                string bundlePath = Path.IsPathRooted(mapPath) || mapPath.StartsWith("res://", StringComparison.Ordinal) ? mapPath : "res://" + mapPath;
+                modPath ??= SceneMapBundle.Read(ReadFile(bundlePath)).Mod;
+            }
+            _activeManifestPath = modPath ?? (_buildings || checkBundles ? "res://game.yaml" : "res://diagnostic-game.yaml");
+            _manifest = LoadManifest(_activeManifestPath);
             LoadRangeDefaults(_manifest.Settings.SensorRanges);
             var unitSources = _manifest.Rules.Select(source =>
             {
@@ -148,6 +157,12 @@ public partial class Sandbox : Node3D
                 _manifest.Weapons.Select(source => source with { Text = FogScenario.AddRadarWeapons(source.Text) }) : null);
             _sensorVisibility = _catalog.Units.Any(unit => unit.Sensors is not null);
             if (_verifySkirmish) _sensorVisibility = false; // This scripted laboratory controls and inspects both players.
+            if (checkBundles)
+            {
+                CheckInstalledSceneMaps(_catalog);
+                GetTree().Quit();
+                return;
+            }
             if (showSetup)
             {
                 OpenMatchSetup(_catalog);
@@ -155,7 +170,10 @@ public partial class Sandbox : Node3D
             }
             if (_skirmish || mapPath is not null)
             {
-                _mapMatch = mapPath == AviationScenario.Map ? AviationScenario.Load(_catalog, ReadMapSource) : MapScenario.Load(_catalog, ReadMapSource, mapPath ?? _manifest.Settings.Match.DefaultMap, startSetPath, _manifest.Settings.Match.DefaultStartSet);
+                string selectedPath = mapPath ?? _manifest.Settings.Match.DefaultMap;
+                _mapMatch = SceneMapBundle.IsPath(selectedPath)
+                    ? MapScenario.PrepareDefault(LoadSceneMap(selectedPath, _catalog), ReadMapSource, startSetPath, _manifest.Settings.Match.DefaultStartSet)
+                    : mapPath == AviationScenario.Map ? AviationScenario.Load(_catalog, ReadMapSource) : MapScenario.Load(_catalog, ReadMapSource, mapPath ?? _manifest.Settings.Match.DefaultMap, startSetPath, _manifest.Settings.Match.DefaultStartSet);
                 if (_sensorScenario) _matchFogMode = OpenRTS.Core.Visibility.FogMode.Hidden;
                 _skirmish = _mapMatch.Map.IsSkirmish || mapPath == AviationScenario.Map;
             }
@@ -178,7 +196,7 @@ public partial class Sandbox : Node3D
         catch (Exception error)
         {
             GD.PushError(error.ToString());
-            if (_verifyMenu || _verifyNetwork || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
+            if (checkBundles || _verifyMenu || _verifyNetwork || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
             else AddOverlay("Ошибка загрузки контента\n" + error.Message);
         }
     }
@@ -191,17 +209,20 @@ public partial class Sandbox : Node3D
             _sprites = new(catalog, _modelCatalog, TeamColor);
             _combatEffects = new(catalog, EffectCatalog.Load(_manifest.Effects));
             AddChild(_combatEffects.Node);
-            Texture2D TextureFor(string id) => GD.Load<Texture2D>("res://resources/terrain/" + id + ".tres");
+            var entry = InstantiateMapScene(_mapMatch?.Map);
+            Texture2D TextureFor(string id) => entry is not null && entry.VisualTextures.TryGetValue(id, out var texture) && texture is not null
+                ? texture : GD.Load<Texture2D>("res://resources/terrain/" + id + ".tres");
             var map = _mapMatch?.Map;
-            var view = map is not null
+            var view = entry?.DrawCompiledTerrain == false ? null : map is not null
                 ? new TerrainView(map.Grid.Width, map.Grid.Height, 1, map.VisualIds, map.VisualAt, TextureFor)
                 : new TerrainView(_buildings ? BuildingScenario.Width : ShowcaseScenario.Width,
                     _buildings ? BuildingScenario.Height : ShowcaseScenario.Height, _buildings ? 1 : ShowcaseScenario.TileSize,
                     ShowcaseScenario.TerrainIds, _buildings ? BuildingScenario.TerrainAt : ShowcaseScenario.TerrainAt, TextureFor);
-            AddChild(view.Node);
+            if (view is not null) AddChild(view.Node);
             AddChild(_sprites.Node);
             if (PlayerFog) { _fogView = new(); AddChild(_fogView.Node); }
             CreateSelectionRing();
+            if (entry is not null) AddChild(entry);
         }
         else { _view = new WorldView(catalog.Units[0], _count); AddChild(_view.Node); }
         if (_navigation)
@@ -341,6 +362,7 @@ public partial class Sandbox : Node3D
             if (_verifySensors) { VerifySensors(frame); return; }
             if (_verifyFog) { VerifyFog(frame); return; }
             if (_verifyAiMatch) { VerifyAiMatch(frame); return; }
+            if (_verifySceneMapMenu) { VerifySceneMapMenu(frame); return; }
             if (_verifyMatchSetup) { VerifyConfiguredMatch(frame); return; }
             if (_verifySkirmish) { VerifySkirmish(frame); return; }
             if (_verifyActions) { VerifyActions(frame); return; }

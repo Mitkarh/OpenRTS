@@ -46,6 +46,38 @@ case "$action" in
     ;;
   run) build; import_assets; exec "$godot_bin" --path "$PWD/sandbox" -- "$@" ;;
   editor) build; exec "$godot_bin" --path "$PWD/sandbox" --editor ;;
+  scene-map)
+    if [[ $# -ne 1 || "$1" != res://*.tscn ]]; then
+      echo 'Usage: tools/dev.sh scene-map res://path/to/map.tscn' >&2
+      exit 2
+    fi
+    if ! grep -q '^enabled=.*"res://addons/openrts_editor/plugin.cfg"' sandbox/project.godot; then
+      echo 'Enable OpenRTS Map Authoring before building a scene-map bundle.' >&2
+      exit 1
+    fi
+    build; import_assets
+    exec "$godot_bin" --headless --editor --path "$PWD/sandbox" "$1" -- --build-scene-map
+    ;;
+  scene-map-pack)
+    if [[ $# -ne 1 || "$1" != /*.pck ]]; then
+      echo 'Usage: tools/dev.sh scene-map-pack /absolute/output.pck' >&2
+      exit 2
+    fi
+    build; import_assets
+    "$godot_bin" --headless --path "$PWD/sandbox" -- --check-scene-maps
+    staging="$(mktemp -d "$(dirname "$1")/.scene-map-pack.XXXXXX")"
+    trap 'rm -rf -- "$staging"' EXIT
+    if ! "$godot_bin" --headless --editor --path "$PWD/sandbox" --export-pack "Scene Map Pack" "$staging/maps.pck" >"$staging/export.log" 2>&1; then
+      cat "$staging/export.log" >&2
+      exit 1
+    fi
+    if rg -q '^ERROR:' "$staging/export.log" || [[ ! -s "$staging/maps.pck" ]]; then
+      cat "$staging/export.log" >&2
+      exit 1
+    fi
+    mv -f -- "$staging/maps.pck" "$1"
+    printf '%s\n' "$1"
+    ;;
   verify-authoring)
     if ! grep -q '^enabled=.*"res://addons/openrts_editor/plugin.cfg"' sandbox/project.godot; then
       echo 'Enable OpenRTS Map Authoring in Sandbox Project Settings > Plugins before verify-authoring.' >&2
@@ -77,5 +109,5 @@ case "$action" in
     ;;
   verify-network) build; import_assets; python3 tools/verify_network.py "$godot_bin" "$@" ;;
   verify) "$0" test; import_assets; python3 tools/verify.py "$godot_bin" ;;
-  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|verify|verify-authoring|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
+  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|scene-map|scene-map-pack|verify|verify-authoring|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
 esac

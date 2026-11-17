@@ -23,7 +23,7 @@ Cells = Array[Vector2i]([Vector2i(20, 16), Vector2i(20, 19)])
 [node name="TerrainAuthoringMap" instance=ExtResource("1")]
 MapId = "terrain-authoring-sample"
 TerrainStrokes = Array[ExtResource("2")]([SubResource("Road"), SubResource("SouthRoad")])
-CompiledPath = "res://artifacts/maps/terrain-authoring-sample.ortmap.json"
+CompiledPath = "res://content/scene-maps/terrain-authoring-sample.ortmap.json"
 
 [node name="Factory" type="Node3D" parent="." index="4"]
 position = Vector3(8.5, 0, 12)

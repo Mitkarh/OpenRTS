@@ -24,7 +24,7 @@ public partial class Sandbox
         if (_verifyFogMatch) Choose(fog, 0);
         var maps = FindOption("Maps");
         var count = FindOption("PlayerCount");
-        CheckSkirmish(maps.ItemCount == 3 && count.ItemCount == 2, "The lobby does not show all maps or the valley capacity.");
+        CheckSkirmish(maps.ItemCount >= 3 && count.ItemCount == 2, "The lobby does not show all maps or the valley capacity.");
         Choose(maps, 1);
         CheckSkirmish(count.ItemCount == 4, "The city map does not allow four players.");
         Choose(count, 3);

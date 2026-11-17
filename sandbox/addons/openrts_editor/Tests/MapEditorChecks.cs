@@ -77,6 +77,20 @@ internal static class MapEditorChecks
             Check(MapSceneExtractor.Extract(reopened).Write() == original, "Saved scene lost marker data or prefab ownership.");
             reopened.Free();
 
+            await plugin.BuildAsync(bundle: true);
+            string bundlePath = ProjectSettings.GlobalizePath(root.CompiledPath).Replace(".ortmap.json", SceneMapBundle.Suffix, StringComparison.Ordinal);
+            Check(plugin.Status.StartsWith("Compiled ", StringComparison.Ordinal) && File.Exists(bundlePath), "Bundle build failed: " + plugin.Status);
+            string published = File.ReadAllText(bundlePath);
+            var bundle = SceneMapBundle.Read(new(bundlePath, published));
+            Sandbox.CheckSceneMapDependencies(bundle);
+            Check(bundle.Scene == saved && bundle.LoadMap(bundlePath, file => new(file, File.ReadAllText(file)), OpenRtsEditorPlugin.LoadCatalog(root)).Map.Id == root.MapId,
+                "Bundle does not pair the saved scene and its map.");
+            var staleBuild = plugin.BuildAsync(bundle: true, saveScene: false);
+            root.GetNode<OpenRtsMapGroup>("Patrol").Position += Vector3.Right;
+            await staleBuild;
+            root.GetNode<OpenRtsMapGroup>("Patrol").Position -= Vector3.Right;
+            Check(File.ReadAllText(bundlePath) == published, "A stale authoring edit replaced the bundle pointer.");
+
             string path = ProjectSettings.GlobalizePath(root.CompiledPath);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllText(path, "previous-file");
             var pending = plugin.BuildAsync(); root.MapId += "-changed";

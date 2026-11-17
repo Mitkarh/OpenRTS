@@ -31,6 +31,11 @@ public partial class Sandbox
     {
         if (!System.IO.Path.IsPathRooted(path) && !path.StartsWith("res://", StringComparison.Ordinal))
             return _manifest.Files.Read(path);
+        return ReadFile(path);
+    }
+
+    private static ContentSource ReadFile(string path)
+    {
         using var file = Godot.FileAccess.Open(path, Godot.FileAccess.ModeFlags.Read)
             ?? throw new System.IO.IOException($"Не удалось открыть {path}: {Godot.FileAccess.GetOpenError()}.");
         return new(path, file.GetAsText());

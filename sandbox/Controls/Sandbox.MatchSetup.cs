@@ -21,12 +21,22 @@ public partial class Sandbox
 
     private void OpenMatchSetup(UnitCatalog catalog)
     {
-        GameMap Map(string path) => GameMap.Load(ReadMapSource(path), catalog);
+        GameMap Map(string path) => SceneMapBundle.IsPath(path) ? LoadSceneMap(path, catalog) : GameMap.Load(ReadMapSource(path), catalog);
         StartingSet Set(string path) => StartingSet.Load(ReadMapSource(path));
         var settings = _manifest.Settings.Match;
         var mapChoices = settings.Maps.Length == 0 ? [new MatchChoice { Path = settings.DefaultMap, Title = settings.DefaultMap }] : settings.Maps;
         var setChoices = settings.StartingSets.Length == 0 ? [new MatchChoice { Path = settings.DefaultStartSet, Title = settings.DefaultStartSet }] : settings.StartingSets;
-        var maps = mapChoices.Select(choice => (choice.Title, choice.Description, Map(choice.Path))).ToArray();
+        var availableMaps = new List<(MatchChoice Choice, GameMap Map)>();
+        foreach (var choice in mapChoices)
+        {
+            try { availableMaps.Add((choice, Map(choice.Path))); }
+            catch (Exception error) when (SceneMapBundle.IsPath(choice.Path) && error is IOException or InvalidDataException or ContentException or System.Text.Json.JsonException)
+            {
+                GD.PushWarning($"Карта {choice.Title} недоступна. {error.Message}");
+            }
+        }
+        if (availableMaps.Count == 0) throw new InvalidDataException("Нет доступных карт матча.");
+        var maps = availableMaps.Select(item => (item.Choice.Title, item.Choice.Description, item.Map)).ToArray();
         if (maps.Any(choice => !choice.Item3.IsSkirmish)) throw new ArgumentException("Экран настройки принимает только skirmish-карты.");
         var modes = setChoices.Select(choice => (choice.Title, Set(choice.Path))).ToArray();
         _setupMaps = maps.ToDictionary(m => m.Item3.Id, m => m.Item3);
@@ -34,7 +44,7 @@ public partial class Sandbox
         _matchSetup = new();
         AddChild(_matchSetup);
         _matchSetup.Build(TerminalTheme(), catalog.Locomotion!, maps, modes,
-            Array.FindIndex(mapChoices, choice => choice.Path == settings.DefaultMap),
+            availableMaps.FindIndex(item => item.Choice.Path == settings.DefaultMap),
             Array.FindIndex(setChoices, choice => choice.Path == settings.DefaultStartSet), _manifest.Settings.Simulation.SpeedPerTick, _fogHoldTicks, catalog.Summary.Fingerprint);
         _matchSetup.Launch += BeginMatchFromSetup;
         _matchSetup.ReplayRequested += BeginReplay;
@@ -44,6 +54,7 @@ public partial class Sandbox
         else if (_verifyMenu) { _ = VerifyMenuFlow(); }
         else if (_verifyNetwork) SelectNetworkVerificationMatch();
         else if (_verifyAiMatch) SelectAiVerificationMatch();
+        else if (_verifySceneMapMenu) SelectSceneMapVerification();
         else if (_verifyMatchSetup) SelectVerificationMatch();
     }
 
@@ -137,6 +148,8 @@ public partial class Sandbox
     private MapMatch PrepareMap(MatchSetupOptions options)
     {
         if (!_setupMaps.TryGetValue(options.Map, out var map) || !_setupSets.TryGetValue(options.Mode, out var set)) throw new ArgumentException("Карта или стартовый набор не установлены.");
+        if (_networkMode != 0 && _sceneMaps.ContainsKey(map.Id))
+            throw new ArgumentException("Scene-map bundles are available for local matches.");
         int capacity = map.Slots.Count;
         if (options.Seats.Where((seat, i) => seat.Controller != OpenRTS.Network.SlotController.None && (i >= capacity || seat.Start >= capacity)).Any() ||
             options.Seats.Any(s => s.Controller == OpenRTS.Network.SlotController.Ai) && set.Id != "supply") throw new ArgumentException("Недоступные места или ИИ для этой карты/режима.");

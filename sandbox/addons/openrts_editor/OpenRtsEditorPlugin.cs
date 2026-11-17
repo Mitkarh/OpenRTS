@@ -33,6 +33,8 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         SetupTerrainTools();
         Button("Extract source", () => _ = BuildAsync(sourceOnly: true));
         Button("Compile map", () => _ = BuildAsync());
+        Button("Build scene-map bundle", () => _ = BuildAsync(bundle: true));
+        Button("Build and play map", () => _ = BuildAsync(bundle: true, play: true));
         Button("Cancel compilation", () => Invalidate("Cancelled; previous file retained."));
         _status = new Label { Text = "Open a map scene, or create an empty scene.", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _dock.AddChild(_status);
@@ -44,6 +46,8 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         _gizmos = new(); AddNode3DGizmoPlugin(_gizmos);
         SceneChanged += OnSceneChanged;
         GetUndoRedo().VersionChanged += OnEdited;
+        if (OS.GetCmdlineUserArgs().Contains("--build-scene-map"))
+            Callable.From(() => { _ = BuildFromCommandLine(); }).CallDeferred();
         if (OS.GetCmdlineUserArgs().Contains("--verify-map-editor"))
             Callable.From(() => { _ = MapEditorChecks.Run(this); }).CallDeferred();
     }
@@ -180,7 +184,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         undo.CommitAction();
     }
 
-    internal async Task BuildAsync(bool sourceOnly = false)
+    internal async Task BuildAsync(bool sourceOnly = false, bool bundle = false, bool play = false, bool saveScene = true)
     {
         try { CommitStroke(); } catch (Exception error) { Fail(error); return; }
         Invalidate("Extracting…");
@@ -189,6 +193,9 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         {
             var root = Root();
             string outputPath = root.CompiledPath, contentPath = root.ContentManifest;
+            if (bundle && (!SceneMapBundle.ResourcePath(root.SceneFilePath, ".tscn") || saveScene && EditorInterface.Singleton.SaveScene() != Error.Ok))
+                throw new IOException("Save the map as a project .tscn before building its bundle.");
+            var dependencies = bundle ? SceneDependencies(root.SceneFilePath) : null;
             string output = ProjectFile(root.CompiledPath, ".ortmap.json");
             var catalog = LoadCatalog(root);
             var source = MapSceneExtractor.Extract(root);
@@ -209,19 +216,23 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
             if (sourceOnly)
             {
                 output = output[..^".ortmap.json".Length] + ".mapsource.json";
-                // Atomic writer reused for a separate inspection document; this is not a bundle manifest.
-                SaveSource(compiled.Source.Write(), output, stop.Token);
+                SaveTextAtomically(compiled.Source.Write(), output, stop.Token);
+            }
+            else if (dependencies is not null)
+            {
+                output = PublishBundle(root, output, compiled, dependencies, stop.Token);
+                if (play) PlayBundle(ProjectSettings.LocalizePath(output), root.ContentManifest);
             }
             else MapCompiler.Save(compiled, output, stop.Token);
             _status.Text = $"{(sourceOnly ? "Extracted" : "Compiled")} {compiled.Map.Id}\n{compiled.Source.Objects.Count} objects, {compiled.Source.Slots.Count} slots\n{ProjectSettings.LocalizePath(output)}\n{(sourceOnly ? "Structural validation only." : "Placed objects validated; starting armies are checked at match creation.")}";
-            EditorInterface.Singleton.GetResourceFilesystem().Scan();
+            if (saveScene) EditorInterface.Singleton.GetResourceFilesystem().Scan();
         }
         catch (OperationCanceledException) { if (generation == _generation) _status.Text = "Cancelled/stale; previous file retained."; }
         catch (Exception error) { if (generation == _generation) Fail(error); }
         finally { if (_build == stop) _build = null; stop.Dispose(); }
     }
 
-    private static void SaveSource(string text, string path, CancellationToken stop)
+    private static void SaveTextAtomically(string text, string path, CancellationToken stop)
     {
         string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try

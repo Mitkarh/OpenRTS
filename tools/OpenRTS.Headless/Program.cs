@@ -89,7 +89,10 @@ try
     {
         if (!compileMapPath.EndsWith(".ortmap.json", StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("Compiled map output must end with .ortmap.json; source files are not overwritten.");
-        var input = ReadMapSource(mapPath ?? settings.Match.DefaultMap);
+        string inputPath = mapPath ?? settings.Match.DefaultMap;
+        if (SceneMapBundle.IsPath(inputPath))
+            throw new ArgumentException("Use the Godot scene-map build command to publish a scene map. Headless reads published bundles through --map.");
+        var input = ReadMapSource(inputPath);
         var source = input.Name.EndsWith(".mapsource.json", StringComparison.OrdinalIgnoreCase)
             ? MapSource.Read(input) : MapSource.FromM1(input, catalog);
         var compiled = MapCompiler.Compile(source, catalog);
@@ -208,7 +211,7 @@ try
     }
     return 0;
 }
-catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or ContentException)
+catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or ContentException or InvalidDataException or JsonException)
 {
     Console.Error.WriteLine(e.Message);
     return 1;
