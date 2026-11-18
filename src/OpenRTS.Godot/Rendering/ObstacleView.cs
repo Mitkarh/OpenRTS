@@ -1,5 +1,6 @@
 using Godot;
 using OpenRTS.Core;
+using OpenRTS.Core.Navigation;
 
 namespace OpenRTS.Godot.Rendering;
 

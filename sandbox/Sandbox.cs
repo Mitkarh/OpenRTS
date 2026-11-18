@@ -520,9 +520,7 @@ public partial class Sandbox : Node3D
             }
             else if (input is InputEventMouseMotion motion && (motion.ButtonMask & MouseButtonMask.Middle) != 0 && _camera is not null)
             {
-                var before = GroundPoint(motion.Position - motion.Relative);
-                var after = GroundPoint(motion.Position);
-                if (before is { } from && after is { } to) MoveCamera(from - to);
+                PlanarCamera.Drag(_camera, motion.Position, motion.Relative, Playfield().GetCenter(), new(_mapWidth, _mapDepth));
                 if (_showcase) { _pointer = motion.Position; UpdateRtsCursor(); }
             }
             else if (_showcase && input is InputEventMouseButton click && click.ButtonIndex is MouseButton.Left or MouseButton.Right)
@@ -536,15 +534,7 @@ public partial class Sandbox : Node3D
         catch (Exception error) { GD.PushError(error.Message); }
     }
 
-    private Vector3? GroundPoint(Vector2 mouse)
-    {
-        if (_camera is null) return null;
-        var origin = _camera.ProjectRayOrigin(mouse);
-        var direction = _camera.ProjectRayNormal(mouse);
-        if (MathF.Abs(direction.Y) < 0.0001f) return null;
-        float distance = -origin.Y / direction.Y;
-        return distance < 0 ? null : origin + direction * distance;
-    }
+    private Vector3? GroundPoint(Vector2 mouse) => _camera is null ? null : PlanarCamera.GroundPoint(_camera, mouse);
 
     private WorldPosition? MousePoint(Vector2 mouse)
     {
@@ -557,9 +547,7 @@ public partial class Sandbox : Node3D
     private void ZoomCamera(Vector2 mouse, float factor)
     {
         if (_camera is null) return;
-        var before = GroundPoint(mouse);
-        _camera.Size = Math.Clamp(_camera.Size * factor, Math.Min(4, _baseCameraSize), _baseCameraSize * 2);
-        if (before is { } from && GroundPoint(mouse) is { } to) MoveCamera(from - to);
+        PlanarCamera.ZoomAt(_camera, mouse, factor, _baseCameraSize, Playfield().GetCenter(), new(_mapWidth, _mapDepth));
     }
 
     private void PanCamera(double delta)
@@ -594,11 +582,8 @@ public partial class Sandbox : Node3D
 
     private void MoveCamera(Vector3 offset)
     {
-        if (_camera is null || GroundPoint(Playfield().GetCenter()) is not { } center) return;
-        offset.Y = 0;
-        offset.X = Math.Clamp(center.X + offset.X, 0, _mapWidth) - center.X;
-        offset.Z = Math.Clamp(center.Z + offset.Z, 0, _mapDepth) - center.Z;
-        _camera.Position += offset;
+        if (_camera is not null)
+            PlanarCamera.Pan(_camera, offset, Playfield().GetCenter(), new(_mapWidth, _mapDepth));
     }
 
     public override void _ExitTree()

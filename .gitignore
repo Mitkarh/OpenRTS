@@ -8,3 +8,4 @@ artifacts/
 .DS_Store
 __pycache__/
 /sandbox/Controls/Shared/
+/sandbox3d/Controls/Shared/

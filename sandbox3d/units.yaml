@@ -1,2 +1,12 @@
 scout:
   Health: { HP: 100 }
+  Body: { Radius: 300 }
+tank:
+  Health: { HP: 200 }
+  Body: { Radius: 850 }
+apc:
+  Health: { HP: 150 }
+  Body: { Radius: 800 }
+engineer:
+  Health: { HP: 150 }
+  Body: { Radius: 850 }

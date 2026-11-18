@@ -6,7 +6,13 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../src/OpenRTS.Content/OpenRTS.Content.csproj" />
-    <Compile Include="../src/OpenRTS.Godot/Rendering/PreviewRenderer.cs" Link="Rendering/PreviewRenderer.cs" />
-    <Compile Include="../src/OpenRTS.Godot/Rendering/WorldView.cs" Link="Rendering/WorldView.cs" />
+    <Compile Include="../src/OpenRTS.Godot/Controls/PlanarCamera.cs;../src/OpenRTS.Godot/Controls/SelectionState.cs" Link="Controls/%(Filename)%(Extension)" />
+    <Compile Include="../src/OpenRTS.Godot/Rendering/ContactDisplayStyle.cs;../src/OpenRTS.Godot/Rendering/ObstacleView.cs" Link="Rendering/%(Filename)%(Extension)" />
+    <Compile Remove="Controls/Shared/RtsOverlay.cs" />
+    <Compile Include="Controls/Shared/RtsOverlay.cs" />
   </ItemGroup>
+  <!-- Godot registers the resource path of the Control script for exports. -->
+  <Target Name="CopySharedOverlay" BeforeTargets="PrepareForBuild">
+    <Copy SourceFiles="../src/OpenRTS.Godot/Controls/RtsOverlay.cs" DestinationFolder="Controls/Shared" SkipUnchangedFiles="true" />
+  </Target>
 </Project>
