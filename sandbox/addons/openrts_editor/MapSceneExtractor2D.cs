@@ -20,9 +20,11 @@ internal static class MapSceneExtractor2D
         if (root.Terrain is not { TileSet: {} tiles } layer || layer.GetParent() != root ||
             layer.TopLevel || !layer.Transform.IsEqualApprox(Transform2D.Identity))
             throw Error(root, "Terrain", "Assign a direct TileMapLayer child with a TileSet and identity transform.");
-        var pixels = tiles.TileSize.X;
-        if (tiles.TileShape != TileSet.TileShapeEnum.Square || pixels < 1 || tiles.TileSize.Y != pixels)
-            throw Error(layer, "TileSet", "The pilot uses square top-down tiles.");
+        var tileSize = tiles.TileSize;
+        bool square = tiles.TileShape == TileSet.TileShapeEnum.Square && tileSize.X == tileSize.Y;
+        bool diamond = tiles.TileShape == TileSet.TileShapeEnum.Isometric && tiles.TileLayout == TileSet.TileLayoutEnum.DiamondDown;
+        if (tileSize.X < 1 || tileSize.Y < 1 || (!square && !diamond))
+            throw Error(layer, "TileSet", "Use square top-down tiles or an isometric Diamond Down layout.");
         if (tiles.GetCustomDataLayerByName("TerrainId") < 0 || tiles.GetCustomDataLayerByName("VisualId") < 0)
             throw Error(layer, "TileSet", "The TileSet requires string custom data fields TerrainId and VisualId.");
         foreach (var cell in layer.GetUsedCells())
@@ -54,19 +56,29 @@ internal static class MapSceneExtractor2D
             visualCells[i] = ReadId(tile, cell, "VisualId", visual);
         }
 
+        // Godot addresses tile centers. Simulation cell coordinates start at the corner of cell (0, 0).
+        var center = layer.MapToLocal(Vector2I.Zero);
+        var column = layer.MapToLocal(Vector2I.Right) - center;
+        var row = layer.MapToLocal(Vector2I.Down) - center;
+        var origin = center - (column + row) * 0.5f;
+        double determinant = (double)column.X * row.Y - (double)column.Y * row.X;
+
         WorldPosition Position(Marker2D marker)
         {
             if (marker.GetParent() != root || marker.TopLevel || !marker.Transform.IsFinite() ||
                 !marker.Transform.X.IsEqualApprox(Vector2.Right) || !marker.Transform.Y.IsEqualApprox(Vector2.Down))
                 throw Error(marker, "Transform", "Use a direct child marker with translation only.");
-            int Coordinate(float value)
+            int Coordinate(double cells)
             {
-                var units = Math.Round((double)value * WorldPosition.UnitsPerCell / pixels, MidpointRounding.AwayFromZero);
+                var units = Math.Round(cells * WorldPosition.UnitsPerCell, MidpointRounding.AwayFromZero);
                 if (units < 0 || units > WorldPosition.MaximumExtent)
                     throw Error(marker, "Position", "Position lies outside the supported world range.");
                 return (int)units;
             }
-            return new(Coordinate(marker.Position.X), Coordinate(marker.Position.Y));
+            double x = (double)marker.Position.X - origin.X;
+            double y = (double)marker.Position.Y - origin.Y;
+            return new(Coordinate((x * row.Y - y * row.X) / determinant),
+                Coordinate((column.X * y - column.Y * x) / determinant));
         }
 
         var slots = new List<MapSlotSource>();

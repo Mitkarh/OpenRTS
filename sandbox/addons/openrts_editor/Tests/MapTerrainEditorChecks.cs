@@ -106,22 +106,26 @@ internal static class MapTerrainEditorChecks
             Enumerable.Range(0, 100).Select(i => new MapSlotSource("start-" + i, new(1024, 1024))).ToArray(), []), catalog);
         check(true, "Candidate starts must not become 100 active players during authored-object validation.");
         plugin.SelectById("patrol/rifle");
+        // Give the synthetic camera a stable viewport when the editor switches between 2D and 3D scenes.
+        var viewport = new SubViewport { Size = new(640, 480) };
+        root.AddChild(viewport, false, Node.InternalMode.Back);
         var camera = new Camera3D { Projection = Camera3D.ProjectionType.Orthogonal, Size = 8, Position = new(4.5f, 10, 4.5f) };
-        root.AddChild(camera, false, Node.InternalMode.Back); camera.LookAt(new(4.5f, 0, 4.5f), Vector3.Forward);
+        viewport.AddChild(camera); camera.LookAt(new(4.5f, 0, 4.5f), Vector3.Forward);
         try
         {
             plugin.SetPainting(true);
-            Vector2 center = camera.GetViewport().GetVisibleRect().Size / 2;
+            Vector2 center = camera.UnprojectPosition(new Vector3(4.5f, 0, 4.5f));
             int result = plugin._Forward3DGuiInput(camera, new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = center });
             plugin._Forward3DGuiInput(camera, new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = center });
-            check(result == (int)EditorPlugin.AfterGuiInput.Stop && root.TerrainStrokes.Count == 1 && root.TerrainStrokes[0].Cells[0] == new Vector2I(4, 4), "Viewport ray did not paint the correct ground cell.");
+            check(result == (int)EditorPlugin.AfterGuiInput.Stop && root.TerrainStrokes.Count == 1 && root.TerrainStrokes[0].Cells[0] == new Vector2I(4, 4),
+                $"Viewport ray did not paint cell (4, 4). Painted: {string.Join(", ", root.TerrainStrokes.SelectMany(stroke => stroke.Cells))}.");
             undo.Undo();
             check(plugin._Forward3DGuiInput(camera, new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, AltPressed = true, Position = center }) == (int)EditorPlugin.AfterGuiInput.Pass, "Brush swallowed camera navigation.");
             plugin.BeginStroke(new() { Terrain = ["road"], Visual = ["road"] }, 0); plugin.PaintCell(new(2, 2));
             plugin._Input(new InputEventKey { Keycode = Key.Escape, Pressed = true }); plugin.CommitStroke();
             check(root.TerrainStrokes.Count == 0, "Escape did not cancel the in-progress stroke.");
         }
-        finally { plugin.SetPainting(false); camera.Free(); }
+        finally { plugin.SetPainting(false); viewport.Free(); }
     }
 }
 #endif

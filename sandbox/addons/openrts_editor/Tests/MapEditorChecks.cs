@@ -1,6 +1,7 @@
 #if TOOLS
 using Godot;
 using OpenRTS.Content;
+using OpenRTS.Core;
 using OpenRTS.Godot.Authoring;
 
 internal static class MapEditorChecks
@@ -25,7 +26,7 @@ internal static class MapEditorChecks
                 if (root is null) await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
             }
             if (root is null) throw new InvalidOperationException("Sample did not load as a tool OpenRtsMap.");
-            await CheckMap2D(plugin, tree, Check);
+            await CheckMap2D(plugin, tree, Check, "InitialPropertiesMap2D", isometric: false);
             editor.OpenSceneFromPath("res://examples/maps/AuthoringMap.tscn");
             await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
             await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
@@ -118,6 +119,12 @@ internal static class MapEditorChecks
             plugin.SelectErrorSource();
             Check(editor.GetSelection().GetSelectedNodes().Single() == root.GetNode("Patrol/Tank"), "Diagnostic did not select its source marker.");
             root.GetNode<OpenRtsMapGroup>("Patrol").GetNode<OpenRtsMapObject>("Tank").TypeId = "tank";
+            string editedScenePath = root.SceneFilePath;
+            await CheckMap2D(plugin, tree, Check, "InitialPropertiesMapIsometric", isometric: true);
+            editor.OpenSceneFromPath(editedScenePath);
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            Check(editor.GetEditedSceneRoot() == root, "The 3D sample was not restored for the cancellation check.");
             pending = plugin.BuildAsync();
             editor.SetPluginEnabled("openrts_editor", false);
             await pending;
@@ -131,7 +138,8 @@ internal static class MapEditorChecks
         catch (Exception error) { GD.PushError(error.ToString()); tree.Quit(1); }
     }
 
-    private static async Task CheckMap2D(OpenRtsEditorPlugin plugin, SceneTree tree, Action<bool, string> check)
+    private static async Task CheckMap2D(OpenRtsEditorPlugin plugin, SceneTree tree, Action<bool, string> check,
+        string sceneName, bool isometric)
     {
         using var baselineScene = GD.Load<PackedScene>("res://examples/maps/InitialPropertiesMap.tscn");
         var baseline = baselineScene.Instantiate<OpenRtsMap>();
@@ -143,14 +151,17 @@ internal static class MapEditorChecks
         finally { baseline.Free(); }
 
         var editor = EditorInterface.Singleton;
-        editor.OpenSceneFromPath("res://examples/maps/InitialPropertiesMap2D.tscn");
+        string scenePath = $"res://examples/maps/{sceneName}.tscn";
+        editor.OpenSceneFromPath(scenePath);
         OpenRtsMap2D? map = null;
         for (int i = 0; i < 120 && map is null; i++)
         {
             await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
-            map = editor.GetEditedSceneRoot() as OpenRtsMap2D;
+            if (editor.GetEditedSceneRoot() is OpenRtsMap2D opened && opened.SceneFilePath == scenePath)
+                map = opened;
         }
-        if (map is null) throw new InvalidOperationException("The 2D authoring scene did not open in the editor.");
+        if (map is null) throw new InvalidOperationException($"{sceneName} did not open in the editor.");
+        editor.EditNode(map);
         await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
         await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
 
@@ -164,18 +175,29 @@ internal static class MapEditorChecks
             "The 2D scene did not compile to the same bytes as B5: " + plugin.Status);
 
         var terrain = map.Terrain!;
+        var expectedShape = isometric ? TileSet.TileShapeEnum.Isometric : TileSet.TileShapeEnum.Square;
+        check(terrain.TileSet.TileShape == expectedShape, $"{sceneName} uses the wrong native TileSet shape.");
         var cell = new Vector2I(2, 3);
-        var grass = terrain.GetCellSourceId(Vector2I.Zero);
         var road = terrain.GetCellSourceId(cell);
-        terrain.SetCell(cell, grass, Vector2I.Zero);
+        var roadAtlas = terrain.GetCellAtlasCoords(cell);
+        terrain.SetCell(cell, terrain.GetCellSourceId(Vector2I.Zero), terrain.GetCellAtlasCoords(Vector2I.Zero));
         var wounded = map.GetNode<OpenRtsMapObject2D>("Wounded");
-        wounded.Position += new Vector2(0.25f, 0);
+        var east = map.GetNode<OpenRtsMapStart2D>("East");
+        var woundedPosition = wounded.Position;
+        var eastPosition = east.Position;
+        wounded.Position += isometric ? new Vector2(0.25f, 0.125f) : new Vector2(0.25f, 0);
+        east.Position += isometric ? new Vector2(-0.03125f, 0.015625f) : new Vector2(0, 0.03125f);
         var edited = MapSceneExtractor2D.Extract(map);
-        check(edited.Terrain.Palette[edited.Terrain.Cells[3 * edited.Width + 2]] == "grass" &&
-            edited.Objects.Single(obj => obj.Id == "wounded").Position.X == 12296,
-            "Tile painting or an off-center Inspector edit was lost during extraction.");
-        terrain.SetCell(cell, road, Vector2I.Zero);
-        wounded.Position -= new Vector2(0.25f, 0);
+        check(edited.Terrain.Palette[edited.Terrain.Cells[3 * edited.Width + 2]] == "grass",
+            "Tile painting was lost during extraction.");
+        check(edited.Objects.Single(obj => obj.Id == "wounded").Position == new WorldPosition(12296, 16384) &&
+            edited.Slots.Single(slot => slot.Id == "east").Position == new WorldPosition(27136, 19457),
+            "The precise positions of the moved object and start were not extracted.");
+        check(terrain.LocalToMap(east.Position) == new Vector2I(26, 19),
+            "The moved start is not in the expected native tile.");
+        terrain.SetCell(cell, road, roadAtlas);
+        wounded.Position = woundedPosition;
+        east.Position = eastPosition;
 
         using var packed = new PackedScene();
         check(packed.Pack(map) == Error.Ok, "The 2D scene could not be packed.");
@@ -188,9 +210,8 @@ internal static class MapEditorChecks
         }
         finally { reopened.Free(); }
 
-        GD.Print($"OPENRTS_MAP_2D:{expected.Source.Width}x{expected.Source.Height}, {expected.Source.Slots.Count} starts, " +
+        GD.Print($"OPENRTS_MAP_2D:{sceneName}, {expected.Source.Width}x{expected.Source.Height}, {expected.Source.Slots.Count} starts, " +
             $"{expected.Source.Objects.Count} objects, gameplay={expected.GameplayFingerprint}, data={expected.DataFingerprint}");
     }
-
 }
 #endif
