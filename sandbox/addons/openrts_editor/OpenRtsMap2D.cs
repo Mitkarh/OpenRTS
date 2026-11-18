@@ -1,0 +1,13 @@
+using Godot;
+
+namespace OpenRTS.Godot.Authoring;
+
+[Tool, GlobalClass]
+public partial class OpenRtsMap2D : Node2D
+{
+    [Export] public string MapId { get; set; } = "new-map";
+    [Export] public Vector2I Size { get; set; } = new(32, 24);
+    [Export] public TileMapLayer? Terrain { get; set; }
+    [Export(PropertyHint.File, "*.yaml")] public string ContentManifest { get; set; } = "res://game.yaml";
+    [Export(PropertyHint.SaveFile, "*.ortmap.json")] public string CompiledPath { get; set; } = "res://artifacts/maps/map-2d.ortmap.json";
+}

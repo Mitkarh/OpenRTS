@@ -25,6 +25,12 @@ internal static class MapEditorChecks
                 if (root is null) await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
             }
             if (root is null) throw new InvalidOperationException("Sample did not load as a tool OpenRtsMap.");
+            await CheckMap2D(plugin, tree, Check);
+            editor.OpenSceneFromPath("res://examples/maps/AuthoringMap.tscn");
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            root = editor.GetEditedSceneRoot() as OpenRtsMap
+                ?? throw new InvalidOperationException("The 3D sample did not reopen after the 2D check.");
             plugin.ShowDock(); Check(plugin.DockAttached, "Editor dock was not attached.");
             root.CompiledPath = "res://artifacts/maps/editor-check.ortmap.json";
             var original = MapSceneExtractor.Extract(root).Write();
@@ -124,5 +130,67 @@ internal static class MapEditorChecks
         }
         catch (Exception error) { GD.PushError(error.ToString()); tree.Quit(1); }
     }
+
+    private static async Task CheckMap2D(OpenRtsEditorPlugin plugin, SceneTree tree, Action<bool, string> check)
+    {
+        using var baselineScene = GD.Load<PackedScene>("res://examples/maps/InitialPropertiesMap.tscn");
+        var baseline = baselineScene.Instantiate<OpenRtsMap>();
+        CompiledMap expected;
+        try
+        {
+            expected = MapCompiler.Compile(MapSceneExtractor.Extract(baseline), OpenRtsEditorPlugin.LoadCatalog(baseline));
+        }
+        finally { baseline.Free(); }
+
+        var editor = EditorInterface.Singleton;
+        editor.OpenSceneFromPath("res://examples/maps/InitialPropertiesMap2D.tscn");
+        OpenRtsMap2D? map = null;
+        for (int i = 0; i < 120 && map is null; i++)
+        {
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            map = editor.GetEditedSceneRoot() as OpenRtsMap2D;
+        }
+        if (map is null) throw new InvalidOperationException("The 2D authoring scene did not open in the editor.");
+        await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        await plugin.BuildAsync(sourceOnly: true);
+        string path = ProjectSettings.GlobalizePath(map.CompiledPath);
+        string sourcePath = path.Replace(".ortmap.json", ".mapsource.json", StringComparison.Ordinal);
+        check(plugin.Status.StartsWith("Extracted", StringComparison.Ordinal) && File.Exists(sourcePath) && File.ReadAllText(sourcePath) == expected.Source.Write(),
+            "The 2D scene did not extract the same canonical source as B5: " + plugin.Status);
+        await plugin.BuildAsync();
+        check(plugin.Status.StartsWith("Compiled", StringComparison.Ordinal) && File.Exists(path) && File.ReadAllText(path) == expected.Write(),
+            "The 2D scene did not compile to the same bytes as B5: " + plugin.Status);
+
+        var terrain = map.Terrain!;
+        var cell = new Vector2I(2, 3);
+        var grass = terrain.GetCellSourceId(Vector2I.Zero);
+        var road = terrain.GetCellSourceId(cell);
+        terrain.SetCell(cell, grass, Vector2I.Zero);
+        var wounded = map.GetNode<OpenRtsMapObject2D>("Wounded");
+        wounded.Position += new Vector2(0.25f, 0);
+        var edited = MapSceneExtractor2D.Extract(map);
+        check(edited.Terrain.Palette[edited.Terrain.Cells[3 * edited.Width + 2]] == "grass" &&
+            edited.Objects.Single(obj => obj.Id == "wounded").Position.X == 12296,
+            "Tile painting or an off-center Inspector edit was lost during extraction.");
+        terrain.SetCell(cell, road, Vector2I.Zero);
+        wounded.Position -= new Vector2(0.25f, 0);
+
+        using var packed = new PackedScene();
+        check(packed.Pack(map) == Error.Ok, "The 2D scene could not be packed.");
+        var reopened = packed.Instantiate<OpenRtsMap2D>();
+        try
+        {
+            var catalog = GameManifest.Load(ProjectSettings.GlobalizePath(reopened.ContentManifest)).LoadUnits();
+            check(MapCompiler.Compile(MapSceneExtractor2D.Extract(reopened), catalog).Write() == expected.Write(),
+                "Reopening the 2D scene changed compiled data.");
+        }
+        finally { reopened.Free(); }
+
+        GD.Print($"OPENRTS_MAP_2D:{expected.Source.Width}x{expected.Source.Height}, {expected.Source.Slots.Count} starts, " +
+            $"{expected.Source.Objects.Count} objects, gameplay={expected.GameplayFingerprint}, data={expected.DataFingerprint}");
+    }
+
 }
 #endif

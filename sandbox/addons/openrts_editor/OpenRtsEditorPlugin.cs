@@ -191,14 +191,26 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         var stop = _build = new(); int generation = _generation;
         try
         {
-            var root = Root();
-            string outputPath = root.CompiledPath, contentPath = root.ContentManifest;
-            if (bundle && (!SceneMapBundle.ResourcePath(root.SceneFilePath, ".tscn") || saveScene && EditorInterface.Singleton.SaveScene() != Error.Ok))
+            var edited = EditorInterface.Singleton.GetEditedSceneRoot();
+            var root = edited as OpenRtsMap;
+            var map2D = edited as OpenRtsMap2D;
+            if (root is null && map2D is null)
+                throw new ArgumentException("Open an OpenRtsMap or OpenRtsMap2D scene to compile it.");
+            if (bundle && root is null)
+                throw new ArgumentException("The 2D pilot supports Extract source and Compile map.");
+
+            string OutputPath() => root?.CompiledPath ?? map2D!.CompiledPath;
+            string ContentPath() => root?.ContentManifest ?? map2D!.ContentManifest;
+            MapSource Extract() => root is null ? MapSceneExtractor2D.Extract(map2D!) : MapSceneExtractor.Extract(root);
+            UnitCatalog Catalog() => GameManifest.Load(ProjectFile(ContentPath(), ".yaml")).LoadUnits();
+
+            string outputPath = OutputPath(), contentPath = ContentPath();
+            if (bundle && (!SceneMapBundle.ResourcePath(root!.SceneFilePath, ".tscn") || saveScene && EditorInterface.Singleton.SaveScene() != Error.Ok))
                 throw new IOException("Save the map as a project .tscn before building its bundle.");
-            var dependencies = bundle ? SceneDependencies(root.SceneFilePath) : null;
-            string output = ProjectFile(root.CompiledPath, ".ortmap.json");
-            var catalog = LoadCatalog(root);
-            var source = MapSceneExtractor.Extract(root);
+            var dependencies = bundle ? SceneDependencies(root!.SceneFilePath) : null;
+            string output = ProjectFile(outputPath, ".ortmap.json");
+            var catalog = Catalog();
+            var source = Extract();
             string snapshot = source.Write();
             _status.Text = "Compiling…";
             var compiled = await Task.Run(() =>
@@ -208,9 +220,9 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
                 stop.Token.ThrowIfCancellationRequested(); return result;
             }, stop.Token);
             stop.Token.ThrowIfCancellationRequested();
-            if (generation != _generation || !GodotObject.IsInstanceValid(root) || EditorInterface.Singleton.GetEditedSceneRoot() != root ||
-                root.CompiledPath != outputPath || root.ContentManifest != contentPath || MapSceneExtractor.Extract(root).Write() != snapshot ||
-                LoadCatalog(root).Summary.Fingerprint != catalog.Summary.Fingerprint)
+            if (generation != _generation || !GodotObject.IsInstanceValid(edited) || EditorInterface.Singleton.GetEditedSceneRoot() != edited ||
+                OutputPath() != outputPath || ContentPath() != contentPath || Extract().Write() != snapshot ||
+                Catalog().Summary.Fingerprint != catalog.Summary.Fingerprint)
                 throw new OperationCanceledException("Scene/content changed during compilation.");
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
             if (sourceOnly)
@@ -220,8 +232,8 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
             }
             else if (dependencies is not null)
             {
-                output = PublishBundle(root, output, compiled, dependencies, stop.Token);
-                if (play) PlayBundle(ProjectSettings.LocalizePath(output), root.ContentManifest);
+                output = PublishBundle(root!, output, compiled, dependencies, stop.Token);
+                if (play) PlayBundle(ProjectSettings.LocalizePath(output), contentPath);
             }
             else MapCompiler.Save(compiled, output, stop.Token);
             _status.Text = $"{(sourceOnly ? "Extracted" : "Compiled")} {compiled.Map.Id}\n{compiled.Source.Objects.Count} objects, {compiled.Source.Slots.Count} slots\n{ProjectSettings.LocalizePath(output)}\n{(sourceOnly ? "Structural validation only." : "Placed objects validated; starting armies are checked at match creation.")}";

@@ -56,6 +56,10 @@
 
 **Recast Navigation — dtNavMeshCreateParams.** Off-mesh connection задаёт ребро между точками графа. Источник иллюстрирует навигационное представление. Правила боя, доступа, ожидания и восстановления в ходе перехода определяет конкретная симуляция. [Detour reference](https://recastnav.com/structdtNavMeshCreateParams.html).
 
+### S013
+
+**Godot 4.7 — изометрическая сетка и Isometric Game Demo.** `TileSet` задаёт изометрическую форму, layout и ось смещения. `TileMapLayer.map_to_local` возвращает центр клетки без учёта графического смещения тайла. Официальное демо показывает отдельные спрайты и высотные смещения в сцене. Проверка совместимости layout, непрерывных координат и пакетной сортировки OpenRTS отнесена к пилоту. [TileSet](https://docs.godotengine.org/en/4.7/classes/class_tileset.html) · [TileMapLayer](https://docs.godotengine.org/en/4.7/classes/class_tilemaplayer.html) · [Демо Godot](https://github.com/godotengine/godot-demo-projects/blob/master/2d/isometric/README.md).
+
 ## От чего зависит пересмотр выводов
 
 | Вывод | Основание | Что может изменить решение |
