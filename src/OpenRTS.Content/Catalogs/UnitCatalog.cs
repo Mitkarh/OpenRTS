@@ -276,6 +276,7 @@ public sealed partial class UnitCatalog
         public int Acceleration { get; set; } = 16;
         public int TurnRate { get; set; } = 16;
         public int CruiseAltitude { get; set; } = 1536;
+        public int? TerrainLookaheadRadius { get; set; }
         public int VerticalSpeed { get; set; } = 96;
         public int HalfHeight { get; set; } = 192;
         public int Ammo { get; set; }
@@ -283,7 +284,8 @@ public sealed partial class UnitCatalog
         public string[] Categories { get; set; } = ["air"];
         public bool NeedsRunway { get; set; }
         public bool WorkRoaming { get; set; }
-        public FlightDefinition Compile() => new(Mode, Speed, MinimumSpeed, Acceleration, TurnRate, CruiseAltitude, VerticalSpeed, HalfHeight, Ammo, ServiceType, new TargetCategories(Categories), NeedsRunway, WorkRoaming);
+        public FlightDefinition Compile() => new(Mode, Speed, MinimumSpeed, Acceleration, TurnRate, CruiseAltitude, VerticalSpeed,
+            HalfHeight, Ammo, ServiceType, new TargetCategories(Categories), NeedsRunway, WorkRoaming, TerrainLookaheadRadius);
     }
     private sealed class AirbaseOptions
     {

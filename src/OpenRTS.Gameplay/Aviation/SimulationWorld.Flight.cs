@@ -11,23 +11,8 @@ public sealed partial class SimulationWorld
     private readonly Dictionary<EntityId, EntityId> _runways = new();
     private readonly List<EntityId> _flightCandidates = [];
     private static readonly Comparison<EntityId> FlightIdComparison = static (a, b) => a.Value.CompareTo(b.Value);
+    private const int FlightGroundContactHeight = 512;
     private MotionIndex? _airIndex;
-    private bool _flightSurfaceValidated;
-
-    private void ValidateFlightSurface()
-    {
-        if (_flightSurfaceValidated) return;
-        if (_baseGrid is { HasSurface: true } grid)
-        {
-            if (grid.HasSlopedSurface || grid.HasSurfaceCuts)
-                throw new ArgumentException("The current aircraft controller requires a flat flight surface; variable-height flight needs terrain anticipation.");
-            int plane = grid.SurfaceAt(0).Elevation;
-            for (int cell = 1; cell < grid.CellCount; cell++)
-                if (grid.SurfaceAt(cell).Elevation != plane)
-                    throw new ArgumentException("The current aircraft controller requires a flat flight surface; variable-height flight needs terrain anticipation.");
-        }
-        _flightSurfaceValidated = true;
-    }
 
     private EntityId[]? _flightOrder;
     private EntityId[] FlightOrder() => _flightOrder ??= _aircraft.ToArray();
@@ -44,14 +29,17 @@ public sealed partial class SimulationWorld
 
     private bool IsAircraft(Entity actor) => actor.Has<FlightState>();
     private bool Airborne(Entity actor) => IsAircraft(actor) && actor.Get<SpatialState>().Position.Elevation > GroundHeight(actor.Get<SpatialState>().Position) + 256;
-    private bool GroundContact(Entity actor) => !IsAircraft(actor) || actor.Get<SpatialState>().Position.Elevation <= GroundHeight(actor.Get<SpatialState>().Position) + 512;
+    private bool GroundContact(Entity actor) => !IsAircraft(actor) ||
+        actor.Get<SpatialState>().Position.Elevation <= GroundHeight(actor.Get<SpatialState>().Position) + FlightGroundContactHeight;
     private int GroundHeight(WorldPosition point) => GroundPosition(point, 0).Elevation;
     private TargetCategories CategoriesOf(Entity actor) => Airborne(actor) ? TypeOf(actor).Flight!.Categories : TypeOf(actor).TargetCategories;
     private bool FlightPlacementAllowed(UnitDefinition type, WorldPosition point, uint owner)
     {
-        ValidateFlightSurface();
+        InitializeFlightTerrain();
         if (point.X < type.Body.HalfWidth || point.Y < type.Body.HalfHeight || point.X > Width - type.Body.HalfWidth || point.Y > Depth - type.Body.HalfHeight) return false;
-        if (point.Elevation > GroundHeight(point) + 256) return true;
+        if (point.Elevation > GroundHeight(point) + 256)
+            return _flightTerrain is null || point.Elevation - type.Flight!.HalfHeight >= FlightTerrainPeak(point, point, type.Body);
+        if (!FlightSupportClear(point, type.Body)) return false;
         EntityId ignored = default;
         foreach (var baseId in _airbases)
         {
@@ -127,13 +115,15 @@ public sealed partial class SimulationWorld
         created = default;
         var flight = _types[type].Flight!; var airbase = TypeOf(producer).Airbase;
         if (airbase is null || !airbase.Accepts.Contains(flight.ServiceType) || flight.NeedsRunway && !airbase.RunwayStart.HasValue) return false;
+        InitializeFlightTerrain();
         var baseId = producer.Get<EntityIdentity>().Id;
         for (int slot = 0; slot < airbase.Slots.Count; slot++)
         {
             if (_airSlots.ContainsKey((baseId, slot))) continue;
             var point = BasePoint(producer, airbase.Slots[slot]);
             var body = _types[type].Body;
-            if (point.X < body.HalfWidth || point.Y < body.HalfHeight || point.X > Width - body.HalfWidth || point.Y > Depth - body.HalfHeight) continue;
+            if (point.X < body.HalfWidth || point.Y < body.HalfHeight || point.X > Width - body.HalfWidth || point.Y > Depth - body.HalfHeight ||
+                !FlightSupportClear(point, body)) continue;
             (_combatIndex ?? _motion)!.Query(point, point, Math.Max(_types[type].Body.HalfWidth, _types[type].Body.HalfHeight), _flightCandidates);
             bool occupied = false;
             foreach (var otherId in _flightCandidates)
@@ -186,7 +176,8 @@ public sealed partial class SimulationWorld
         if (order.Kind == UnitActionKind.Land && definition.NeedsRunway) return false;
         if (order.Kind == UnitActionKind.Land && order.Target != default && !IsBoardingPassenger(order.Target, actor)) return false;
         if (order.Kind == UnitActionKind.Land && _navigation is not null &&
-            !TerrainGeometry.CanStop(_navigation.Grid, order.Position, TypeOf(actor).Body, TypeOf(actor).Locomotor)) return false;
+            (!TerrainGeometry.CanStop(_navigation.Grid, order.Position, TypeOf(actor).Body, TypeOf(actor).Locomotor) ||
+                !FlightSupportClear(GroundPosition(order.Position, 0), TypeOf(actor).Body))) return false;
         if (order.Kind == UnitActionKind.ReturnToBase && order.Target.Value != 0 &&
             (!TryGetEntity(order.Target, out var provider) || !CompatibleAirbase(actor, provider))) return false;
         BeforeFlightOrder(actor, preserveBoarding: order.Kind == UnitActionKind.Land && order.Target != default);
@@ -260,7 +251,9 @@ public sealed partial class SimulationWorld
             for (int s = 0; s < definition.Slots.Count; s++)
             {
                 if (_airSlots.ContainsKey((baseId, s))) continue;
-                var point = BasePoint(provider, definition.Slots[s]); long d = DistanceSquared(p, point);
+                var point = BasePoint(provider, definition.Slots[s]);
+                if (!FlightSupportClear(point, TypeOf(actor).Body)) continue;
+                long d = DistanceSquared(p, point);
                 if (d >= distance) continue;
                 distance = d; best = baseId; slot = s;
             }
@@ -393,7 +386,7 @@ public sealed partial class SimulationWorld
             }
             if (f.Phase == FlightPhase.TakingOff)
             {
-                ref var position = ref actor.Get<SpatialState>(); int height = GroundHeight(position.Position) + definition.CruiseAltitude;
+                ref var position = ref actor.Get<SpatialState>(); int height = FlightCruiseAt(position.Position, TypeOf(actor));
                 position.Position = position.Position with { Elevation = Approach(position.Position.Elevation, height, definition.VerticalSpeed) };
                 if (position.Position.Elevation == height) { f.Phase = FlightPhase.Flying; if (!f.ReturnRequested) ReleaseAirAssignment(id, f); }
                 motion.Moving = true; continue;
@@ -413,7 +406,10 @@ public sealed partial class SimulationWorld
                 if (LandingClear(actor, current, next, f.Base)) actor.Get<SpatialState>().Position = next;
                 else
                 {
-                    actor.Get<SpatialState>().Position = current with { Elevation = Approach(current.Elevation, GroundHeight(current) + 512, definition.VerticalSpeed) };
+                    int waitHeight = GroundHeight(current) + 512;
+                    if (_flightTerrain is not null)
+                        waitHeight = Math.Max(waitHeight, FlightTerrainPeak(current, current, TypeOf(actor).Body) + definition.HalfHeight);
+                    actor.Get<SpatialState>().Position = current with { Elevation = Approach(current.Elevation, waitHeight, definition.VerticalSpeed) };
                     f.Phase = FlightPhase.Approaching;
                 }
                 if (actor.Get<SpatialState>().Position == f.LandingPoint)
@@ -460,9 +456,11 @@ public sealed partial class SimulationWorld
 
         var p = actor.Get<SpatialState>().Position;
         var entry = RunwayEntry(start, end, TypeOf(actor).Body, flight);
-        entry = entry with { Elevation = Approach(p.Elevation, start.Elevation + flight.CruiseAltitude, flight.VerticalSpeed) };
+        entry = entry with { Elevation = _flightTerrain is null
+            ? Approach(p.Elevation, start.Elevation + flight.CruiseAltitude, flight.VerticalSpeed)
+            : FlightCruiseAt(entry, TypeOf(actor)) };
         f.Phase = FlightPhase.Approaching;
-        if (!PreciseFlightMove(actor, entry, flight.Speed) || !ReserveRunway(id, f)) return;
+        if (!PreciseFlightMove(actor, entry, flight.Speed, followRelief: true) || !ReserveRunway(id, f)) return;
         f.Phase = FlightPhase.RunwayLanding;
     }
 
@@ -480,7 +478,7 @@ public sealed partial class SimulationWorld
         return new(start.X - (int)(dx * distance / length), start.Y - (int)(dy * distance / length), start.Elevation);
     }
 
-    private bool PreciseFlightMove(Entity actor, WorldPosition target, int speed, bool synchronize = false)
+    private bool PreciseFlightMove(Entity actor, WorldPosition target, int speed, bool synchronize = false, bool followRelief = false)
     {
         var p = actor.Get<SpatialState>().Position; var f = actor.Get<FlightState>();
         int vertical = TypeOf(actor).Flight!.VerticalSpeed;
@@ -494,6 +492,7 @@ public sealed partial class SimulationWorld
             vertical = Math.Max(1, (height + ticks - 1) / ticks);
         }
         var next = StepTowards(p, target, speed) with { Elevation = Approach(p.Elevation, target.Elevation, vertical) };
+        if (followRelief && _flightTerrain is not null) next = FollowFlightRelief(p, next, TypeOf(actor));
         if (!LandingClear(actor, p, next, f.Base)) return false;
         if (p.X != next.X || p.Y != next.Y) FaceFlight(actor, f, FlightMath.Heading(target.X - p.X, target.Y - p.Y));
         actor.Get<SpatialState>().Position = next;
@@ -508,8 +507,11 @@ public sealed partial class SimulationWorld
 
     private bool LandingClear(Entity actor, WorldPosition from, WorldPosition to, EntityId provider)
     {
+        var type = TypeOf(actor);
+        if (_flightTerrain is not null && Math.Min(from.Elevation, to.Elevation) < FlightTerrainPeak(from, to, type.Body))
+            return false;
         if (Math.Min(from.Elevation, to.Elevation) > GroundHeight(to) + 512) return true;
-        var type = TypeOf(actor); var id = actor.Get<EntityIdentity>().Id;
+        var id = actor.Get<EntityIdentity>().Id;
         if (provider.Value == 0 && _navigation is not null && !TerrainGeometry.CanStop(_navigation.Grid, to, type.Body, type.Locomotor)) return false;
         (_combatIndex ?? _motion)?.Query(from, to, Math.Max(type.Body.HalfWidth, type.Body.HalfHeight), _flightCandidates);
         foreach (var otherId in _flightCandidates)
@@ -579,8 +581,7 @@ public sealed partial class SimulationWorld
         next = next with { X = Math.Clamp(next.X, type.Body.HalfWidth, Width - type.Body.HalfWidth), Y = Math.Clamp(next.Y, type.Body.HalfHeight, Depth - type.Body.HalfHeight) };
         if (forward && (next.X == type.Body.HalfWidth || next.X == Width - type.Body.HalfWidth || next.Y == type.Body.HalfHeight || next.Y == Depth - type.Body.HalfHeight))
             f.Heading = FlightMath.Heading(Width / 2 - p.X, Depth / 2 - p.Y);
-        int surface = Math.Max(GroundHeight(p), GroundHeight(next));
-        next = next with { Elevation = Approach(p.Elevation, surface + definition.CruiseAltitude, definition.VerticalSpeed) };
+        next = FollowFlightRelief(p, next, type);
         actor.Get<SpatialState>().Position = next;
         bool reached = forward ? BodyGeometry.SegmentCircle(p, next, target, Math.Max(256, f.Speed * 2)) : next.X == target.X && next.Y == target.Y;
         motion.Moving = go && !reached;

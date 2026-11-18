@@ -20,10 +20,57 @@ public partial class MapAuthoringChecks : Node
             MapTerrainChecks.Run(Check);
             CheckDiagonalRelief();
             CheckDiagonalCliffMap();
+            CheckAircraftOnReliefMaps();
             GD.Print($"OPENRTS_AUTHORING_CHECKS:{_checks} passed"); GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
         finally { foreach (Node child in GetChildren()) child.Free(); }
+    }
+
+    private void CheckAircraftOnReliefMaps()
+    {
+        const int size = WorldPosition.UnitsPerCell;
+        (string Scene, WorldPosition Start, WorldPosition Target)[] routes =
+        [
+            ("RockyPass", new(15 * size + 512, 24 * size + 512), new(15 * size + 512, 8 * size + 512)),
+            ("DiagonalRamps", new(2 * size + 512, 2 * size + 512), new(14 * size + 512, 14 * size + 512)),
+            ("DiagonalCliffs", new(size / 2, 8 * size + 512), new(8 * size + 512, 8 * size + 512)),
+        ];
+        var poses = new EntityPose[1];
+        foreach (var (scene, start, target) in routes)
+        {
+            var map = GD.Load<PackedScene>($"res://examples/maps/{scene}.tscn").Instantiate<OpenRtsMap2D>();
+            AddChild(map);
+            var catalog = GameManifest.Load(ProjectSettings.GlobalizePath(map.ContentManifest)).LoadUnits();
+            var compiled = MapCompiler.Compile(MapSceneExtractor2D.Extract(map), catalog);
+            var grid = MapCompiler.Read(new(scene, compiled.Write()), catalog).Map.Grid;
+            var aircraft = catalog.Units.Single(unit => unit.Id == "tiltrotor");
+            var flight = aircraft.Flight!;
+            using var world = new SimulationWorld([aircraft], grid.Width * size, grid.Height * size, navigationGrid: grid);
+            var departure = start with { Elevation = grid.SurfaceElevationAt(start) + flight.CruiseAltitude };
+            var id = world.AddInitialUnit(0, departure, owner: 1);
+            FlyTo(target);
+            FlyTo(departure);
+            Check(poses[0].Current == departure, $"{scene}: aircraft did not settle back at its original altitude.");
+            map.Free();
+
+            void FlyTo(WorldPosition goal)
+            {
+                world.Step([new(world.Tick + 1, 0, 1, CommandKind.Move, id, goal)]);
+                var expected = goal with { Elevation = grid.SurfaceElevationAt(goal) + flight.CruiseAltitude };
+                bool safe = true;
+                for (int tick = 0; tick < 240; tick++)
+                {
+                    world.CopyPoses(poses);
+                    var pose = poses[0];
+                    safe &= pose.Current.Elevation - flight.HalfHeight >= grid.SurfaceElevationAt(pose.Current) &&
+                        Math.Abs(pose.Current.Elevation - pose.Previous.Elevation) <= flight.VerticalSpeed;
+                    if (pose.Current == expected) break;
+                    world.Step();
+                }
+                Check(safe && poses[0].Current == expected, $"{scene}: relief flight failed approaching {expected}, current {poses[0].Current}.");
+            }
+        }
     }
 
     private void Check(bool condition, string message)

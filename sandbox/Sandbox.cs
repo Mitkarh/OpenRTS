@@ -354,7 +354,7 @@ public partial class Sandbox : Node3D
             if (_showcase)
             {
                 _displayAlpha = alpha;
-                _sprites!.SetFlightSurface(frame.Grid);
+                _sprites!.SetFlightSurface(frame.Grid, reliefProjection: _rampTerrain is not null);
                 if (_displayPoses.Length < frame.Poses.Length) Array.Resize(ref _displayPoses, frame.Poses.Length);
                 _displayCount = 0;
                 _storedPoses.Clear();
@@ -402,7 +402,8 @@ public partial class Sandbox : Node3D
             }
             if (_rtsOverlay is not null) _rtsOverlay.RadarStyle = _radarStyle;
             _sprites?.Apply(frame.Poses, alpha, frame.Tick, frame.TickRate, frame.Weapons, _visibleProjects, BuildingPreview() ?? UpgradePreview(), frame.Contacts, _radarStyle);
-            _combatEffects?.Apply(frame.Projectiles, alpha, frame.Tick, _sprites?.FlightSurface ?? 0, PlayerFog ? frame : null);
+            _combatEffects?.Apply(frame.Projectiles, alpha, frame.Tick, _sprites?.FlightSurface ?? 0, PlayerFog ? frame : null,
+                reliefProjection: _rampTerrain is not null);
             UpdateTerminal(frame, alpha);
             if (_jammingScenario && _verifySimulation && completed)
             {

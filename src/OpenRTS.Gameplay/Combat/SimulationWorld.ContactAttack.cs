@@ -47,12 +47,17 @@ public sealed partial class SimulationWorld
     {
         var actor = _entityHandles[index];
         var from = actor.Get<SpatialState>().Position;
-        var muzzle = WeaponPoint(ObjectGeometry.ClosestPoint(TypeOf(actor), from, point) with { Elevation = from.Elevation }, weapon);
-        point = WeaponPoint(point, weapon);
+        var muzzle = WeaponPoint(ObjectGeometry.ClosestPoint(TypeOf(actor), from, point) with { Elevation = from.Elevation },
+            weapon, Airborne(actor));
+        point = ContactWeaponPoint(point, weapon);
         bool spatial = weapon.SpatialTrajectory || IsAircraft(actor);
         return ProjectileDistanceSquared(muzzle, point, spatial) <= (long)weapon.Range * weapon.Range &&
             (_baseGrid is null || (spatial ? SpatialTerrainClear(muzzle, point) : TerrainGeometry.Clear(_baseGrid, muzzle, point, 0)));
     }
+
+    private WorldPosition ContactWeaponPoint(WorldPosition point, WeaponDefinition weapon) =>
+        TracesCliffRelief(weapon) && (uint)point.X <= Width && (uint)point.Y <= Depth
+            ? WeaponPoint(point, weapon, point.Elevation > GroundHeight(point) + 256) : point;
 
     private void UpdateContactOrder(int index)
     {

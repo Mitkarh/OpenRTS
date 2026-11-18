@@ -30,8 +30,8 @@ public sealed partial class SimulationWorld
             muzzle = ObjectGeometry.ClosestPoint(TypeOf(actor), actorSpatial.Position, p) with { Elevation = actorSpatial.Position.Elevation };
         }
         else ObjectGeometry.DistanceSquared(TypeOf(actor), actorSpatial.Position, TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, out muzzle, out destination);
-        muzzle = WeaponPoint(muzzle, weapon);
-        if (point is null) destination = WeaponPoint(destination, weapon);
+        muzzle = WeaponPoint(muzzle, weapon, Airborne(actor));
+        if (point is null) destination = WeaponPoint(destination, weapon, Airborne(_entityHandles[target]));
         _projectiles.Add(new() { Id = checked(_nextProjectileId++), BornTick = Tick, Source = actorIdentity.Id, Target = target < 0 ? default : _entityHandles[target].Get<EntityIdentity>().Id,
             Owner = actorOwnership.Owner, UnitType = weaponUnitType < 0 ? actorIdentity.Type : weaponUnitType, Mount = mount, Previous = muzzle, Position = muzzle,
             Destination = destination, Weapon = weapon, Remaining = weapon.TravelLimit, Hover = hover, LaunchElevation = muzzle.Elevation,
@@ -51,7 +51,8 @@ public sealed partial class SimulationWorld
                 if (!_indices.TryGetValue(shot.Target, out int target) || !IsOnMap(_entityHandles[target])) { Expire(shot); continue; }
                 var entity = _entityHandles[target];
                 var position = entity.Get<SpatialState>().Position;
-                shot.Destination = WeaponPoint(ObjectGeometry.ClosestPoint(TypeOf(entity), position, shot.Position) with { Elevation = position.Elevation }, weapon);
+                shot.Destination = WeaponPoint(ObjectGeometry.ClosestPoint(TypeOf(entity), position, shot.Position) with { Elevation = position.Elevation },
+                    weapon, Airborne(entity));
             }
             int budget = Math.Min(shot.Remaining, weapon.ProjectileSpeed);
             bool spatial = weapon.SpatialTrajectory;

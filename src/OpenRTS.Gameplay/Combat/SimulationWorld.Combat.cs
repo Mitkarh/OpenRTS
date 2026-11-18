@@ -71,7 +71,8 @@ public sealed partial class SimulationWorld
         bool spatial = TracesCliffRelief(weapon) || (IsAircraft(source) || IsAircraft(other)) && !(weapon.Effect == WeaponEffect.Repair && TypeOf(source).Flight is { Mode: FlightMode.Hover });
         long dz = (long)from.Elevation - to.Elevation;
         return distanceSquared <= (long)range * range && (!spatial || distanceSquared + dz * dz <= (long)range * range) &&
-            (_baseGrid is null || (spatial ? SpatialTerrainClear(WeaponPoint(from, weapon), WeaponPoint(to, weapon)) : TerrainGeometry.Clear(_baseGrid, from, to, 0)));
+            (_baseGrid is null || (spatial ? SpatialTerrainClear(WeaponPoint(from, weapon, Airborne(source)), WeaponPoint(to, weapon, Airborne(other)))
+                : TerrainGeometry.Clear(_baseGrid, from, to, 0)));
     }
     private WorldPosition AimPoint(int source, int target) => ObjectGeometry.ClosestPoint(TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, _entityHandles[source].Get<SpatialState>().Position);
 
@@ -173,7 +174,7 @@ public sealed partial class SimulationWorld
                             weapon.CanAttackContact(contact.Level) && ContactInRange(origin, contact.Position, weapon))
                         {
                             ground = true;
-                            point = WeaponPoint(contact.Position, weapon);
+                            point = ContactWeaponPoint(contact.Position, weapon);
                             entityPresentation.AimPoint = point;
                         }
                     }
@@ -225,8 +226,8 @@ public sealed partial class SimulationWorld
                                 muzzle = ObjectGeometry.ClosestPoint(sourceType, entitySpatial.Position, point) with { Elevation = entitySpatial.Position.Elevation };
                             }
                             else ObjectGeometry.DistanceSquared(sourceType, entitySpatial.Position, TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, out muzzle, out impactPoint);
-                            muzzle = WeaponPoint(muzzle, weapon);
-                            if (!ground) impactPoint = WeaponPoint(impactPoint, weapon);
+                            muzzle = WeaponPoint(muzzle, weapon, Airborne(_entityHandles[origin]));
+                            if (!ground) impactPoint = WeaponPoint(impactPoint, weapon, Airborne(_entityHandles[target]));
                             var hover = sourceType.Flight?.Mode == FlightMode.Hover ? HoverEndpoints.Source : HoverEndpoints.None;
                             if (!ground && TypeOf(_entityHandles[target]).Flight?.Mode == FlightMode.Hover) hover |= HoverEndpoints.Target;
                             EmitEvent(new(Tick, WorldEventKind.WeaponFired, entityIdentity.Id, impactPoint, entityIdentity.Type,

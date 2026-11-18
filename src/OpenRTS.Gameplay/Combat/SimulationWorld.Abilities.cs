@@ -58,7 +58,7 @@ public sealed partial class SimulationWorld
         if (order.Target.Value != 0) return _indices.TryGetValue(order.Target, out int target) && IsOnMap(_entityHandles[target]) && InWeaponRange(index, target, weapon.Range, weapon);
         var e = _entityHandles[index];
         var closest = ObjectGeometry.ClosestPoint(TypeOf(e), e.Get<SpatialState>().Position, order.Position);
-        var muzzle = WeaponPoint(closest, weapon);
+        var muzzle = WeaponPoint(closest, weapon, Airborne(e));
         bool relief = TracesCliffRelief(weapon);
         return ProjectileDistanceSquared(muzzle, order.Position, relief) <= (long)weapon.Range * weapon.Range &&
             (_baseGrid is null || (relief ? SpatialTerrainClear(muzzle, order.Position)

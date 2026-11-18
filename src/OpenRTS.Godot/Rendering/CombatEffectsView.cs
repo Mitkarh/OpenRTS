@@ -27,7 +27,8 @@ public sealed class CombatEffectsView
     public void Accept(WorldEvent value)
     { if (value.UnitType >= 0 && value.Kind is (WorldEventKind.WeaponFired or WorldEventKind.ProjectileImpact)) _events.Add(value); }
     public void Clear() => _events.Clear();
-    public void Apply(ReadOnlySpan<ProjectilePose> shots, float alpha, long tick, float flightSurface = 0, FrameExchange.FrameLease? observation = null)
+    public void Apply(ReadOnlySpan<ProjectilePose> shots, float alpha, long tick, float flightSurface = 0,
+        FrameExchange.FrameLease? observation = null, bool reliefProjection = false)
     {
         _rounds.Clear(); _beams.Clear(); _impacts.Clear(); ProjectileCount = shots.Length;
         double time = tick + Math.Clamp(alpha, 0, 1);
@@ -38,7 +39,7 @@ public sealed class CombatEffectsView
             var previous = Position(shot.Previous);
             float heading = MathF.Atan2(shot.Facing.X, shot.Facing.Y);
             var projection = shot.Projection;
-            if (projection.Hover != HoverEndpoints.None)
+            if (!reliefProjection && projection.Hover != HoverEndpoints.None)
             {
                 var destination = Position(projection.Destination);
                 float sourceLift = Lift(projection.LaunchElevation, HoverEndpoints.Source, projection.Hover, flightSurface);
@@ -87,11 +88,11 @@ public sealed class CombatEffectsView
                         sourcePoint = WorkSource(actor, value.Position, alpha);
                 }
                 var source = Position(sourcePoint);
-                source.Z -= Lift(sourcePoint.Elevation, HoverEndpoints.Source, value.Hover, flightSurface);
+                if (!reliefProjection) source.Z -= Lift(sourcePoint.Elevation, HoverEndpoints.Source, value.Hover, flightSurface);
                 if (weapon.Projectile == ProjectileKind.Hitscan)
                 {
                     var target = Position(value.Position);
-                    target.Z -= Lift(value.Position.Elevation, HoverEndpoints.Target, value.Hover, flightSurface);
+                    if (!reliefProjection) target.Z -= Lift(value.Position.Elevation, HoverEndpoints.Target, value.Hover, flightSurface);
                     Beam(source, target, (float)style.BeamWidth, Color(style.Color, 1 - phase));
                 }
                 _impacts.Add(source, new(0.25f * (1 - phase), 0.05f, 0.25f * (1 - phase)), 0, Color(style.Color, 1 - phase));
@@ -100,7 +101,7 @@ public sealed class CombatEffectsView
             {
                 float size = (float)style.ImpactSize * (0.3f + phase);
                 var target = Position(value.Position);
-                target.Z -= Lift(value.Position.Elevation, HoverEndpoints.Target, value.Hover, flightSurface);
+                if (!reliefProjection) target.Z -= Lift(value.Position.Elevation, HoverEndpoints.Target, value.Hover, flightSurface);
                 _impacts.Add(target, new(size * 2, 0.08f, size * 2), 0, Color(style.ImpactColor, 1 - phase));
             }
         }

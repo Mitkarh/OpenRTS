@@ -67,10 +67,14 @@ public sealed class SpriteWorldView
 
     private readonly Func<uint, Color> _ownerColor;
     private float _flightSurface;
+    private NavigationGrid? _reliefSurface;
     internal float FlightSurface => _flightSurface;
 
-    public void SetFlightSurface(NavigationGrid? grid) =>
+    public void SetFlightSurface(NavigationGrid? grid, bool reliefProjection = false)
+    {
         _flightSurface = grid?.HasSurface == true ? grid.SurfaceAt(0).Elevation / 1024f : 0;
+        _reliefSurface = reliefProjection ? grid : null;
+    }
 
     /// <summary>Interpolated sprite anchor, including the screen lift of a hovering aircraft.</summary>
     public Vector3 DisplayPosition(in EntityPose pose, float alpha = 1)
@@ -287,7 +291,9 @@ public sealed class SpriteWorldView
             bool ghost = _ghostIds.Contains(pose.Id);
             var point = Interpolate(pose, alpha);
             float elevation = point.Y;
-            float height = Math.Max(0, elevation - _flightSurface);
+            float surface = _reliefSurface is { } grid && model.Unit.Flight is not null
+                ? grid.SurfaceElevationAt(new((int)(point.X * 1024), (int)(point.Z * 1024))) / 1024f : _flightSurface;
+            float height = Math.Max(0, elevation - surface);
             float lift = HoverLift(model.Unit, elevation);
             Vector2 origin = new(point.X, point.Z - lift);
             float body = _workFlights.Heading(pose, time, Angle(view.PreviousBodyFacing, view.BodyFacing, alpha)), weapon = Angle(view.PreviousWeaponFacing, view.WeaponFacing, alpha);
@@ -381,7 +387,9 @@ public sealed class SpriteWorldView
                 {
                     float shadowOffset = flight.Mode == FlightMode.Hover ? 0 : height * 0.28f;
                     var shadow = new Color(0, 0, 0, 0.3f * tint.A);
-                    TintedBatch(frame, shadow).Add(new(center.X + shadowOffset, ShadowHeight, center.Y + lift + shadowOffset * 0.65f), drawAngle, size * 0.9f, shadow, Colors.Transparent);
+                    float shadowHeight = _reliefSurface is null ? ShadowHeight : surface + ShadowHeight;
+                    TintedBatch(frame, shadow).Add(new(center.X + shadowOffset, shadowHeight, center.Y + lift + shadowOffset * 0.65f),
+                        drawAngle, size * 0.9f, shadow, Colors.Transparent);
                     SpriteCount++;
                 }
                 int layer = ghost ? PreviewLayer : pose.Flight.Airborne ? AirLayer : (int)(part.DrawLayer ?? model.DrawLayer);
@@ -399,7 +407,8 @@ public sealed class SpriteWorldView
         return from + Mathf.Wrap(to - from, -MathF.PI, MathF.PI) * alpha;
     }
     private static Vector2 Rotate(Vector2 point, float angle) => new(point.X * MathF.Cos(angle) - point.Y * MathF.Sin(angle), point.X * MathF.Sin(angle) + point.Y * MathF.Cos(angle));
-    private float HoverLift(UnitDefinition unit, float elevation) => unit.Flight?.Mode == FlightMode.Hover ? HoverLift(elevation, _flightSurface) : 0;
+    private float HoverLift(UnitDefinition unit, float elevation) => _reliefSurface is null && unit.Flight?.Mode == FlightMode.Hover
+        ? HoverLift(elevation, _flightSurface) : 0;
     internal static float HoverLift(float elevation, float surface) => Math.Max(0, elevation - surface) * HoverLiftScale;
     private static Vector3 Interpolate(in EntityPose pose, float alpha) => new(
         Lerp(pose.Previous.X, pose.Current.X, alpha), Lerp(pose.Previous.Elevation, pose.Current.Elevation, alpha), Lerp(pose.Previous.Y, pose.Current.Y, alpha));

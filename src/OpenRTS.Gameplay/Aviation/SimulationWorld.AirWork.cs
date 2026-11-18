@@ -15,7 +15,7 @@ public sealed partial class SimulationWorld
         var order = actor.Get<OrderState>().ActiveOrder;
         bool roaming = flight.WorkRoaming && order.Kind is UnitActionKind.Build or UnitActionKind.Capture or UnitActionKind.UpgradeSupport;
         if (!roaming) state.WorkTarget = default;
-        if ((ObjectGeometry.Squared(at, target) <= 256L * 256 || roaming && state.WorkTarget == order.Target) && at.Elevation == GroundHeight(at) + flight.CruiseAltitude &&
+        if ((ObjectGeometry.Squared(at, target) <= 256L * 256 || roaming && state.WorkTarget == order.Target) && at.Elevation == FlightCruiseAt(at, TypeOf(actor)) &&
             !actor.Get<FlightState>().LandRequested && !actor.Get<FlightState>().ReturnRequested)
         {
             state.WorkingTick = Tick;
@@ -44,7 +44,7 @@ public sealed partial class SimulationWorld
             from.Y + (int)((to.Y - (long)from.Y) * blend / 13824), state.WorkAnchor.Elevation);
         var body = TypeOf(actor).Body;
         point = point with { X = Math.Clamp(point.X, body.HalfWidth, Width - body.HalfWidth), Y = Math.Clamp(point.Y, body.HalfHeight, Depth - body.HalfHeight) };
-        PreciseFlightMove(actor, point, TypeOf(actor).Flight!.Speed);
+        PreciseFlightMove(actor, point, TypeOf(actor).Flight!.Speed, followRelief: true);
         return true;
 
         WorldPosition Point(long leg)

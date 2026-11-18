@@ -255,12 +255,100 @@ internal static class AviationChecks
                 NavigationChecks.Check(Pose(first, a).Current == Pose(second, b).Current, "An air body changed the ground clearance graph");
             }
         });
-        test("Aviation: unsupported variable-height flight surfaces reject before consuming identity", () =>
+        test("Aviation relief: lookahead defaults to sixteen maximum-speed ticks and accepts a YAML override", () =>
         {
-            var grid = new NavigationGrid(16, 16, surface: Enumerable.Range(0, 256).Select(i => new SurfaceSample(i == 255 ? 2048 : 0)));
-            using var w = new SimulationWorld([Aircraft(), new("ground", 100)], 16384, 16384, navigationGrid: grid);
-            NavigationChecks.Reject<ArgumentException>(() => w.AddInitialUnit(0, new(8192, 8192, 1536), 1));
-            NavigationChecks.Check(w.AddInitialUnit(1, new(8192, 8192), 1).Value == 1, "Unsupported flight mutated identity allocation");
+            var catalog = UnitCatalog.Load([new("relief flight", "u: {Health: {HP: 100}, Aircraft: {Speed: 240, TerrainLookaheadRadius: 5000}}")]);
+            NavigationChecks.Check(new FlightDefinition(speed: 240).TerrainLookaheadRadius == 3840 &&
+                catalog.Units.Single().Flight!.TerrainLookaheadRadius == 5000, "The default or authored radius was lost.");
+            NavigationChecks.Reject<ArgumentException>(() => new FlightDefinition(terrainLookaheadRadius: -1));
+        });
+        test("Aviation relief: Hover and ForwardFlight climb before a cut, clear a higher ridge and descend beyond the ramp", () =>
+        {
+            const int width = 32, height = 24, size = 1024;
+            var surface = new SurfaceSample[width * height];
+            var rises = new SurfaceRise[surface.Length];
+            var cuts = new Dictionary<int, SurfaceCut>();
+            for (int y = 0; y < height; y++)
+            {
+                cuts[y * width + 11] = new(SurfaceCorner.NorthEast, 1024);
+                surface[y * width + 12] = new(1024);
+                surface[y * width + 13] = new(1536);
+                for (int x = 14; x < 18; x++)
+                {
+                    int cell = y * width + x;
+                    surface[cell] = new((18 - x) * 384 - 192);
+                    rises[cell] = new(-384, 0);
+                }
+            }
+            var grid = new NavigationGrid(width, height, surface: surface, rises: rises, cuts: cuts);
+            foreach (var mode in new[] { FlightMode.Hover, FlightMode.ForwardFlight })
+            {
+                var flight = new FlightDefinition(mode, speed: 192, turnRate: 32, verticalSpeed: 128);
+                using var world = new SimulationWorld([Aircraft(flight)], width * size, height * size, navigationGrid: grid);
+                using var replay = new SimulationWorld([Aircraft(flight)], width * size, height * size, navigationGrid: grid, navigationWorkers: 4);
+                var first = new WorldPosition(4 * size, 12 * size, flight.CruiseAltitude);
+                var start = world.AddInitialUnit(0, first, 1);
+                replay.AddInitialUnit(0, first, 1);
+                WorldCommand[] move = [new(1, 0, 1, CommandKind.Move, start, new(26 * size, 12 * size))];
+                world.Step(move);
+                replay.Step(move);
+                bool earlyClimb = false, clearedHigh = false, descended = false;
+                for (int tick = 0; tick < 260; tick++)
+                {
+                    var pose = Pose(world, start);
+                    var position = pose.Current;
+                    earlyClimb |= position.X < 11 * size && position.Elevation > first.Elevation;
+                    clearedHigh |= position.X is >= 13 * size and < 14 * size && position.Elevation >= 1536 + flight.CruiseAltitude;
+                    descended |= position.X > 23 * size && position.Elevation == first.Elevation;
+                    NavigationChecks.Check(Math.Abs(position.Elevation - pose.Previous.Elevation) <= flight.VerticalSpeed &&
+                        position.Elevation >= grid.SurfaceElevationAt(position) + flight.HalfHeight, "Altitude jumped or intersected the relief.");
+                    if (descended) break;
+                    world.Step();
+                    replay.Step();
+                }
+                NavigationChecks.Check(earlyClimb && clearedHigh && descended && world.Report() == replay.Report(),
+                    $"{mode} did not complete the relief profile or replay diverged.");
+            }
+        });
+        test("Aviation relief: a short lookahead yields before rock and hover lands on the plateau", () =>
+        {
+            const int side = 16, size = 1024, cliff = 4096;
+            var grid = new NavigationGrid(side, side, surface: Enumerable.Range(0, side * side)
+                .Select(i => new SurfaceSample(i % side >= 8 ? cliff : 0)));
+            var flight = new FlightDefinition(speed: 256, cruiseAltitude: 768, verticalSpeed: 64, terrainLookaheadRadius: 0);
+            using var world = new SimulationWorld([Aircraft(flight)], side * size, side * size, navigationGrid: grid);
+            NavigationChecks.Reject<ArgumentException>(() => world.AddInitialUnit(0, new(8 * size - 64, 6 * size, 1024), 1));
+            var air = world.AddInitialUnit(0, new(6 * size, 6 * size, flight.CruiseAltitude), 1);
+            var goal = new WorldPosition(10 * size, 6 * size, cliff);
+            world.Step([new(1, 0, 1, CommandKind.Land, air, goal)]);
+            bool yielded = false;
+            for (int tick = 0; tick < 230; tick++)
+            {
+                var pose = Pose(world, air);
+                if (pose.Flight.Phase == FlightPhase.Landed) break;
+                yielded |= pose.Current.X < 8 * size && pose.Current.X == pose.Previous.X &&
+                    pose.Current.Elevation > pose.Previous.Elevation;
+                NavigationChecks.Check(pose.Current.Elevation >= grid.SurfaceElevationAt(pose.Current) &&
+                    Math.Abs(pose.Current.Elevation - pose.Previous.Elevation) <= flight.VerticalSpeed, "Fallback took an unsafe step.");
+                world.Step();
+            }
+            NavigationChecks.Check(air.Value == 1 && yielded && Pose(world, air).Current == goal &&
+                Pose(world, air).Flight.Phase == FlightPhase.Landed, "Short-radius flight failed to yield, cross or land.");
+        });
+        test("Aviation relief: a runway approach reaches parking on a plateau", () =>
+        {
+            const int size = 1024, side = 64, elevation = 1024;
+            var grid = new NavigationGrid(side, side, surface: Enumerable.Range(0, side * side)
+                .Select(i => new SurfaceSample(i % side is >= 8 and < 40 && i / side is >= 8 and < 40 ? elevation : 0)));
+            var plane = Aircraft(new(FlightMode.ForwardFlight, needsRunway: true));
+            using var world = new SimulationWorld([Base(4, true), plane], side * size, side * size, navigationGrid: grid);
+            var airbase = world.AddInitialUnit(0, new(24 * size, 24 * size, elevation), 1);
+            var air = world.AddInitialUnit(1, new(48 * size, 32 * size, plane.Flight!.CruiseAltitude), 1);
+            world.Step([new(1, 0, 1, CommandKind.ReturnToBase, air)]);
+            Step(world, 400);
+            var arrive = Pose(world, air);
+            NavigationChecks.Check(arrive.Flight.Phase == FlightPhase.Landed && arrive.Flight.Airbase == airbase &&
+                arrive.Current.Elevation == elevation, $"The plane did not complete its raised runway approach: {arrive.Current}.");
         });
     }
 }

@@ -15,6 +15,7 @@ public sealed record FlightDefinition
     public int TurnRate { get; }
     public int CruiseAltitude { get; }
     public int VerticalSpeed { get; }
+    public int TerrainLookaheadRadius { get; }
     public int HalfHeight { get; }
     public int Ammo { get; }
     public string ServiceType { get; }
@@ -23,15 +24,18 @@ public sealed record FlightDefinition
     public bool WorkRoaming { get; }
     public FlightDefinition(FlightMode mode = FlightMode.Hover, int speed = 160, int minimumSpeed = 80,
         int acceleration = 16, int turnRate = 16, int cruiseAltitude = 1536, int verticalSpeed = 96,
-        int halfHeight = 192, int ammo = 0, string serviceType = "aircraft", TargetCategories? categories = null, bool needsRunway = false, bool workRoaming = false)
+        int halfHeight = 192, int ammo = 0, string serviceType = "aircraft", TargetCategories? categories = null,
+        bool needsRunway = false, bool workRoaming = false, int? terrainLookaheadRadius = null)
     {
         if (!Enum.IsDefined(mode) || speed is < 1 or > 1024 || minimumSpeed < 1 || minimumSpeed > speed ||
             acceleration is < 1 or > 1024 || turnRate is < 1 or > 128 || cruiseAltitude is < 512 or > 16384 ||
             verticalSpeed is < 1 or > 1024 || halfHeight is < 1 or > 256 || ammo is < 0 or > 100000 ||
+            terrainLookaheadRadius is < 0 or > 16384 ||
             string.IsNullOrWhiteSpace(serviceType) || serviceType.Length > 128 || needsRunway && mode != FlightMode.ForwardFlight)
             throw new ArgumentException("Invalid aircraft speed, altitude, turn rate, ammunition or service settings.");
         Mode = mode; Speed = speed; MinimumSpeed = minimumSpeed; Acceleration = acceleration; TurnRate = turnRate;
         CruiseAltitude = cruiseAltitude; VerticalSpeed = verticalSpeed; HalfHeight = halfHeight; Ammo = ammo;
+        TerrainLookaheadRadius = terrainLookaheadRadius ?? 16 * speed;
         ServiceType = serviceType; Categories = categories ?? new(["air"]); NeedsRunway = needsRunway; WorkRoaming = workRoaming;
     }
     internal void Write(BinaryWriter w)
@@ -39,6 +43,7 @@ public sealed record FlightDefinition
         w.Write((int)Mode); w.Write(Speed); w.Write(MinimumSpeed); w.Write(Acceleration); w.Write(TurnRate);
         w.Write(CruiseAltitude); w.Write(VerticalSpeed); w.Write(HalfHeight); w.Write(Ammo); w.Write(ServiceType);
         Categories.Write(w); w.Write(NeedsRunway); w.Write(WorkRoaming);
+        if (TerrainLookaheadRadius != 16 * Speed) { w.Write((byte)0xF1); w.Write(TerrainLookaheadRadius); }
     }
 }
 

@@ -71,7 +71,7 @@ public sealed partial class SimulationWorld
     private bool TracesCliffRelief(WeaponDefinition weapon) => weapon.SpatialTrajectory && _baseGrid?.HasSurfaceCuts == true;
 
     // Ground poses give the support height. Fire from inside the existing ground hit volume.
-    private WorldPosition WeaponPoint(WorldPosition point, WeaponDefinition weapon) => TracesCliffRelief(weapon)
+    private WorldPosition WeaponPoint(WorldPosition point, WeaponDefinition weapon, bool airborne = false) => !airborne && TracesCliffRelief(weapon)
         ? point with { Elevation = point.Elevation + 128 } : point;
 
     private bool SpatialTerrainClear(WorldPosition from, WorldPosition to) => SpatialTerrainHit(from, to) == 65537;

@@ -597,7 +597,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
         EntityId id = default, int? initialHealth = null, Action<Frent.Entity>? initialize = null, int quarterTurns = 0)
     {
         ValidateVisionOwner(owner);
-        if (_types[unitType].Flight is not null) ValidateFlightSurface();
+        if (_types[unitType].Flight is not null) InitializeFlightTerrain();
         else if (_navigation?.Grid is { } grid && (grid.HasSlopedSurface || grid.HasSurfaceCuts))
             position = GroundPosition(position, position.Elevation);
         if (id.Value == 0) id = AllocateEntityId();
