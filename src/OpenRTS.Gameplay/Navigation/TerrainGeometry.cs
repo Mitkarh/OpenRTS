@@ -53,10 +53,24 @@ internal static class TerrainGeometry
         return x + 1 < grid.Width && Blocks(cell + 1, right, top, right, bottom) ||
             y + 1 < grid.Height && Blocks(cell + grid.Width, left, bottom, right, bottom);
 
-        bool Blocks(int neighbor, int x0, int y0, int x1, int y1) =>
-            (Math.Abs(grid.SurfaceElevationAt(cell, x0, y0) - grid.SurfaceElevationAt(neighbor, x0, y0)) > maximumStep ||
-             Math.Abs(grid.SurfaceElevationAt(cell, x1, y1) - grid.SurfaceElevationAt(neighbor, x1, y1)) > maximumStep) &&
-            BodyGeometry.SweptBox(from, to, new(x0, y0, x1, y1), body);
+        bool Blocks(int neighbor, int x0, int y0, int x1, int y1)
+        {
+            int start = grid.SurfaceElevationAt(cell, x0, y0) - grid.SurfaceElevationAt(neighbor, x0, y0);
+            int end = grid.SurfaceElevationAt(cell, x1, y1) - grid.SurfaceElevationAt(neighbor, x1, y1);
+            return BlocksAbove(start, end) || BlocksAbove(-start, -end);
+
+            bool BlocksAbove(int a, int b)
+            {
+                if (a <= maximumStep && b <= maximumStep) return false;
+                int low = 0, high = size;
+                // Round toward the traversable part to keep clearance at fractional wall endpoints.
+                if (a <= maximumStep) low = (int)((long)size * (maximumStep - a) / (b - a));
+                else if (b <= maximumStep) high = size - (int)((long)size * (maximumStep - b) / (a - b));
+                return BodyGeometry.SweptBox(from, to, x0 == x1
+                    ? new(x0, y0 + low, x1, y0 + high)
+                    : new(x0 + low, y0, x0 + high, y1), body);
+            }
+        }
     }
 
     internal static bool CanStop(NavigationGrid grid, WorldPosition point, BodyShape body, Locomotor profile)

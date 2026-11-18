@@ -17,8 +17,9 @@ internal sealed class TerrainSurface
         int size = grid.CellSize;
         var faces = new List<Face>(2 * grid.CellCount);
         using var untextured = Builder(null);
+        using var untexturedCliffs = cliff is null ? Builder(null, doubleSided: true) : null;
         var builders = new Dictionary<Texture2D, SurfaceTool>();
-        bool hasUntextured = false;
+        bool hasUntextured = false, hasCliffs = false;
         Mesh = new ArrayMesh();
         try
         {
@@ -44,6 +45,7 @@ internal sealed class TerrainSurface
                         AddCliff(c, d, Vertex(cell + grid.Width, left, bottom), Vertex(cell + grid.Width, right, bottom));
                 }
             if (hasUntextured) Finish(untextured);
+            if (hasCliffs && untexturedCliffs is not null) Finish(untexturedCliffs);
             foreach (var builder in builders.Values) Finish(builder);
         }
         finally
@@ -95,7 +97,8 @@ internal sealed class TerrainSurface
         {
             float start = a.Y - c.Y, end = b.Y - d.Y;
             if (start == 0 && end == 0) return;
-            var surface = Surface(cliff);
+            hasCliffs = true;
+            var surface = untexturedCliffs ?? Surface(cliff);
             bool alongX = a.X != b.X;
             var rock = cliff is null ? new Color("#a47351") : alongX ? new Color("#e3d6c3") : new Color("#b9b6ac");
             if (start * end < 0)
@@ -112,7 +115,7 @@ internal sealed class TerrainSurface
         }
     }
 
-    private static SurfaceTool Builder(Texture2D? texture)
+    private static SurfaceTool Builder(Texture2D? texture, bool doubleSided = false)
     {
         if (texture is AtlasTexture atlas)
         {
@@ -126,7 +129,7 @@ internal sealed class TerrainSurface
         var builder = new SurfaceTool();
         builder.Begin(global::Godot.Mesh.PrimitiveType.Triangles);
         builder.SetSmoothGroup(uint.MaxValue);
-        if (texture is not null)
+        if (texture is not null || doubleSided)
             builder.SetMaterial(new StandardMaterial3D
             {
                 AlbedoTexture = texture,

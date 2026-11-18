@@ -56,8 +56,13 @@ public sealed partial class NavigationGrid
             if (_surface is null || values.Length != CellCount)
                 throw new ArgumentException("Surface rises require one sample and rise per cell.", nameof(rises));
             for (int i = 0; i < values.Length; i++)
-                if (2 * Math.Abs((long)_surface[i].Elevation) + Math.Abs((long)values[i].X) + Math.Abs((long)values[i].Y) > 2L * 1048576)
+            {
+                long x = Math.Abs((long)values[i].X), y = Math.Abs((long)values[i].Y);
+                if (2 * Math.Abs((long)_surface[i].Elevation) + x + y > 2L * 1048576)
                     throw new ArgumentException("Sloped surface corners exceed the elevation limits.", nameof(rises));
+                long slope = x == 0 || y == 0 ? x + y : (long)Math.Ceiling(Math.Sqrt(x * x + y * y));
+                if (slope > _surface[i].Slope) _surface[i] = _surface[i] with { Slope = (int)slope };
+            }
             if (values.Any(rise => rise != default)) _rises = values;
         }
         _obstacles = obstacles?.Distinct().OrderBy(b => b.MinY).ThenBy(b => b.MinX).ThenBy(b => b.MaxY).ThenBy(b => b.MaxX).ToArray() ?? [];

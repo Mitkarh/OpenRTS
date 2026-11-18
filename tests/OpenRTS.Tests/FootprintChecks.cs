@@ -177,6 +177,68 @@ internal static class FootprintChecks
             NavigationChecks.Check(restored.IsBlocked(editedCell) && restored.SurfaceElevationAt(start) == grid.SurfaceElevationAt(start),
                 "Runtime grid restore lost the immutable ramp geometry");
         });
+        test("Diagonal ramp: zero-step locomotor ascends and descends at exact XY", () =>
+        {
+            const int size = WorldPosition.UnitsPerCell, side = 10, rise = 128;
+            var samples = new SurfaceSample[side * side];
+            var rises = new SurfaceRise[samples.Length];
+            for (int y = 0; y < side; y++)
+                for (int x = 0; x < side; x++)
+                {
+                    int i = y * side + x;
+                    samples[i] = new(Height(x) + Height(y));
+                    rises[i] = new(AxisRise(x), AxisRise(y));
+                }
+            var grid = new NavigationGrid(side, side, surface: samples, rises: rises);
+            var profile = new Locomotor("diagonal", [TerrainRule.Ground], maximumSlope: 182, maximumStep: 0);
+            var steep = new DestinationResolver(grid, new Locomotor("steep", [TerrainRule.Ground], maximumSlope: 181));
+            NavigationChecks.Check(!steep.CanStop(new(4 * size + 512, 4 * size + 512)), "Steep diagonal slope accepted a weaker locomotor.");
+            using var world = new SimulationWorld([Mover(profile: profile)], side * size, side * size, navigationGrid: grid);
+            var low = new WorldPosition(1501, 1713);
+            var high = new WorldPosition(8451, 8687, 10 * rise);
+            world.AddInitialUnit(0, low);
+            Traverse(high);
+            Traverse(low);
+
+            void Traverse(WorldPosition goal)
+            {
+                Move(world, 1, goal);
+                bool onDiagonal = false;
+                for (int t = 0; t < 200; t++)
+                {
+                    var pose = Pose(world, 1);
+                    NavigationChecks.Check(pose.Current.Elevation == grid.SurfaceElevationAt(pose.Current) &&
+                        Math.Abs(pose.Current.Elevation - pose.Previous.Elevation) <= 24, "Diagonal ramp caused a height jump.");
+                    var plane = grid.SurfaceRiseAt(grid.CellAt(pose.Current));
+                    onDiagonal |= plane is { X: not 0, Y: not 0 };
+                    if (world.MovingCount == 0) break;
+                    world.Step();
+                }
+                NavigationChecks.Check(Pose(world, 1).Current == goal && onDiagonal, "Unit did not reach the precise goal via the diagonal slope.");
+            }
+
+            static int AxisRise(int cell) => cell is >= 2 and < 7 ? rise : 0;
+            static int Height(int cell) => Math.Clamp(cell - 2, 0, 5) * rise + AxisRise(cell) / 2;
+        });
+        test("Diagonal cliff: a traversable section between two cliff faces preserves body clearance", () =>
+        {
+            var grid = new NavigationGrid(2, 1, surface: [new(32), new(64)], rises: [new(64, 256), default]);
+            foreach (var body in new[] { BodyShape.Circle(128), BodyShape.Box(128, 128) })
+            {
+                var profile = new Locomotor("step", [TerrainRule.Ground], body, maximumStep: 64);
+                var resolver = new DestinationResolver(grid, profile);
+                NavigationChecks.Check(resolver.CanStop(new(1024, 512)) && resolver.CanReach(new(512, 512), new(1536, 512)),
+                    "A shallow crossing between the cliffs is blocked.");
+                NavigationChecks.Check(!resolver.CanStop(new(1024, 160)) && !resolver.CanStop(new(1024, 864)) &&
+                    !resolver.CanStop(new(1024, 350)), "Cliffs or swept body clearance were ignored.");
+                using var world = new SimulationWorld([new("unit", 100, body: body, locomotor: profile)], 2048, 1024, navigationGrid: grid);
+                world.AddInitialUnit(0, new(500, 512));
+                var goal = new WorldPosition(1513, 512, 64);
+                Move(world, 1, goal);
+                Finish(world);
+                NavigationChecks.Check(Pose(world, 1).Current == goal, "The route follower could not move through the shallow crossing.");
+            }
+        });
         test("N2: weapon range reaches the nearest building cell rather than its center", () =>
         {
             var gun = new UnitDefinition("gun", 100, ["idle", "move", "fire"], weapon: new(5120, 5120, 20, 100, 0), body: BodyShape.Circle(512));

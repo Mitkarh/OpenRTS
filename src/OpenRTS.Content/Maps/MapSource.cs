@@ -28,7 +28,7 @@ public sealed record MapHealthVariant(string Id, int MaxHealth);
 /// <summary>Height at the center and signed height change across each cell axis.</summary>
 public readonly record struct MapSurfaceCell(int Elevation, int RiseX = 0, int RiseY = 0)
 {
-    internal SurfaceSample Sample => new(Elevation, Math.Max(Math.Abs(RiseX), Math.Abs(RiseY)));
+    internal SurfaceSample Sample => new(Elevation);
     internal SurfaceRise Rise => new(RiseX, RiseY);
 }
 

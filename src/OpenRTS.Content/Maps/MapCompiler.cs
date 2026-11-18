@@ -64,9 +64,8 @@ public static class MapCompiler
             {
                 if ((i & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
                 var cell = surface[i];
-                if (cell.RiseX != 0 && cell.RiseY != 0 ||
-                    2 * Math.Abs((long)cell.Elevation) + Math.Abs((long)cell.RiseX) + Math.Abs((long)cell.RiseY) > 2 * 1048576)
-                    throw Error($"surface[{i}]", "Use a bounded elevation and a rise along at most one axis.");
+                if (2 * Math.Abs((long)cell.Elevation) + Math.Abs((long)cell.RiseX) + Math.Abs((long)cell.RiseY) > 2 * 1048576)
+                    throw Error($"surface[{i}]", "Sloped surface corners exceed the elevation limits.");
             }
         }
         var locomotion = catalog.Locomotion ?? throw Error("terrain", "Maps require a terrain catalog.");

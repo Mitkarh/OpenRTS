@@ -3,6 +3,7 @@ using Godot;
 using OpenRTS.Content;
 using OpenRTS.Core;
 using OpenRTS.Godot.Authoring;
+using OpenRTS.Godot.Rendering;
 
 /// <summary>Executed by Godot itself: tests scene serialization, transforms and headless independent output.</summary>
 public partial class MapAuthoringChecks : Node
@@ -16,6 +17,7 @@ public partial class MapAuthoringChecks : Node
         {
             Run();
             MapTerrainChecks.Run(Check);
+            CheckDiagonalRelief();
             GD.Print($"OPENRTS_AUTHORING_CHECKS:{_checks} passed"); GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
@@ -28,6 +30,53 @@ public partial class MapAuthoringChecks : Node
     {
         try { action(); } catch (ContentException) { _checks++; return; }
         throw new InvalidOperationException(message);
+    }
+
+    private void CheckDiagonalRelief()
+    {
+        var map = GD.Load<PackedScene>("res://examples/maps/RockyPass.tscn").Instantiate<OpenRtsMap2D>();
+        AddChild(map);
+        var layer = map.Terrain!;
+        var atlas = (TileSetAtlasSource)layer.TileSet!.GetSource(0);
+        var ramp = new Vector2I(2, 0);
+        var cell = new Vector2I(28, 21);
+        int alternative = atlas.CreateAlternativeTile(ramp);
+        try
+        {
+            var tile = atlas.GetTileData(ramp, alternative);
+            tile.SetCustomData("TerrainId", "road");
+            tile.SetCustomData("VisualId", "rock-ramp");
+            tile.SetCustomData("Elevation", 1024);
+            tile.SetCustomData("Rise", new Vector2I(128, -256));
+            layer.SetCell(cell, 0, ramp, alternative);
+            var catalog = GameManifest.Load(ProjectSettings.GlobalizePath(map.ContentManifest)).LoadUnits();
+            var compiled = MapCompiler.Compile(MapSceneExtractor2D.Extract(map), catalog);
+            var grid = MapCompiler.Read(new("diagonal relief", compiled.Write()), catalog).Map.Grid;
+            int index = grid.Index(new(cell.X, cell.Y));
+            Check(grid.SurfaceRiseAt(index) == new OpenRTS.Core.Navigation.SurfaceRise(128, -256) &&
+                grid.SurfaceAt(index).Slope == 287, "The TileMapLayer diagonal relief was lost in compilation.");
+
+            var terrain = new TerrainSurface(grid);
+            using var mesh = terrain.Mesh;
+            Check(mesh.GetSurfaceCount() == 2 && mesh.SurfaceGetMaterial(1) is BaseMaterial3D
+                { CullMode: BaseMaterial3D.CullModeEnum.Disabled }, "Rock faces must be visible from both sides.");
+            var camera = new Camera3D { Projection = Camera3D.ProjectionType.Orthogonal, Size = 8 };
+            AddChild(camera);
+            var center = new Vector3(28.5f, 0.5f, 21.5f);
+            camera.Position = center + new Vector3(0, 4, 6);
+            camera.LookAt(center);
+            const int size = WorldPosition.UnitsPerCell;
+            var point = new WorldPosition(28 * size + 256, 21 * size + 768, 928);
+            Check(terrain.Pick(camera, camera.UnprojectPosition(new(28.25f, 928f / size, 21.75f))) == point,
+                "Picking the diagonal surface lost exact XY or height.");
+            Check(terrain.Pick(camera, camera.UnprojectPosition(new(28.5f, 0.5f, 22))) is null,
+                "An exposed diagonal ramp cliff accepted a ground order.");
+        }
+        finally
+        {
+            layer.EraseCell(cell);
+            atlas.RemoveAlternativeTile(ramp, alternative);
+        }
     }
 
     private void Run()

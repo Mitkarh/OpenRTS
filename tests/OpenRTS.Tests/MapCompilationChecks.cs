@@ -67,10 +67,10 @@ internal static class MapCompilationChecks
             NavigationChecks.Reject<ContentException>(() => MapCompiler.Read(new("v2 bad effective fingerprint", bad.ToJsonString()), catalog));
         });
 
-        test("Maps compiled: v3 derives exact start and object heights from canonical relief", () =>
+        test("Maps compiled: v3 diagonal relief preserves exact start and object heights", () =>
         {
             var grass = new MapLayer(["grass"], new int[64]);
-            var cells = Enumerable.Range(0, 64).Select(i => new MapSurfaceCell(1920 - i / 8 * 256, RiseY: -256)).ToArray();
+            var cells = Enumerable.Range(0, 64).Select(i => new MapSurfaceCell(1920 + i % 8 * 128 - i / 8 * 256, 128, -256)).ToArray();
             MapSource Source(MapSurfaceCell[] surface) => new("relief", true, 8, 8, grass, grass,
                 [new("west", new(1536, 1792))], [new("scout", "rifleman", new(5632, 2432), "neutral", InitialHealth: 35)], surface: surface);
             var compiled = MapCompiler.Compile(MapSource.Read(new("relief", Source(cells).Write())), catalog);
@@ -81,16 +81,17 @@ internal static class MapCompilationChecks
             var poses = new EntityPose[2];
             world.CopyPoses(poses);
             NavigationChecks.Check(restored.Source.Surface!.SequenceEqual(cells) &&
-                restored.Map.StartPosition("west") == new WorldPosition(1536, 1792, 1600) &&
-                poses[0].Current == new WorldPosition(1536, 2304, 1472) &&
-                poses[1].Current == new WorldPosition(5632, 2432, 1440) && poses[1].Health == 35,
+                restored.Map.Grid.SurfaceAt(0).Slope == 287 &&
+                restored.Map.StartPosition("west") == new WorldPosition(1536, 1792, 1728) &&
+                poses[0].Current == new WorldPosition(1536, 2304, 1600) &&
+                poses[1].Current == new WorldPosition(5632, 2432, 2080) && poses[1].Health == 35,
                 "Surface, exact start offsets or v2-compatible initial HP were lost.");
 
             var tampered = JsonNode.Parse(compiled.Write())!;
             tampered["map"]!["surface"]![0]![0] = 1921;
             NavigationChecks.Reject<ContentException>(() => MapCompiler.Read(new("tampered surface", tampered.ToJsonString()), catalog));
             NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(cells[..^1]), catalog));
-            cells[0] = new(0, RiseX: 256, RiseY: 256);
+            cells[0] = new(1048576, RiseX: 256, RiseY: 256);
             NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(cells), catalog));
         });
 
