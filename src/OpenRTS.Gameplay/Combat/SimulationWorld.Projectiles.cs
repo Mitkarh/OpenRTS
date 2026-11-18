@@ -30,6 +30,8 @@ public sealed partial class SimulationWorld
             muzzle = ObjectGeometry.ClosestPoint(TypeOf(actor), actorSpatial.Position, p) with { Elevation = actorSpatial.Position.Elevation };
         }
         else ObjectGeometry.DistanceSquared(TypeOf(actor), actorSpatial.Position, TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, out muzzle, out destination);
+        muzzle = WeaponPoint(muzzle, weapon);
+        if (point is null) destination = WeaponPoint(destination, weapon);
         _projectiles.Add(new() { Id = checked(_nextProjectileId++), BornTick = Tick, Source = actorIdentity.Id, Target = target < 0 ? default : _entityHandles[target].Get<EntityIdentity>().Id,
             Owner = actorOwnership.Owner, UnitType = weaponUnitType < 0 ? actorIdentity.Type : weaponUnitType, Mount = mount, Previous = muzzle, Position = muzzle,
             Destination = destination, Weapon = weapon, Remaining = weapon.TravelLimit, Hover = hover, LaunchElevation = muzzle.Elevation,
@@ -47,22 +49,29 @@ public sealed partial class SimulationWorld
             {
                 // shortcut: steering is instantaneous; add turn limits when missiles need inertia.
                 if (!_indices.TryGetValue(shot.Target, out int target) || !IsOnMap(_entityHandles[target])) { Expire(shot); continue; }
-                shot.Destination = ObjectGeometry.ClosestPoint(TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, shot.Position) with { Elevation = _entityHandles[target].Get<SpatialState>().Position.Elevation };
+                var entity = _entityHandles[target];
+                var position = entity.Get<SpatialState>().Position;
+                shot.Destination = WeaponPoint(ObjectGeometry.ClosestPoint(TypeOf(entity), position, shot.Position) with { Elevation = position.Elevation }, weapon);
             }
             int budget = Math.Min(shot.Remaining, weapon.ProjectileSpeed);
-            var next = weapon.SpatialTrajectory ? SpatialStep(shot.Position, shot.Destination, budget) : StepTowards(shot.Position, shot.Destination, budget);
-            int travel = Math.Max(1, (int)SquareRoot((ulong)ProjectileDistanceSquared(shot.Position, next, weapon.SpatialTrajectory)));
+            bool spatial = weapon.SpatialTrajectory;
+            var next = spatial ? SpatialStep(shot.Position, shot.Destination, budget) : StepTowards(shot.Position, shot.Destination, budget);
+            int travel = Math.Max(1, (int)SquareRoot((ulong)ProjectileDistanceSquared(shot.Position, next, spatial)));
             // Round distance upwards so rounding cannot extend a missile's fuel budget.
-            if ((long)travel * travel < ProjectileDistanceSquared(shot.Position, next, weapon.SpatialTrajectory)) travel++;
+            if ((long)travel * travel < ProjectileDistanceSquared(shot.Position, next, spatial)) travel++;
             shot.Remaining -= travel;
             // shortcut: wall effects use the segment start; calculate exact entry when impact placement matters.
-            if (_baseGrid is not null && !(weapon.SpatialTrajectory ? SpatialTerrainClear(shot.Position, next) : TerrainGeometry.Clear(_baseGrid, shot.Position, next, 0)))
+            if (!TracesCliffRelief(weapon) && _baseGrid is not null &&
+                !(spatial ? SpatialTerrainClear(shot.Position, next) : TerrainGeometry.Clear(_baseGrid, shot.Position, next, 0)))
             { Hit(shot, default, shot.Position); continue; }
             int fraction = 65537;
             var hit = weapon.Projectile == ProjectileKind.Grenade ? default :
                 TraceProjectileHit(weapon, shot.Source, shot.Owner, shot.Position, next, swept: true, out fraction);
+            int wall = TracesCliffRelief(weapon) ? SpatialTerrainHit(shot.Position, next) : 65537;
+            if (wall <= 65536 && wall <= fraction)
+            { Hit(shot, default, SpatialInterpolate(shot.Position, next, wall)); continue; }
             if (hit.Value != 0 && fraction <= 65536)
-            { Hit(shot, hit, weapon.SpatialTrajectory ? SpatialInterpolate(shot.Position, next, fraction) : Interpolate(shot.Position, next, fraction)); continue; }
+            { Hit(shot, hit, spatial ? SpatialInterpolate(shot.Position, next, fraction) : Interpolate(shot.Position, next, fraction)); continue; }
             shot.Position = next;
             if (shot.Position == shot.Destination) { Hit(shot, default, shot.Position); continue; }
             if (shot.Remaining <= 0) { Expire(shot); continue; }

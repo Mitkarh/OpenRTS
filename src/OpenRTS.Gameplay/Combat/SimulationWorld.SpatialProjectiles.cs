@@ -1,4 +1,5 @@
 using OpenRTS.Core.Simulation;
+using OpenRTS.Core.Navigation;
 
 namespace OpenRTS.Core;
 
@@ -67,36 +68,63 @@ public sealed partial class SimulationWorld
         return ClipAxis(from.Elevation, (long)to.Elevation - from.Elevation, -height, height, ref low, ref high) ? low : 65537;
     }
 
-    private bool SpatialTerrainClear(WorldPosition from, WorldPosition to)
+    private bool TracesCliffRelief(WeaponDefinition weapon) => weapon.SpatialTrajectory && _baseGrid?.HasSurfaceCuts == true;
+
+    // Ground poses give the support height. Fire from inside the existing ground hit volume.
+    private WorldPosition WeaponPoint(WorldPosition point, WeaponDefinition weapon) => TracesCliffRelief(weapon)
+        ? point with { Elevation = point.Elevation + 128 } : point;
+
+    private bool SpatialTerrainClear(WorldPosition from, WorldPosition to) => SpatialTerrainHit(from, to) == 65537;
+
+    private int SpatialTerrainHit(WorldPosition from, WorldPosition to)
     {
-        if (_baseGrid is not { } grid) return true;
+        if (_baseGrid is not { } grid) return 65537;
         int size = grid.CellSize;
-        if (Math.Min(from.X, to.X) < 0 || Math.Min(from.Y, to.Y) < 0 || Math.Max(from.X, to.X) >= Width || Math.Max(from.Y, to.Y) >= Depth) return false;
+        if (Math.Min(from.X, to.X) < 0 || Math.Min(from.Y, to.Y) < 0 || Math.Max(from.X, to.X) >= Width || Math.Max(from.Y, to.Y) >= Depth) return 0;
         int x = from.X / size, y = from.Y / size, ex = to.X / size, ey = to.Y / size;
         long dx = (long)to.X - from.X, dy = (long)to.Y - from.Y;
         int sx = Math.Sign(dx), sy = Math.Sign(dy);
         long ax = Math.Abs(dx), ay = Math.Abs(dy);
         long tx = sx > 0 ? (long)(x + 1) * size - from.X : from.X - (long)x * size;
         long ty = sy > 0 ? (long)(y + 1) * size - from.Y : from.Y - (long)y * size;
+        bool relief = grid.HasSurfaceCuts;
+        int first = 65537;
         while (true)
         {
-            if (!ClearCell(x, y)) return false;
-            if (x == ex && y == ey) return true;
-            if (x != ex && y != ey && tx * ay == ty * ax && !ClearCell(x, y + sy)) return false;
+            Visit(x, y);
+            if (relief && sx == 0 && x > 0 && from.X % size == 0) Visit(x - 1, y);
+            if (relief && sy == 0 && y > 0 && from.Y % size == 0) Visit(x, y - 1);
+            if (relief && sx == 0 && sy == 0 && x > 0 && y > 0 && from.X % size == 0 && from.Y % size == 0)
+                Visit(x - 1, y - 1);
+            if ((!relief && first <= 65536) || x == ex && y == ey) return first;
+            if (x != ex && y != ey && tx * ay == ty * ax) Visit(x, y + sy);
             if (x != ex && (y == ey || tx * ay <= ty * ax)) { x += sx; tx += size; }
             else { y += sy; ty += size; }
         }
-        bool ClearCell(int cx, int cy)
+        void Visit(int cx, int cy)
         {
             int cell = cy * grid.Width + cx;
             var bounds = new WorldBox(cx * size, cy * size, (cx + 1) * size, (cy + 1) * size);
             int surface = grid.SurfaceAt(cell).Elevation;
             // shortcut: binary terrain blockers have a 512-unit height; author obstacle heights when a game needs tall air obstacles.
-            int top = surface + (grid.IsBlocked(cell) ? 512 : -1);
-            if (SpatialBoxHit(from, to, bounds, -WorldPosition.MaximumExtent, top) <= 65536) return false;
+            int extra = grid.IsBlocked(cell) ? 512 : -1;
+            var cut = grid.SurfaceCutAt(cell);
+            first = Math.Min(first, SpatialBoxHit(from, to, bounds, -WorldPosition.MaximumExtent, surface + extra));
+            if (cut.UpperElevation > surface && cut.UpperCorner != SurfaceCorner.None)
+            {
+                // The low slab covers the square. Only the upper triangle adds rock above it.
+                int low = 0, high = Math.Min(first, 65536);
+                long start = cut.SignedDistance(from.X - bounds.MinX, from.Y - bounds.MinY, size);
+                long end = cut.SignedDistance(to.X - bounds.MinX, to.Y - bounds.MinY, size);
+                if (ClipAxis(from.X, dx, bounds.MinX, bounds.MaxX, ref low, ref high) &&
+                    ClipAxis(from.Y, dy, bounds.MinY, bounds.MaxY, ref low, ref high) &&
+                    ClipAxis(start, end - start, 0, size, ref low, ref high) &&
+                    ClipAxis(from.Elevation, (long)to.Elevation - from.Elevation,
+                        -WorldPosition.MaximumExtent, cut.UpperElevation + extra, ref low, ref high))
+                    first = Math.Min(first, low);
+            }
             foreach (int obstacle in grid.ObstaclesAt(cell))
-                if (SpatialBoxHit(from, to, grid.Obstacle(obstacle), surface, surface + 512) <= 65536) return false;
-            return true;
+                first = Math.Min(first, SpatialBoxHit(from, to, grid.Obstacle(obstacle), surface, surface + 512));
         }
     }
 }

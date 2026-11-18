@@ -47,7 +47,8 @@ public sealed partial class SimulationWorld
     {
         var actor = _entityHandles[index];
         var from = actor.Get<SpatialState>().Position;
-        var muzzle = ObjectGeometry.ClosestPoint(TypeOf(actor), from, point) with { Elevation = from.Elevation };
+        var muzzle = WeaponPoint(ObjectGeometry.ClosestPoint(TypeOf(actor), from, point) with { Elevation = from.Elevation }, weapon);
+        point = WeaponPoint(point, weapon);
         bool spatial = weapon.SpatialTrajectory || IsAircraft(actor);
         return ProjectileDistanceSquared(muzzle, point, spatial) <= (long)weapon.Range * weapon.Range &&
             (_baseGrid is null || (spatial ? SpatialTerrainClear(muzzle, point) : TerrainGeometry.Clear(_baseGrid, muzzle, point, 0)));

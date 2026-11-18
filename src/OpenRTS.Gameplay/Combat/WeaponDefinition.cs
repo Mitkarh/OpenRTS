@@ -5,6 +5,7 @@ namespace OpenRTS.Core.Combat;
 
 public enum ArmorKind { Living, Mechanical, Building }
 public enum ProjectileKind { Hitscan, Cannon, Missile, Grenade }
+public enum ProjectileTrajectory { Planar, Direct }
 public enum WeaponEffect { Damage, Repair }
 
 /// <summary>Gameplay only. Distances are fixed world units, durations are simulation ticks, modifiers are percent.</summary>
@@ -13,7 +14,8 @@ public sealed record WeaponDefinition
     public string Id { get; }
     public TargetCategories Targets { get; }
     public TargetCategories? ExcludedTargets { get; }
-    public bool SpatialTrajectory { get; }
+    public ProjectileTrajectory Trajectory { get; }
+    public bool SpatialTrajectory => Trajectory == ProjectileTrajectory.Direct;
     public SensorDisplay MinimumContact { get; }
     public int Range { get; }
     public int AcquireRange { get; }
@@ -39,17 +41,19 @@ public sealed record WeaponDefinition
         int projectileSpeed = 256, int travelLimit = 16384, int splashRadius = 0,
         int burst = 1, int burstIntervalTicks = 2, int animationTicks = 4,
         int livingModifier = 100, int mechanicalModifier = 100, int buildingModifier = 100, bool friendlyFire = false, int passengerDamage = 0, bool passengerDamageSpill = false, TargetCategories? targets = null, bool spatialTrajectory = false, TargetCategories? excludedTargets = null,
-        SensorDisplay minimumContact = SensorDisplay.Model)
+        SensorDisplay minimumContact = SensorDisplay.Model, ProjectileTrajectory? trajectory = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        Targets = targets ?? TargetCategories.Ground; ExcludedTargets = excludedTargets; SpatialTrajectory = spatialTrajectory;
+        Targets = targets ?? TargetCategories.Ground; ExcludedTargets = excludedTargets;
+        Trajectory = trajectory ?? (spatialTrajectory ? ProjectileTrajectory.Direct : ProjectileTrajectory.Planar);
         MinimumContact = minimumContact;
         if (range is < 512 or > 8192 || acquireRange < range || acquireRange > 12288 || damage is < 0 or > 1000000 || damage == 0 && passengerDamage == 0 ||
             cooldownTicks is < 1 or > 1000000 || windupTicks is < 0 or > 1000 || burst is < 1 or > 64 ||
             burstIntervalTicks is < 1 or > 10000 || animationTicks is < 1 or > 1000 ||
             projectileSpeed is < 1 or > 4096 || travelLimit < range || travelLimit > 65536 || splashRadius is < 0 or > 8192 ||
             passengerDamage is < 0 or > 1000000 || passengerDamageSpill && passengerDamage == 0 ||
-            !Enum.IsDefined(projectile) || !Enum.IsDefined(effect) || !Enum.IsDefined(minimumContact) ||
+            !Enum.IsDefined(projectile) || !Enum.IsDefined(Trajectory) || spatialTrajectory && !SpatialTrajectory ||
+            !Enum.IsDefined(effect) || !Enum.IsDefined(minimumContact) ||
             livingModifier is < 0 or > 1000 || mechanicalModifier is < 0 or > 1000 || buildingModifier is < 0 or > 1000 ||
             effect == WeaponEffect.Repair && (projectile != ProjectileKind.Hitscan || splashRadius != 0 || friendlyFire || passengerDamage != 0 || minimumContact != SensorDisplay.Model))
             throw new ArgumentException("Invalid weapon range, timing, projectile or effect parameters.");

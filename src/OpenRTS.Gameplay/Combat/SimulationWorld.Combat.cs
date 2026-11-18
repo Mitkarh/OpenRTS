@@ -61,17 +61,17 @@ public sealed partial class SimulationWorld
             }
         return compatible ?? best;
     }
-    private bool InWeaponRange(int index, int target, int range, bool repair = false) => InWeaponRange(index, target, range, out _, repair);
+    private bool InWeaponRange(int index, int target, int range, WeaponDefinition weapon) => InWeaponRange(index, target, range, weapon, out _);
 
-    private bool InWeaponRange(int index, int target, int range, out long distanceSquared, bool repair = false)
+    private bool InWeaponRange(int index, int target, int range, WeaponDefinition weapon, out long distanceSquared)
     {
         ref var source = ref _entityHandles[index];
         ref var other = ref _entityHandles[target];
         distanceSquared = ObjectGeometry.DistanceSquared(TypeOf(source), source.Get<SpatialState>().Position, TypeOf(other), other.Get<SpatialState>().Position, out var from, out var to);
-        bool spatial = (IsAircraft(source) || IsAircraft(other)) && !(repair && TypeOf(source).Flight is { Mode: FlightMode.Hover });
+        bool spatial = TracesCliffRelief(weapon) || (IsAircraft(source) || IsAircraft(other)) && !(weapon.Effect == WeaponEffect.Repair && TypeOf(source).Flight is { Mode: FlightMode.Hover });
         long dz = (long)from.Elevation - to.Elevation;
         return distanceSquared <= (long)range * range && (!spatial || distanceSquared + dz * dz <= (long)range * range) &&
-            (_baseGrid is null || (spatial ? SpatialTerrainClear(from, to) : TerrainGeometry.Clear(_baseGrid, from, to, 0)));
+            (_baseGrid is null || (spatial ? SpatialTerrainClear(WeaponPoint(from, weapon), WeaponPoint(to, weapon)) : TerrainGeometry.Clear(_baseGrid, from, to, 0)));
     }
     private WorldPosition AimPoint(int source, int target) => ObjectGeometry.ClosestPoint(TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, _entityHandles[source].Get<SpatialState>().Position);
 
@@ -94,7 +94,7 @@ public sealed partial class SimulationWorld
         foreach (var candidateId in _combatCandidates)
         {
             if (!ValidTarget(index, candidateId, weapon, out int candidate) ||
-                !InWeaponRange(index, candidate, range, out long distance, weapon.Effect == WeaponEffect.Repair)) continue;
+                !InWeaponRange(index, candidate, range, weapon, out long distance)) continue;
             long score = 0;
             if (rule is not null)
             {
@@ -173,7 +173,7 @@ public sealed partial class SimulationWorld
                             weapon.CanAttackContact(contact.Level) && ContactInRange(origin, contact.Position, weapon))
                         {
                             ground = true;
-                            point = contact.Position;
+                            point = WeaponPoint(contact.Position, weapon);
                             entityPresentation.AimPoint = point;
                         }
                     }
@@ -186,12 +186,12 @@ public sealed partial class SimulationWorld
                     else
                     {
                         var preferred = repairOrder ? entityOrders.ActiveOrder.Target : entityOrders.CombatTarget;
-                        if (!ValidTarget(origin, preferred, weapon, out target) || !InWeaponRange(origin, target, weapon.Range, weapon.Effect == WeaponEffect.Repair))
+                        if (!ValidTarget(origin, preferred, weapon, out target) || !InWeaponRange(origin, target, weapon.Range, weapon))
                         {
                             target = -1;
                             if (!repairOrder && (weapon.Effect == WeaponEffect.Damage || state.AutoCast))
                             {
-                                if (ValidTarget(origin, state.Target, weapon, out int previous) && InWeaponRange(origin, previous, weapon.Range, weapon.Effect == WeaponEffect.Repair)) target = previous;
+                                if (ValidTarget(origin, state.Target, weapon, out int previous) && InWeaponRange(origin, previous, weapon.Range, weapon)) target = previous;
                                 else if ((Tick + entityIdentity.Id.Value + mountIndex) % 4 == 0 || entityOrders.OrderStarted == Tick) target = AcquireWeaponTarget(origin, weapon);
                             }
                         }
@@ -225,6 +225,8 @@ public sealed partial class SimulationWorld
                                 muzzle = ObjectGeometry.ClosestPoint(sourceType, entitySpatial.Position, point) with { Elevation = entitySpatial.Position.Elevation };
                             }
                             else ObjectGeometry.DistanceSquared(sourceType, entitySpatial.Position, TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, out muzzle, out impactPoint);
+                            muzzle = WeaponPoint(muzzle, weapon);
+                            if (!ground) impactPoint = WeaponPoint(impactPoint, weapon);
                             var hover = sourceType.Flight?.Mode == FlightMode.Hover ? HoverEndpoints.Source : HoverEndpoints.None;
                             if (!ground && TypeOf(_entityHandles[target]).Flight?.Mode == FlightMode.Hover) hover |= HoverEndpoints.Target;
                             EmitEvent(new(Tick, WorldEventKind.WeaponFired, entityIdentity.Id, impactPoint, entityIdentity.Type,
@@ -299,7 +301,7 @@ public sealed partial class SimulationWorld
             bool repair = weapon.Effect == WeaponEffect.Repair;
             if (repair ? !AreAllied(entityOwnership.Owner, owner) || id == source : entityOwnership.Owner == 0 || !weapon.FriendlyFire && AreAllied(entityOwnership.Owner, owner)) return;
             if (!WeaponAccepts(weapon, entity)) return;
-            if (weapon.SpatialTrajectory && Math.Abs((long)entity.Get<SpatialState>().Position.Elevation - position.Elevation) >
+            if ((weapon.SpatialTrajectory) && Math.Abs((long)entity.Get<SpatialState>().Position.Elevation - position.Elevation) >
                 weapon.SplashRadius + (TypeOf(entity).Flight?.HalfHeight ?? 256)) return;
             if (_types[_entityHandles[i].Get<EntityIdentity>().Type].Destruction == DestructionPolicy.Invulnerable) return;
             long value = (long)weapon.Damage * weapon.Modifier(_types[entityIdentity.Type].Armor) / 100;

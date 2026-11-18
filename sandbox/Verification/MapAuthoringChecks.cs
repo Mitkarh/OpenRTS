@@ -2,6 +2,7 @@ using DeclarativeContent;
 using Godot;
 using OpenRTS.Content;
 using OpenRTS.Core;
+using OpenRTS.Core.Combat;
 using OpenRTS.Godot.Authoring;
 using OpenRTS.Godot.Rendering;
 
@@ -138,9 +139,65 @@ public partial class MapAuthoringChecks : Node
         }
         Check(grounded && detoured && poses[0].Current == goal && poses[1].Current == high &&
             world.Report() == replay.Report(), "Movement across the plateau outline, either half, or replay was incorrect.");
+        CheckDiagonalCliffCombat(grid, infantry.Locomotor);
 
         WorldPosition? Pick(WorldPosition position) => terrain.Pick(camera,
             camera.UnprojectPosition(new Vector3(position.X, position.Elevation, position.Y) / size));
+    }
+
+    private void CheckDiagonalCliffCombat(NavigationGrid grid, OpenRTS.Core.Navigation.Locomotor locomotor)
+    {
+        var low = new WorldPosition(4608, 4608);
+        var highNearEdge = new WorldPosition(6710, 5686);
+        var highBehindRock = new WorldPosition(7680, 6656);
+        var direct = new WeaponDefinition(6144, 6144, 25, 1000, 0, projectile: ProjectileKind.Cannon,
+            projectileSpeed: 512, trajectory: ProjectileTrajectory.Direct);
+        foreach (bool uphill in new[] { true, false })
+        {
+            var blocked = uphill ? Fire(direct, low, highBehindRock) : Fire(direct, highBehindRock, low);
+            var clear = uphill ? Fire(direct, low, highNearEdge) : Fire(direct, highNearEdge, low);
+            Check(!blocked.Fired && blocked.Health == 100 && clear.Fired && clear.Health == 75,
+                $"Direct fire {(uphill ? "uphill" : "downhill")} failed to distinguish rock from a clear ray.");
+        }
+        var planar = new WeaponDefinition(6144, 6144, 25, 1000, 0, projectile: ProjectileKind.Cannon);
+        Check(Fire(planar, low, highBehindRock).Health == 75, "Planar weapon behavior changed on the cliff map.");
+        Check(Fire(direct, new(6400, 5376), new(5632, 5632)).Health == 75,
+            "The upper half of a cut incorrectly obstructed a ray entirely on low ground.");
+        var missile = new WeaponDefinition(6144, 6144, 25, 1000, 0, projectile: ProjectileKind.Missile,
+            projectileSpeed: 96, trajectory: ProjectileTrajectory.Direct);
+        var redirected = Fire(missile, low, highNearEdge, moveTarget: true);
+        Check(redirected.Fired && redirected.Health == 100 && redirected.Impact is { } impact &&
+            impact.TargetEntity == default && impact.Position.Elevation is > 0 and < 1024 &&
+            Math.Abs(impact.Position.X + impact.Position.Y - 12 * 1024) <= 2,
+            $"A missile steered into rock instead of striking the diagonal wall: {redirected}.");
+
+        (bool Fired, int Health, WorldEvent? Impact) Fire(WeaponDefinition weapon, WorldPosition from, WorldPosition to,
+            bool moveTarget = false)
+        {
+            var body = BodyShape.Circle(64);
+            using var shotWorld = new SimulationWorld([
+                new("test-gun", 100, ["idle", "fire"], body: body, weapon: weapon, movable: false, locomotor: locomotor),
+                new("test-target", 100, body: body, locomotor: locomotor)
+            ], grid.Width * grid.CellSize, grid.Height * grid.CellSize, navigationGrid: grid);
+            shotWorld.AddInitialUnit(0, from, owner: 1);
+            shotWorld.AddInitialUnit(1, to, owner: 2);
+            shotWorld.Step([new(1, 0, 1, CommandKind.AttackTarget, new(1), TargetEntity: new(2))]);
+            bool fired = false;
+            WorldEvent? impact = null;
+            for (int tick = 1; tick <= 96; tick++)
+            {
+                foreach (var e in shotWorld.Events)
+                    if (e.Kind == WorldEventKind.WeaponFired) fired = true;
+                    else if (e.Kind == WorldEventKind.ProjectileImpact) impact = e;
+                if (impact.HasValue) break;
+                if (tick == 1 && moveTarget)
+                    shotWorld.Step([new(2, 0, 2, CommandKind.Move, new(2), new(8704, 7680, 1024))]);
+                else shotWorld.Step();
+            }
+            var poses = new EntityPose[2];
+            shotWorld.CopyPoses(poses);
+            return (fired, poses[1].Health, impact);
+        }
     }
 
     private void Run()

@@ -175,7 +175,7 @@ public sealed partial class SimulationWorld
             bool aggressive = entityOrders.HasOrder && entityOrders.ActiveOrder.Kind == UnitActionKind.AttackMove;
             int range = aggressive ? weapon.AcquireRange : weapon.Range;
             if (attack) entityOrders.CombatTarget = entityOrders.ActiveOrder.Target;
-            if (!ValidTarget(i, entityOrders.CombatTarget, weapon, out int target) || !attack && !InWeaponRange(i, target, range, weapon.Effect == WeaponEffect.Repair))
+            if (!ValidTarget(i, entityOrders.CombatTarget, weapon, out int target) || !attack && !InWeaponRange(i, target, range, weapon))
             {
                 if (entityOrders.CombatTarget.Value != 0)
                 {
@@ -187,13 +187,13 @@ public sealed partial class SimulationWorld
                 }
                 if ((Tick + entityIdentity.Id.Value) % 4 != 0 && entityOrders.OrderStarted != Tick) continue;
                 target = AcquireWeaponTarget(i, weapon, range);
-                if (target < 0 || !InWeaponRange(i, target, range, weapon.Effect == WeaponEffect.Repair)) continue;
+                if (target < 0 || !InWeaponRange(i, target, range, weapon)) continue;
                 entityOrders.CombatTarget = _entityHandles[target].Get<EntityIdentity>().Id;
             }
             entityPresentation.HasAim = true; entityPresentation.AimEntity = entityOrders.CombatTarget;
             if (repair && !PrepareAirWork(entity, _entityHandles[target].Get<SpatialState>().Position))
             { entityOrders.OrderPhase = OrderPhase.Approaching; continue; }
-            if (InWeaponRange(i, target, weapon.Range, weapon.Effect == WeaponEffect.Repair) && (_types[entityIdentity.Type].Footprint is not null || StopAllowed(entityIdentity.Type, entity.Get<SpatialState>().Position))) { Halt(i); entityOrders.OrderPhase = OrderPhase.Engaging; }
+            if (InWeaponRange(i, target, weapon.Range, weapon) && (_types[entityIdentity.Type].Footprint is not null || StopAllowed(entityIdentity.Type, entity.Get<SpatialState>().Position))) { Halt(i); entityOrders.OrderPhase = OrderPhase.Engaging; }
             else if ((aggressive || attack) && _types[entityIdentity.Type].Movable)
             {
                 if (!entityMotion.Moving || (Tick + entityIdentity.Id.Value) % 4 == 0)

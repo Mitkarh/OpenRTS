@@ -12,6 +12,24 @@ internal static class WeaponChecks
     private static WeaponPose[] Mounts(SimulationWorld world) { var poses = new WeaponPose[world.WeaponCount]; world.CopyWeaponPoses(poses); return poses; }
     public static void Run(Action<string, Action> test)
     {
+        test("Weapons: Trajectory chooses direct or planar flight and supports legacy YAML", () =>
+        {
+            WeaponDefinition Load(string fields) => WeaponCatalog.Load([new("test weapon", $"test: {{Weapon: {{{fields}}}}}")]).Weapons["test"];
+            NavigationChecks.Check(Load("Trajectory: Direct").Trajectory == ProjectileTrajectory.Direct &&
+                State(Load("Trajectory: Direct")).SequenceEqual(State(Load("SpatialTrajectory: true"))) &&
+                State(Load("Trajectory: Planar")).SequenceEqual(State(Load("SpatialTrajectory: false"))) &&
+                Load("").Trajectory == ProjectileTrajectory.Planar, "Trajectory did not normalize to the existing weapon modes.");
+            NavigationChecks.Reject<ContentException>(() => Load("Trajectory: Direct, SpatialTrajectory: false"));
+            NavigationChecks.Reject<ContentException>(() => Load("Trajectory: Arc"));
+
+            static byte[] State(WeaponDefinition weapon)
+            {
+                using var bytes = new MemoryStream();
+                using var writer = new BinaryWriter(bytes);
+                weapon.WriteState(writer);
+                return bytes.ToArray();
+            }
+        });
         test("Weapons: slow spatial projectiles advance within their budget and hit diagonal targets", () =>
         {
             foreach (var offset in new WorldPosition[] { new(1, 1, 1), new(256, 256, 256), new(-256, -256, 256) })

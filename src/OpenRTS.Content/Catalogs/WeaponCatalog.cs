@@ -19,10 +19,12 @@ public sealed class WeaponCatalog
         foreach (var (id, node) in definitions.Concrete.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
             var o = registry.Compile(id, node).Create(id).Single<WeaponOptions>();
+            if (o.Trajectory is { } trajectory && o.SpatialTrajectory is bool spatial && spatial != (trajectory == ProjectileTrajectory.Direct))
+                throw node.Error(id + ".Weapon.Trajectory", "Trajectory conflicts with SpatialTrajectory.");
             try { weapons.Add(id, new(o.Range, o.AcquireRange, o.Damage, o.ReloadTicks, o.WindupTicks, id, o.Projectile, o.Effect,
                 o.Speed, o.TravelLimit, o.SplashRadius, o.Burst, o.BurstIntervalTicks, o.AnimationTicks,
-                o.Versus.Living, o.Versus.Mechanical, o.Versus.Building, o.FriendlyFire, o.PassengerDamage, o.PassengerDamageSpill, new TargetCategories(o.Targets), o.SpatialTrajectory,
-                o.ExcludedTargets.Length == 0 ? null : new TargetCategories(o.ExcludedTargets), o.MinimumContact)); }
+                o.Versus.Living, o.Versus.Mechanical, o.Versus.Building, o.FriendlyFire, o.PassengerDamage, o.PassengerDamageSpill, new TargetCategories(o.Targets), o.SpatialTrajectory ?? false,
+                o.ExcludedTargets.Length == 0 ? null : new TargetCategories(o.ExcludedTargets), o.MinimumContact, o.Trajectory)); }
             catch (ArgumentException error) { throw node.Error(id + ".Weapon", error.Message); }
         }
         return new(weapons);
@@ -31,7 +33,8 @@ public sealed class WeaponCatalog
     {
         public string[] Targets { get; set; } = ["ground"];
         public string[] ExcludedTargets { get; set; } = [];
-        public bool SpatialTrajectory { get; set; }
+        public bool? SpatialTrajectory { get; set; }
+        public ProjectileTrajectory? Trajectory { get; set; }
         public SensorDisplay MinimumContact { get; set; } = SensorDisplay.Model;
         public int Range { get; set; } = 4096;
         public int AcquireRange { get; set; } = 8192;
