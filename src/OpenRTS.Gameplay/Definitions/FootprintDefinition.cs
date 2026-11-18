@@ -64,13 +64,18 @@ public sealed class FootprintDefinition
                 for (int x = box.MinX / size; x < box.MaxX / size; x++)
                 {
                     int index = y * grid.Width + x;
-                    int terrain = grid.TerrainAt(index);
-                    bool canStop = terrain < profile.Rules.Count ? profile.At(grid, index).CanStop :
-                        ReferenceEquals(profile, Locomotor.Default) || profile.Rules.Count == 1 && profile.Rules[0] == TerrainRule.Ground;
-                    if (grid.IsBlocked(index) || !grid.CanStop(index) || !canStop || grid.ObstaclesAt(index).Length != 0) return false;
+                    if (grid.IsBlocked(index) || !grid.CanStop(index) || !CanSupport(index, upper: false) ||
+                        grid.HasSplitTerrain && !CanSupport(index, upper: true) || grid.ObstaclesAt(index).Length != 0) return false;
                 }
         }
         return true;
+
+        bool CanSupport(int index, bool upper)
+        {
+            int terrain = grid.TerrainAt(index, upper);
+            return terrain < profile.Rules.Count ? profile.At(grid, index, upper).CanStop :
+                ReferenceEquals(profile, Locomotor.Default) || profile.Rules.Count == 1 && profile.Rules[0] == TerrainRule.Ground;
+        }
     }
     internal FootprintDefinition TurnClockwise() => new(Height, Width,
         Cells.Select(cell => cell with { X = Height - 1 - cell.Y, Y = cell.X }), CellSize);

@@ -9,17 +9,20 @@ public readonly record struct SurfaceRise(int X = 0, int Y = 0);
 public enum SurfaceCorner { None, NorthWest, NorthEast, SouthEast, SouthWest }
 
 /// <summary>Two flat triangles separated by a diagonal wall. The sample stores the lower elevation.</summary>
-public readonly record struct SurfaceCut(SurfaceCorner UpperCorner, int UpperElevation)
+public readonly record struct SurfaceCut(SurfaceCorner UpperCorner, int UpperElevation, byte? UpperTerrain = null)
 {
     public bool DescendingDiagonal => UpperCorner is SurfaceCorner.NorthEast or SurfaceCorner.SouthWest;
 
-    public bool IsUpper(int x, int y, int size) => UpperCorner switch
+    public bool IsUpper(int x, int y, int size) => UpperCorner != SurfaceCorner.None && SignedDistance(x, y, size) >= 0;
+
+    /// <summary>Unnormalized signed distance from the diagonal in local coordinates.</summary>
+    public long SignedDistance(long x, long y, int size) => UpperCorner switch
     {
-        SurfaceCorner.NorthWest => x + y <= size,
-        SurfaceCorner.NorthEast => x >= y,
-        SurfaceCorner.SouthEast => x + y >= size,
-        SurfaceCorner.SouthWest => x <= y,
-        _ => false
+        SurfaceCorner.NorthWest => size - x - y,
+        SurfaceCorner.NorthEast => x - y,
+        SurfaceCorner.SouthEast => x + y - size,
+        SurfaceCorner.SouthWest => y - x,
+        _ => 0
     };
 }
 
@@ -33,6 +36,8 @@ public sealed partial class NavigationGrid
     private readonly SurfaceSample[]? _surface;
     private readonly SurfaceRise[]? _rises;
     private readonly Dictionary<int, SurfaceCut>? _cuts;
+    private readonly HashSet<int>? _paintedCuts;
+    private readonly int _maximumUpperTerrain;
     private readonly WorldBox[] _obstacles;
     private readonly Dictionary<int, int[]> _obstacleCells;
     public bool HasGeometry => _surface is not null || _obstacles.Length > 0;
@@ -40,7 +45,8 @@ public sealed partial class NavigationGrid
     public bool HasSlopedSurface => _rises is not null;
     public bool HasSurfaceCuts => _cuts is not null;
     public IReadOnlyList<WorldBox> Obstacles => Array.AsReadOnly(_obstacles);
-    public bool HasTerrain => _terrain is not null;
+    public bool HasTerrain => _terrain is not null || HasSplitTerrain;
+    public bool HasSplitTerrain { get; }
     public bool HasStoppingRestrictions => _noStop is not null;
     public int MaximumTerrain { get; }
     public int Width { get; }
@@ -91,10 +97,17 @@ public sealed partial class NavigationGrid
             {
                 if (_surface is null || (uint)cell >= CellCount || SurfaceRiseAt(cell) != default ||
                     cut.UpperCorner is < SurfaceCorner.NorthWest or > SurfaceCorner.SouthWest ||
-                    cut.UpperElevation <= _surface[cell].Elevation || cut.UpperElevation > 1048576)
+                    cut.UpperElevation < _surface[cell].Elevation || cut.UpperElevation > 1048576 ||
+                    cut.UpperElevation == _surface[cell].Elevation && (!cut.UpperTerrain.HasValue || cut.UpperTerrain == TerrainAt(cell)))
                     throw new ArgumentException("A cut requires two bounded flat heights and an upper corner.", nameof(cuts));
                 _cuts.Add(cell, cut);
+                if (cut.UpperTerrain is { } upperTerrain)
+                {
+                    HasSplitTerrain = true;
+                    _maximumUpperTerrain = Math.Max(_maximumUpperTerrain, upperTerrain);
+                }
             }
+            MaximumTerrain = Math.Max(MaximumTerrain, _maximumUpperTerrain);
         }
         _obstacles = obstacles?.Distinct().OrderBy(b => b.MinY).ThenBy(b => b.MinX).ThenBy(b => b.MaxY).ThenBy(b => b.MaxX).ToArray() ?? [];
         if (_obstacles.Length > 65536 || _obstacles.Any(b => b.MinX < 0 || b.MinY < 0 || b.MaxX > Width * CellSize || b.MaxY > Height * CellSize || b.MinX >= b.MaxX || b.MinY >= b.MaxY)) throw new ArgumentException("Invalid partial obstacles.", nameof(obstacles));
@@ -122,16 +135,19 @@ public sealed partial class NavigationGrid
         Revision = checked(previous.Revision + 1);
         _terrain = previous._terrain; MaximumTerrain = previous.MaximumTerrain; _noStop = previous._noStop;
         _surface = previous._surface; _rises = previous._rises; _cuts = previous._cuts; _obstacles = previous._obstacles; _obstacleCells = previous._obstacleCells;
+        _paintedCuts = previous._paintedCuts; HasSplitTerrain = previous.HasSplitTerrain; _maximumUpperTerrain = previous._maximumUpperTerrain;
         _blocked = (uint[])previous._blocked.Clone();
         uint bit = 1u << (cell & 31);
         if (blocked) _blocked[cell >> 5] |= bit;
         else _blocked[cell >> 5] &= ~bit;
     }
 
-    private NavigationGrid(NavigationGrid basis, uint[] blocked, byte[]? terrain, uint[]? noStop, int revision)
+    private NavigationGrid(NavigationGrid basis, uint[] blocked, byte[]? terrain, uint[]? noStop, HashSet<int>? paintedCuts, int revision)
     {
         Width = basis.Width; Height = basis.Height; CellSize = basis.CellSize; Revision = revision;
-        _blocked = blocked; _terrain = terrain; _noStop = noStop; MaximumTerrain = terrain?.Max() ?? 0;
+        _blocked = blocked; _terrain = terrain; _noStop = noStop; _paintedCuts = paintedCuts;
+        HasSplitTerrain = basis.HasSplitTerrain; _maximumUpperTerrain = basis._maximumUpperTerrain;
+        MaximumTerrain = Math.Max(terrain?.Max() ?? 0, _maximumUpperTerrain);
         _surface = basis._surface; _rises = basis._rises; _cuts = basis._cuts; _obstacles = basis._obstacles; _obstacleCells = basis._obstacleCells;
     }
     /// <summary>Overlays valid cell indices on this base grid and compares against the current revision of the same grid.</summary>
@@ -139,17 +155,25 @@ public sealed partial class NavigationGrid
     {
         var blocked = (uint[])_blocked.Clone(); var stop = _noStop is null ? new uint[blocked.Length] : (uint[])_noStop.Clone();
         byte[]? terrain = _terrain is null ? null : (byte[])_terrain.Clone();
+        HashSet<int>? paintedCuts = null;
         foreach (var (cell, patch) in patches)
         {
             uint bit = 1u << (cell & 31);
             if (patch.Traverse is { } traverse) { if (traverse) blocked[cell >> 5] &= ~bit; else blocked[cell >> 5] |= bit; }
             if (patch.CanStop is { } canStop) { if (canStop) stop[cell >> 5] &= ~bit; else stop[cell >> 5] |= bit; }
-            if (patch.Terrain is { } type) { terrain ??= new byte[CellCount]; terrain[cell] = type; }
+            if (patch.Terrain is { } type)
+            {
+                terrain ??= new byte[CellCount]; terrain[cell] = type;
+                if (HasSplitTerrain && SurfaceCutAt(cell).UpperTerrain is { } upper && upper != type)
+                    (paintedCuts ??= []).Add(cell);
+            }
         }
         if (_terrain is null && terrain is not null && !terrain.Any(t => t != 0)) terrain = null;
         uint[]? finalStop = stop.Any(t => t != 0) ? stop : null;
-        if (blocked.AsSpan().SequenceEqual(current._blocked) && Equal(terrain, current._terrain) && Equal(finalStop, current._noStop)) return current;
-        return new(this, blocked, terrain, finalStop, checked(current.Revision + 1));
+        bool sameCuts = paintedCuts is null ? current._paintedCuts is null :
+            current._paintedCuts is not null && paintedCuts.SetEquals(current._paintedCuts);
+        if (sameCuts && blocked.AsSpan().SequenceEqual(current._blocked) && Equal(terrain, current._terrain) && Equal(finalStop, current._noStop)) return current;
+        return new(this, blocked, terrain, finalStop, paintedCuts, checked(current.Revision + 1));
         static bool Equal<T>(T[]? a, T[]? b) where T : IEquatable<T> => a is null ? b is null : b is not null && a.AsSpan().SequenceEqual(b);
     }
     public bool CanStop(int cell) => !IsBlocked(cell) && (_noStop is null || (_noStop[cell >> 5] & (1u << (cell & 31))) == 0);
@@ -212,10 +236,21 @@ public sealed partial class NavigationGrid
         return (_blocked[index >> 5] & (1u << (index & 31))) != 0;
     }
 
+    /// <summary>Terrain of the whole cell or its lower triangle when split.</summary>
     public byte TerrainAt(int index)
     {
         if ((uint)index >= (uint)CellCount) throw new ArgumentOutOfRangeException(nameof(index));
         return _terrain?[index] ?? 0;
+    }
+
+    public byte TerrainAt(int index, bool upper) => upper && _paintedCuts?.Contains(index) != true &&
+        SurfaceCutAt(index).UpperTerrain is { } terrain ? terrain : TerrainAt(index);
+
+    public byte TerrainAt(WorldPosition point)
+    {
+        int cell = CellAt(point);
+        return HasSplitTerrain && SurfaceCutAt(cell).IsUpper(point.X - cell % Width * CellSize, point.Y - cell / Width * CellSize, CellSize)
+            ? TerrainAt(cell, upper: true) : TerrainAt(cell);
     }
 
     public NavigationGrid WithBlocked(int index, bool blocked)
@@ -247,18 +282,21 @@ public sealed partial class NavigationGrid
     {
         writer.Write(Width); writer.Write(Height); writer.Write(CellSize); writer.Write(Revision);
         foreach (uint bits in _blocked) writer.Write(bits);
-        writer.Write(HasTerrain);
+        writer.Write(_terrain is not null);
         if (_terrain is not null) writer.Write(_terrain);
         writer.Write(_noStop is not null); if (_noStop is not null) foreach (uint bits in _noStop) writer.Write(bits);
         int surfaceFormat = _surface is null ? 0 : _rises is null ? 1 : 2;
-        writer.Write((byte)(surfaceFormat | (_cuts is null ? 0 : 4)));
+        writer.Write((byte)(surfaceFormat | (_cuts is null ? 0 : 4) | (HasSplitTerrain ? 8 : 0)));
         if (_surface is not null) foreach (var sample in _surface) { writer.Write(sample.Elevation); writer.Write(sample.Slope); writer.Write(sample.Depth); }
         if (_rises is not null) foreach (var rise in _rises) { writer.Write(rise.X); writer.Write(rise.Y); }
         if (_cuts is not null)
         {
             writer.Write(_cuts.Count);
             foreach (var (cell, cut) in _cuts.OrderBy(pair => pair.Key))
-            { writer.Write(cell); writer.Write((byte)cut.UpperCorner); writer.Write(cut.UpperElevation); }
+            {
+                writer.Write(cell); writer.Write((byte)cut.UpperCorner); writer.Write(cut.UpperElevation);
+                if (HasSplitTerrain) writer.Write(cut.UpperTerrain is null ? (short)-1 : TerrainAt(cell, upper: true));
+            }
         }
         writer.Write(_obstacles.Length); foreach (var box in _obstacles) { writer.Write(box.MinX); writer.Write(box.MinY); writer.Write(box.MaxX); writer.Write(box.MaxY); }
     }

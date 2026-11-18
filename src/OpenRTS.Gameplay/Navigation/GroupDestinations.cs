@@ -12,7 +12,8 @@ internal static class GroupDestinations
         int Pitch = Math.Max(1024, (profiles?.Max(p => Math.Max(p.Body.HalfWidth, p.Body.HalfHeight)) ?? 256) * 2 + 2);
         bool Clear(WorldPosition a, WorldPosition b) => profiles is null ? TerrainGeometry.Clear(grid, a, b, MotionIndex.BodyRadius) :
             profiles.All(p => TerrainGeometry.Clear(grid, a, b, p.Body, p));
-        bool Stop(WorldPosition p) => (profiles is null || profiles.All(profile => profile.At(grid, grid.CellAt(p)).CanStop)) && (allowed is null || allowed(p));
+        bool Stop(WorldPosition p) => (profiles is null || profiles.All(profile => grid.HasSplitTerrain
+            ? TerrainGeometry.CanStop(grid, p, profile.Body, profile) : profile.At(grid, p).CanStop)) && (allowed is null || allowed(p));
         if (!Clear(anchor, anchor) || !Stop(anchor)) return null;
         int width = grid.Width * grid.CellSize, height = grid.Height * grid.CellSize, radius = profiles?.Max(p => Math.Max(p.Body.HalfWidth, p.Body.HalfHeight)) ?? MotionIndex.BodyRadius;
         int maxColumns = (width - radius * 2) / Pitch + 1, maxRows = (height - radius * 2) / Pitch + 1;

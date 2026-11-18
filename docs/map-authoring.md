@@ -78,7 +78,7 @@ YAML позволяет задать карту непосредственно �
 
 ## Диагональный обрыв внутри клетки
 
-Откройте [DiagonalCliffs.tscn](../sandbox/examples/maps/DiagonalCliffs.tscn). В [палитре](../sandbox/examples/maps/DiagonalCliffTiles.tres) слева идут низина, плато и четыре разреза. Для собственной палитры задайте в custom data `Elevation` для нижней половины, `Rise = (0, 0)`, `UpperCorner` от 1 до 4 по часовой стрелке от северо-запада и `UpperElevation` для верхней половины. У обычного тайла оба поля `UpperCorner` и `UpperElevation` равны нулю. Выбирайте вариант нужного направления в палитре **Tiles**. [Контракт карты v4](decisions/047-map-compilation.md#версия-4--диагональные-обрывы).
+Откройте [DiagonalCliffs.tscn](../sandbox/examples/maps/DiagonalCliffs.tscn). В [палитре](../sandbox/examples/maps/DiagonalCliffTiles.tres) слева идут низина, плато, четыре обрыва и ровный берег. Для собственной палитры задайте в custom data `Elevation` для нижней половины, `Rise = (0, 0)`, `UpperCorner` от 1 до 4 по часовой стрелке от северо-запада и `UpperElevation` для верхней половины. У обычного тайла оба поля `UpperCorner` и `UpperElevation` равны нулю. Выбирайте вариант нужного направления в палитре **Tiles**. [Контракт карты v4](decisions/047-map-compilation.md#версия-4--диагональные-обрывы).
 
 Нажмите **Build and play map**. Нижний пехотинец обойдёт плато при приказе двигаться на противоположную сторону. Верхнего можно направить на верхнюю половину пограничного тайла. Клик по самой стенке пропускается.
 
@@ -86,3 +86,9 @@ YAML позволяет задать карту непосредственно �
 ./tools/dev.sh map-build res://examples/maps/DiagonalCliffs.tscn --verify
 ./tools/dev.sh run --map=res://artifacts/maps/diagonal-cliffs.ortmap.json --mod=res://rocky-pass-game.yaml
 ```
+
+## Разные типы грунта в одной клетке
+
+В том же TileSet добавьте строковый слой `UpperTerrainId`. Обычный `TerrainId` задаёт грунт нижнего треугольника, а `UpperTerrainId` — грунт треугольника со стороны `UpperCorner`. Пустое поле сохраняет общий грунт. Для отдельной фактуры в игре добавьте строковый `UpperVisualId`. Изображение самого атласного тайла задаёт, как обе половины выглядят в редакторе.
+
+В `DiagonalCliffs` плато покрыто грязью, а низина — травой. Тайл `(1, 1)` показывает берег с травой и водой на одинаковой высоте. Пехота может остановиться на траве, если всё тело помещается на ней. [Контракт карты v5](decisions/047-map-compilation.md#версия-5--раздельный-грунт).

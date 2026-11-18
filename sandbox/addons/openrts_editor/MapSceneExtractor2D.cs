@@ -43,11 +43,17 @@ internal static class MapSceneExtractor2D
         int riseLayer = tiles.GetCustomDataLayerByName("Rise");
         int upperCornerLayer = tiles.GetCustomDataLayerByName("UpperCorner");
         int upperElevationLayer = tiles.GetCustomDataLayerByName("UpperElevation");
+        int upperTerrainLayer = tiles.GetCustomDataLayerByName("UpperTerrainId");
+        int upperVisualLayer = tiles.GetCustomDataLayerByName("UpperVisualId");
         bool hasCuts = upperCornerLayer >= 0 || upperElevationLayer >= 0;
         if (hasCuts && (upperCornerLayer < 0 || upperElevationLayer < 0 ||
             tiles.GetCustomDataLayerType(upperCornerLayer) != Variant.Type.Int ||
             tiles.GetCustomDataLayerType(upperElevationLayer) != Variant.Type.Int))
             throw Error(layer, "TileSet", "Diagonal cliff tiles require integer UpperCorner and UpperElevation custom data.");
+        if ((upperTerrainLayer >= 0 || upperVisualLayer >= 0) && (!hasCuts || upperTerrainLayer < 0 ||
+            tiles.GetCustomDataLayerType(upperTerrainLayer) != Variant.Type.String ||
+            upperVisualLayer >= 0 && tiles.GetCustomDataLayerType(upperVisualLayer) != Variant.Type.String))
+            throw Error(layer, "TileSet", "Split terrain requires a string UpperTerrainId layer and optional string UpperVisualId layer.");
         MapSurfaceCell[]? surface = null;
         if (elevationLayer >= 0 || riseLayer >= 0 || hasCuts)
         {
@@ -100,7 +106,18 @@ internal static class MapSceneExtractor2D
                     throw Error(layer, $"cell {cell}.Elevation", "Use an explicit relief tile for each direction instead of flipping or transposing it.");
                 if (elevation is < int.MinValue or > int.MaxValue)
                     throw Error(layer, $"cell {cell}.Elevation", "Expected an Int32 height.");
-                surface[i] = new((int)elevation, rise.X, rise.Y, cut);
+                string? upperTerrain = OptionalId(upperTerrainLayer);
+                string? upperVisual = OptionalId(upperVisualLayer);
+                if (upperTerrain is not null && cut == default || upperVisual is not null && upperTerrain is null)
+                    throw Error(layer, $"cell {cell}.UpperTerrainId", "Upper terrain requires a cut; upper visuals require upper terrain.");
+                surface[i] = new((int)elevation, rise.X, rise.Y, cut, upperTerrain, upperVisual);
+
+                string? OptionalId(int index)
+                {
+                    if (index < 0) return null;
+                    string value = tile.GetCustomDataByLayerId(index).AsString();
+                    return value.Length == 0 ? null : value;
+                }
             }
         }
 

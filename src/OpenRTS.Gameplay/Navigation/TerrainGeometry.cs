@@ -32,9 +32,12 @@ internal static class TerrainGeometry
                 for (int cx = Math.Max(0, x - reachX); cx <= Math.Min(grid.Width - 1, x + reachX); cx++)
                 {
                     int cell = cy * grid.Width + cx;
-                    if ((grid.IsBlocked(cell) || locomotor is not null && (!locomotor.At(grid, cell).Traverse ||
-                        !graded && Math.Abs((long)grid.SurfaceAt(cell).Elevation - grid.SurfaceAt(current).Elevation) > locomotor.MaximumStep)) &&
-                        BodyGeometry.SweptBox(from, to, new(cx * size, cy * size, (cx + 1) * size, (cy + 1) * size), body)) return false;
+                    var bounds = new WorldBox(cx * size, cy * size, (cx + 1) * size, (cy + 1) * size);
+                    if ((grid.IsBlocked(cell) || locomotor is not null && !graded &&
+                        Math.Abs((long)grid.SurfaceAt(cell).Elevation - grid.SurfaceAt(current).Elevation) > locomotor.MaximumStep) &&
+                        BodyGeometry.SweptBox(from, to, bounds, body)) return false;
+                    if (locomotor is not null && TouchesRestrictedTerrain(grid, cell, bounds, from, to, body, locomotor, stopping: false))
+                        return false;
                     if (graded && locomotor is not null &&
                         TouchesCliff(grid, cx, cy, cell, locomotor.MaximumStep, from, to, body)) return false;
                     foreach (int obstacle in grid.ObstaclesAt(cell)) if (BodyGeometry.SweptBox(from, to, grid.Obstacle(obstacle), body)) return false;
@@ -82,10 +85,28 @@ internal static class TerrainGeometry
     {
         if (!Clear(grid, point, point, body, profile)) return false;
         int size = grid.CellSize;
-        for (int y = Math.Max(0, (point.Y - body.HalfHeight) / size); y <= Math.Min(grid.Height - 1, (point.Y + body.HalfHeight) / size); y++)
-            for (int x = Math.Max(0, (point.X - body.HalfWidth) / size); x <= Math.Min(grid.Width - 1, (point.X + body.HalfWidth) / size); x++)
-                if (!profile.At(grid, y * grid.Width + x).CanStop && BodyGeometry.SweptBox(point, point, new(x * size, y * size, (x + 1) * size, (y + 1) * size), body)) return false;
+        int tangent = grid.HasSplitTerrain ? 1 : 0;
+        for (int y = Math.Max(0, (point.Y - body.HalfHeight - tangent) / size); y <= Math.Min(grid.Height - 1, (point.Y + body.HalfHeight) / size); y++)
+            for (int x = Math.Max(0, (point.X - body.HalfWidth - tangent) / size); x <= Math.Min(grid.Width - 1, (point.X + body.HalfWidth) / size); x++)
+                if (TouchesRestrictedTerrain(grid, y * grid.Width + x, new(x * size, y * size, (x + 1) * size, (y + 1) * size),
+                    point, point, body, profile, stopping: true)) return false;
         return true;
+    }
+
+    private static bool TouchesRestrictedTerrain(NavigationGrid grid, int cell, WorldBox bounds, WorldPosition from,
+        WorldPosition to, BodyShape body, Locomotor profile, bool stopping)
+    {
+        var lower = profile.At(grid, cell);
+        bool lowerAllowed = stopping ? lower.CanStop : lower.Traverse;
+        if (!grid.HasSplitTerrain || grid.SurfaceCutAt(cell) is not { UpperTerrain: not null } cut)
+            return !lowerAllowed && BodyGeometry.SweptBox(from, to, bounds, body);
+        var upper = profile.At(grid, cell, upper: true);
+        bool upperAllowed = stopping ? upper.CanStop : upper.Traverse;
+        if (lowerAllowed == upperAllowed) return !lowerAllowed && BodyGeometry.SweptBox(from, to, bounds, body);
+        if (!BodyGeometry.SweptBox(from, to, bounds, body)) return false;
+        // The two right angles lie at opposite corners.
+        var forbidden = !upperAllowed ? cut.UpperCorner : (SurfaceCorner)(((int)cut.UpperCorner + 1) % 4 + 1);
+        return BodyGeometry.SweptTriangle(from, to, bounds, forbidden, body);
     }
 
     internal static bool IntersectsBox(WorldPosition a, WorldPosition b, int minX, int minY, int maxX, int maxY)

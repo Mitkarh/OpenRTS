@@ -11,7 +11,8 @@ internal sealed class TerrainSurface
     private readonly Face[] _faces;
     public ArrayMesh Mesh { get; }
 
-    public TerrainSurface(NavigationGrid grid, Func<int, int, Texture2D>? textureAt = null, Texture2D? cliff = null)
+    public TerrainSurface(NavigationGrid grid, Func<int, int, Texture2D>? textureAt = null, Texture2D? cliff = null,
+        Func<int, int, Texture2D?>? upperTextureAt = null)
     {
         _grid = grid;
         int size = grid.CellSize;
@@ -51,6 +52,8 @@ internal sealed class TerrainSurface
                         var c = VertexAt(left, bottom, lower);
                         var d = VertexAt(right, bottom, lower);
                         var lift = Vector3.Up * ((cut.UpperElevation - lower) / (float)WorldPosition.UnitsPerCell);
+                        var upperTexture = upperTextureAt?.Invoke(x, y);
+                        var upperSurface = upperTexture is null ? surface : Surface(upperTexture);
                         if (cut.DescendingDiagonal)
                         {
                             Top(a, b, d, cut.UpperCorner == SurfaceCorner.NorthEast);
@@ -67,7 +70,9 @@ internal sealed class TerrainSurface
                         void Top(Vector3 p, Vector3 q, Vector3 r, bool upper)
                         {
                             var offset = upper ? lift : Vector3.Zero;
-                            Add(surface, p + offset, q + offset, r + offset, cell, upper ? color.Darkened(0.14f) : color);
+                            var shade = upper && upperTexture is not null ? Colors.White :
+                                upper && lift != Vector3.Zero ? color.Darkened(0.14f) : color;
+                            Add(upper ? upperSurface : surface, p + offset, q + offset, r + offset, cell, shade);
                         }
                     }
                     if (x + 1 < grid.Width)

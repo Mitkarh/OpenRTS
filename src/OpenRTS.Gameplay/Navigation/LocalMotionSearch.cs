@@ -39,7 +39,8 @@ internal sealed class LocalMotionSearch
             }
             else found = TerrainGeometry.Clear(grid, point, goal, body, locomotor) && bodies.ClearSegment(token, point, goal);
             if (node != origin && found && _depth[node] < PathCapacity &&
-                (yieldFor is null || locomotor is null || locomotor.At(grid, grid.CellAt(point)).CanStop))
+                (yieldFor is null || locomotor is null || (grid.HasSplitTerrain
+                    ? TerrainGeometry.CanStop(grid, point, body, locomotor) : locomotor.At(grid, point).CanStop)))
             {
                 int length = _depth[node], cursor = node;
                 for (int i = length - 1; i >= 0; i--) { path[i] = Position(cursor); cursor = _parents[cursor]; }

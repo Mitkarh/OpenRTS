@@ -102,6 +102,15 @@ public partial class MapAuthoringChecks : Node
         var low = new WorldPosition(6 * size + 256, 5 * size + 256);
         var high = new WorldPosition(6 * size + 768, 5 * size + 768, size);
         Check(Pick(low) == low && Pick(high) == high, "Picking the two halves lost XY or selected the wrong floor.");
+        var shore = new WorldPosition(size + 256, size + 768);
+        var water = new WorldPosition(size + 768, size + 256);
+        var infantry = catalog.Units.Single(type => type.Id == "ramp-rifleman");
+        var resolver = new OpenRTS.Core.Navigation.DestinationResolver(grid, infantry.Locomotor);
+        Check(grid.TerrainAt(low) == catalog.Locomotion!.TerrainIndex("grass") &&
+            grid.TerrainAt(high) == catalog.Locomotion.TerrainIndex("mud") && game.UpperVisualAt(6, 5) == "mud" &&
+            grid.SurfaceElevationAt(shore) == grid.SurfaceElevationAt(water) && resolver.CanStop(shore) &&
+            !resolver.CanStop(water) && game.UpperVisualAt(1, 1) == "water",
+            "The two terrain IDs and visual IDs did not survive the compiler or flat shore clearance.");
         var wall = new Vector3(6.5f, 0.5f, 5.5f);
         camera.Position = wall + new Vector3(-5, 4, -5);
         camera.LookAt(wall);

@@ -36,9 +36,18 @@ public sealed class Locomotor
         Id = id; Rules = Array.AsReadOnly(values);
     }
     internal Locomotor WithBody(BodyShape body) => body == Body ? this : new(Id, Rules, body, MaximumSlope, MaximumStep, MaximumDepth);
-    internal TerrainRule At(NavigationGrid grid, int cell)
+    internal TerrainRule At(NavigationGrid grid, int cell, bool upper = false) =>
+        At(grid, cell, grid.TerrainAt(cell, upper));
+
+    internal TerrainRule At(NavigationGrid grid, WorldPosition point)
     {
-        var sample = grid.SurfaceAt(cell); var rule = Rules[grid.TerrainAt(cell)];
+        int cell = grid.CellAt(point);
+        return grid.HasSplitTerrain ? At(grid, cell, grid.TerrainAt(point)) : At(grid, cell);
+    }
+
+    private TerrainRule At(NavigationGrid grid, int cell, byte terrain)
+    {
+        var sample = grid.SurfaceAt(cell); var rule = Rules[terrain];
         if (sample.Slope > MaximumSlope || sample.Depth > MaximumDepth) return TerrainRule.Blocked;
         return !grid.CanStop(cell) && rule.CanStop ? rule with { CanStop = false } : rule;
     }

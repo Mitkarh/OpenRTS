@@ -26,7 +26,7 @@ public sealed partial class SimulationWorld
     {
         if (!_navigation!.UsesWeightedRoutes) return StepTowards(position, target);
         var grid = _navigation.Grid;
-        int factor = type.Locomotor.At(grid, grid.CellAt(position)).Speed;
+        int factor = type.Locomotor.At(grid, position).Speed;
         int budget = SpeedPerTick * factor + motion.MovementRemainder;
         motion.MovementRemainder = budget % 1024;
         var result = budget < 1024 ? position : StepTowards(position, target, budget / 1024);

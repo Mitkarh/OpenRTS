@@ -20,6 +20,22 @@ public readonly record struct BodyShape
 
 internal static class BodyGeometry
 {
+    internal static bool SweptTriangle(WorldPosition from, WorldPosition to, WorldBox bounds,
+        SurfaceCorner corner, BodyShape body)
+    {
+        bool west = corner is SurfaceCorner.NorthWest or SurfaceCorner.SouthWest;
+        bool north = corner is SurfaceCorner.NorthWest or SurfaceCorner.NorthEast;
+        var a = new WorldPosition(west ? bounds.MinX : bounds.MaxX, north ? bounds.MinY : bounds.MaxY);
+        var b = new WorldPosition(west ? bounds.MaxX : bounds.MinX, a.Y);
+        var c = new WorldPosition(a.X, north ? bounds.MaxY : bounds.MinY);
+        return Inside(from) || Inside(to) || SweptSegment(from, to, a, b, body) ||
+            SweptSegment(from, to, a, c, body) || SweptSegment(from, to, b, c, body);
+
+        bool Inside(WorldPosition p) => p.X >= bounds.MinX && p.X <= bounds.MaxX &&
+            p.Y >= bounds.MinY && p.Y <= bounds.MaxY &&
+            Math.Abs(p.X - a.X) + Math.Abs(p.Y - a.Y) <= bounds.MaxX - bounds.MinX;
+    }
+
     internal static bool SweptSegment(WorldPosition from, WorldPosition to, WorldPosition a, WorldPosition b, BodyShape body)
     {
         if (body.Kind == BodyKind.Circle)

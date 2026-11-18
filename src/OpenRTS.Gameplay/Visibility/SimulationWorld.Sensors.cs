@@ -129,7 +129,7 @@ public sealed partial class SimulationWorld
 
     private bool Applies(SensorState.Concealment gate, Frent.Entity entity) =>
         gate.Terrain is not byte terrain || NavigationGrid is { } grid && GroundContact(entity) &&
-        grid.TerrainAt(grid.CellAt(entity.Get<SpatialState>().Position)) == terrain;
+        grid.TerrainAt(entity.Get<SpatialState>().Position) == terrain;
 
     private LiveObservationFields? OrdinaryObservation(uint viewer, Frent.Entity entity)
     {

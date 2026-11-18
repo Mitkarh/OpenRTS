@@ -29,10 +29,11 @@ public sealed class CompiledMap
 
 public static class MapCompiler
 {
-    public const int Version = 4;
+    public const int Version = 5;
     public const string Geometry = "ground-plane-v1";
     internal const string SurfaceGeometry = "single-surface-v1";
     internal const string CutSurfaceGeometry = "single-surface-cuts-v1";
+    internal const string SplitTerrainGeometry = "single-surface-split-terrain-v1";
     public const int MaximumDocumentBytes = 64 * 1024 * 1024;
     public const int MaximumPaletteEntries = 65536;
     public const int MaximumObjects = 1000000;
@@ -59,6 +60,7 @@ public static class MapCompiler
         Text(source.Id, "id");
         ValidateDimensions(source.Width, source.Height, source.CellSize, source.Origin);
         int cells = checked(source.Width * source.Height);
+        var locomotion = catalog.Locomotion ?? throw Error("terrain", "Maps require a terrain catalog.");
         if (source.Surface is { } surface)
         {
             if (surface.Count != cells) throw Error("surface", "The surface must cover every map cell.");
@@ -68,13 +70,25 @@ public static class MapCompiler
                 var cell = surface[i];
                 if (2 * Math.Abs((long)cell.Elevation) + Math.Abs((long)cell.RiseX) + Math.Abs((long)cell.RiseY) > 2 * 1048576)
                     throw Error($"surface[{i}]", "Sloped surface corners exceed the elevation limits.");
-                if (cell.Cut != default && (cell.Rise != default ||
+                if (cell.UpperTerrainId is { } upper)
+                {
+                    Text(upper, $"surface[{i}].upperTerrain");
+                    if (locomotion.Terrains.IndexOf(upper) < 0)
+                        throw Error($"surface[{i}].upperTerrain", $"Unknown terrain '{upper}'.");
+                }
+                if (cell.UpperVisualId is { } visualId)
+                {
+                    Text(visualId, $"surface[{i}].upperVisual");
+                    if (cell.UpperTerrainId is null) throw Error($"surface[{i}].upperVisual", "An upper visual requires an upper terrain.");
+                }
+                if (cell.Cut.UpperTerrain.HasValue || cell.Cut == default && cell.UpperTerrainId is not null ||
+                    cell.Cut != default && (cell.Rise != default ||
                     cell.Cut.UpperCorner is < SurfaceCorner.NorthWest or > SurfaceCorner.SouthWest ||
-                    cell.Cut.UpperElevation <= cell.Elevation || cell.Cut.UpperElevation > 1048576))
-                    throw Error($"surface[{i}]", "A cut requires two bounded flat heights and an upper corner.");
+                    cell.Cut.UpperElevation < cell.Elevation || cell.Cut.UpperElevation > 1048576 ||
+                    cell.Cut.UpperElevation == cell.Elevation && cell.UpperTerrainId is null))
+                    throw Error($"surface[{i}]", "A cut requires an upper corner and two bounded flat surfaces.");
             }
         }
-        var locomotion = catalog.Locomotion ?? throw Error("terrain", "Maps require a terrain catalog.");
         MapLayer Normalize(MapLayer layer, string path)
         {
             if (layer.Cells.Count != cells) throw Error(path, "Layer must cover every map cell.");
@@ -108,6 +122,11 @@ public static class MapCompiler
             if (locomotion.Terrains.IndexOf(id) < 0) throw Error("terrain.palette", $"Unknown terrain '{id}'.");
         var terrain = Normalize(source.Terrain, "terrain");
         var visual = Normalize(source.Visual, "visual");
+        if (source.Surface is { } cuts)
+            for (int i = 0; i < cuts.Count; i++)
+                if (cuts[i].UpperTerrainId is { } id && cuts[i].Cut.UpperElevation == cuts[i].Elevation &&
+                    id == terrain.Palette[terrain.Cells[i]])
+                    throw Error($"surface[{i}].upperTerrain", "A cut at equal elevation requires a different terrain.");
         var slots = new HashSet<string>(StringComparer.Ordinal);
         foreach (var slot in source.Slots)
         {

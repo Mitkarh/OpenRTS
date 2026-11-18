@@ -14,6 +14,7 @@ public sealed class GameMap
     private readonly Placed[] _objects;
     private readonly Source _source;
     private readonly TerrainLayout _layout;
+    private readonly IReadOnlyList<MapSurfaceCell>? _surface;
     public UnitCatalog Catalog => _catalog;
     public string Id { get; }
     public string GameplayFingerprint { get; }
@@ -31,15 +32,21 @@ public sealed class GameMap
         _types = catalog.Units.Select((type, index) => (type.Id, index)).ToDictionary(p => p.Id, p => p.index, StringComparer.Ordinal);
         var terrainIds = data.Terrain.Palette.Select(id => (byte)catalog.Locomotion!.Terrains.IndexOf(id)).ToArray();
         _layout = new(data.Width, data.Height, data.Terrain.Cells.Select(i => terrainIds[i]), data.Visual.Cells.Select(i => data.Visual.Palette[i]));
-        Grid = _layout.CreateGrid(data.Surface);
+        _surface = data.Surface;
+        Grid = _layout.CreateGrid(_surface, catalog.Locomotion);
         _slots = data.Slots.ToDictionary(s => s.Id, s => new Slot(s.Position is { } point ? OnGround(point) : default, s.Reverse), StringComparer.Ordinal);
         Slots = Array.AsReadOnly(_slots.Keys.Order(StringComparer.Ordinal).ToArray());
         _objects = data.Objects.Select(o => new Placed(o.Id, _types[UnitCatalog.MapTypeId(data.Id, o)], OnGround(o.Position), o.Owner, o.Origin ?? data.Origin, o.QuarterTurns, o.InitialHealth)).ToArray();
-        TerrainIds = Array.AsReadOnly(terrainIds.Order().Select(i => catalog.Locomotion!.Terrains[i]).ToArray());
-        VisualIds = Array.AsReadOnly(_layout.VisualIds());
+        var terrainNames = terrainIds.Order().Select(i => catalog.Locomotion!.Terrains[i]);
+        TerrainIds = Array.AsReadOnly((Grid.HasSplitTerrain
+            ? terrainNames.Concat(_surface!.Select(cell => cell.UpperTerrainId).OfType<string>()).Distinct(StringComparer.Ordinal)
+            : terrainNames).ToArray());
+        VisualIds = Array.AsReadOnly(_layout.VisualIds().Concat(_surface?.Select(cell => cell.UpperVisualId).OfType<string>() ?? [])
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray());
     }
 
     public string VisualAt(int x, int y) => _layout.VisualAt(x, y);
+    public string? UpperVisualAt(int x, int y) => _surface?[Grid.Index(new(x, y))].UpperVisualId;
 
     private WorldPosition OnGround(WorldPosition point) => Grid.HasSurface ? point with { Elevation = Grid.SurfaceElevationAt(point) } : point;
 

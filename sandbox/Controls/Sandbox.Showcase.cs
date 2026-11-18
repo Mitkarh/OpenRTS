@@ -39,7 +39,7 @@ public partial class Sandbox
             var type = _catalog.Units[pose.UnitType];
             if (_displayGrid is { } grid && _catalog.Locomotion is { } locomotion)
             {
-                int terrain = grid.TerrainAt(grid.CellAt(pose.Current));
+                int terrain = grid.TerrainAt(pose.Current);
                 string ground = locomotion.Terrains[terrain] switch
                 { "road" => "бетон", "grass" => "трава", "mud" => "грязь", "water" => "вода", "forest" => "лес", "swamp" => "болото", _ => "горы" };
                 string phase = pose.Order.Phase switch { OpenRTS.Core.Orders.OrderPhase.Moving => "идёт", OpenRTS.Core.Orders.OrderPhase.Approaching => "сближается",

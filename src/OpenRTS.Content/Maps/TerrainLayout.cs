@@ -55,11 +55,12 @@ public sealed class TerrainLayout
         }
     }
 
-    public NavigationGrid CreateGrid() => CreateGrid(null);
-    internal NavigationGrid CreateGrid(IReadOnlyList<MapSurfaceCell>? surface) =>
+    public NavigationGrid CreateGrid() => CreateGrid(null, null);
+    internal NavigationGrid CreateGrid(IReadOnlyList<MapSurfaceCell>? surface, LocomotionCatalog? locomotion) =>
         new(Width, Height, terrain: _terrain, surface: surface?.Select(cell => cell.Sample), rises: surface?.Select(cell => cell.Rise),
-            cuts: surface?.Select((cell, index) => (cell.Cut, index)).Where(pair => pair.Cut != default)
-                .ToDictionary(pair => pair.index, pair => pair.Cut));
+            cuts: surface?.Select((cell, index) => (cell, index)).Where(pair => pair.cell.Cut != default)
+                .ToDictionary(pair => pair.index, pair => pair.cell.Cut with
+                    { UpperTerrain = pair.cell.UpperTerrainId is { } id ? locomotion!.TerrainIndex(id) : null }));
     public byte TerrainAt(int x, int y) => _terrain[Index(x, y)];
     public string VisualAt(int x, int y) => _visual[Index(x, y)];
     public string[] VisualIds() => _visual.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();

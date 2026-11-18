@@ -21,7 +21,8 @@ public partial class Sandbox
         var cliff = GD.Load<Texture2D>("res://assets/terrain/cliff-face.png")
             ?? throw new InvalidOperationException("Missing terrain texture: cliff-face");
         _rampTerrain = new(grid, (x, y) => covers[map?.VisualAt(x, y) ??
-            (grid.SurfaceRiseAt(grid.Index(new(x, y))) == default ? "grass" : "rock-ramp")], cliff);
+            (grid.SurfaceRiseAt(grid.Index(new(x, y))) == default ? "grass" : "rock-ramp")], cliff,
+            (x, y) => map?.UpperVisualAt(x, y) is { } id ? covers[id] : null);
         AddChild(new MeshInstance3D { Name = "RaisedTerrain", Mesh = _rampTerrain.Mesh });
     }
 

@@ -115,6 +115,30 @@ internal static class MapCompilationChecks
             NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(), catalog));
         });
 
+        test("Maps compiled: v5 split terrain round-trips and keeps upper artwork outside gameplay identity", () =>
+        {
+            var grass = new MapLayer(["grass"], new int[4]);
+            var cells = new MapSurfaceCell[4];
+            MapSource Source() => new("shore", false, 2, 2, grass, grass, [], [], surface: cells);
+            cells[0] = new(0, Cut: new(OpenRTS.Core.Navigation.SurfaceCorner.NorthEast, 0), UpperTerrainId: "water", UpperVisualId: "water");
+            var shore = MapCompiler.Compile(MapSource.Read(new("shore source", Source().Write())), catalog);
+            var restored = MapCompiler.Read(new("shore compiled", shore.Write()), catalog);
+            NavigationChecks.Check(restored.Write() == shore.Write() && restored.Map.UpperVisualAt(0, 0) == "water" &&
+                restored.Map.TerrainIds.Contains("water"), "Split ground or its upper artwork did not round-trip.");
+            cells[0] = cells[0] with { UpperVisualId = "river" };
+            var art = MapCompiler.Compile(Source(), catalog);
+            cells[0] = cells[0] with { UpperTerrainId = "mud" };
+            var gameplay = MapCompiler.Compile(Source(), catalog);
+            NavigationChecks.Check(shore.GameplayFingerprint == art.GameplayFingerprint && shore.DataFingerprint != art.DataFingerprint &&
+                art.GameplayFingerprint != gameplay.GameplayFingerprint, "The two upper IDs contributed to the wrong fingerprints.");
+            cells[0] = cells[0] with { UpperTerrainId = "unknown" };
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(), catalog));
+            cells[0] = cells[0] with { UpperTerrainId = "grass" };
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(), catalog));
+            cells[0] = cells[0] with { UpperTerrainId = "water", Cut = default };
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(), catalog));
+        });
+
         test("Maps compiled: independent input and artifact preserve exact world and every journal hash", () =>
         {
             var baseline = JsonNode.Parse(File.ReadAllText("docs/verification/047-map-compilation/baseline.json"))!;

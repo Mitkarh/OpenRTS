@@ -264,6 +264,79 @@ internal static class FootprintChecks
                 NavigationChecks.Check(Pose(world, 1).Current == low, "A locomotor with sufficient step could not cross the wall.");
             }
         });
+        test("Split terrain: both body shapes respect half-cell traversal and stopping", () =>
+        {
+            var grid = new NavigationGrid(1, 1, surface: [default],
+                cuts: new Dictionary<int, SurfaceCut> { [0] = new(SurfaceCorner.NorthEast, 0, UpperTerrain: 1) });
+            var land = new WorldPosition(256, 768);
+            var water = new WorldPosition(768, 256);
+            var overlapping = new WorldPosition(496, 528);
+            NavigationChecks.Check(grid.TerrainAt(land) == 0 && grid.TerrainAt(water) == 1 && grid.MaximumTerrain == 1,
+                "The terrain palette does not include both halves.");
+            foreach (var body in new[] { BodyShape.Circle(64), BodyShape.Box(64, 32) })
+            {
+                var landOnly = new DestinationResolver(grid, new Locomotor("land", [TerrainRule.Ground, TerrainRule.Blocked], body));
+                var waterOnly = new DestinationResolver(grid, new Locomotor("water", [TerrainRule.Blocked, TerrainRule.Ground], body));
+                var noStop = new DestinationResolver(grid,
+                    new Locomotor("cross", [TerrainRule.Ground, TerrainRule.Ground with { CanStop = false }], body));
+                NavigationChecks.Check(landOnly.CanStop(land) && !landOnly.CanStop(overlapping) && !landOnly.CanReach(land, water) &&
+                    waterOnly.CanStop(water) && !waterOnly.CanStop(land) && noStop.CanReach(land, water) &&
+                    !noStop.CanStop(overlapping), "Traverse or CanStop ignored a forbidden triangle under the body.");
+            }
+
+            var painted = grid.Compose(new Dictionary<int, CellOverride> { [0] = new(Terrain: 0) }, grid);
+            var landProfile = new Locomotor("land-building", [TerrainRule.Ground, TerrainRule.Blocked]);
+            var footprint = Stamp(1, 1, new(false));
+            NavigationChecks.Check(!footprint.AllowsConstruction(grid, new(512, 512), landProfile) &&
+                footprint.AllowsConstruction(painted, new(512, 512), landProfile),
+                "A full-cell footprint did not check both triangles for supporting terrain.");
+            NavigationChecks.Check(grid.TerrainAt(water) == 1 && painted.TerrainAt(water) == 0 && painted.Revision == 1,
+                "Painting the original lower terrain did not override the upper triangle.");
+            using var state = new MemoryStream();
+            using var writer = new BinaryWriter(state, System.Text.Encoding.UTF8, leaveOpen: true);
+            painted.WriteRuntimeState(writer);
+            state.Position = 0;
+            using var reader = new BinaryReader(state);
+            var restored = grid.ReadRuntimeState(reader);
+            NavigationChecks.Check(restored.TerrainAt(water) == 0 && grid.Compose(new Dictionary<int, CellOverride>(), restored)
+                .TerrainAt(water) == 1, "Runtime restore or overlay removal lost a triangle's terrain.");
+        });
+        test("Split terrain: speed uses the center and route price charges the crossed half", () =>
+        {
+            int StepX(WorldPosition start, WorldPosition goal)
+            {
+                var grid = new NavigationGrid(1, 1, surface: [default],
+                    cuts: new Dictionary<int, SurfaceCut> { [0] = new(SurfaceCorner.NorthEast, 0, UpperTerrain: 1) });
+                var profile = new Locomotor("speed", [TerrainRule.Ground, TerrainRule.Ground with { Speed = 512 }]);
+                using var world = new SimulationWorld([Mover(radius: 64, profile: profile)], 1024, 1024, navigationGrid: grid);
+                world.AddInitialUnit(0, start);
+                Move(world, 1, goal);
+                return Pose(world, 1).Current.X - start.X;
+            }
+            NavigationChecks.Check(StepX(new(192, 768), new(576, 768)) == 128 &&
+                StepX(new(448, 192), new(896, 192)) == 64, "Terrains in the same cell did not give distinct movement speeds.");
+
+            int TimeOnUpper(int upperCost)
+            {
+                var grid = new NavigationGrid(4, 4, surface: new SurfaceSample[16],
+                    cuts: new Dictionary<int, SurfaceCut> { [5] = new(SurfaceCorner.NorthEast, 0, UpperTerrain: 1) });
+                var profile = new Locomotor("price", [TerrainRule.Ground, TerrainRule.Ground with { Cost = upperCost }]);
+                using var world = new SimulationWorld([Mover(radius: 64, profile: profile)], 4096, 4096, navigationGrid: grid);
+                var goal = new WorldPosition(1584, 1552);
+                world.AddInitialUnit(0, new(2600, 1152));
+                Move(world, 1, goal);
+                int upperTicks = 0;
+                for (int tick = 0; tick < 80; tick++)
+                {
+                    if (grid.TerrainAt(Pose(world, 1).Current) == 1) upperTicks++;
+                    if (world.MovingCount == 0) break;
+                    world.Step();
+                }
+                NavigationChecks.Check(Pose(world, 1).Current == goal, "The mixed-terrain route missed its exact goal.");
+                return upperTicks;
+            }
+            NavigationChecks.Check(TimeOnUpper(65536) < TimeOnUpper(1024), "The route did not avoid the expensive triangle.");
+        });
         test("N2: weapon range reaches the nearest building cell rather than its center", () =>
         {
             var gun = new UnitDefinition("gun", 100, ["idle", "move", "fire"], weapon: new(5120, 5120, 20, 100, 0), body: BodyShape.Circle(512));
