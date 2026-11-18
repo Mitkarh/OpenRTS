@@ -7,7 +7,7 @@ rifle:
     BurstIntervalTicks: 3
     ReloadTicks: 24
     WindupTicks: 1
-    Versus: {Living: 100, Mechanical: 10, Building: 10}
+    Versus: { Living: 100, Mechanical: 10, Building: 10 }
 
 rifleman:
   Inherits: rifle
@@ -21,7 +21,7 @@ cannon:
     Damage: 70
     ReloadTicks: 38
     WindupTicks: 3
-    Versus: {Living: 10, Mechanical: 150, Building: 90}
+    Versus: { Living: 10, Mechanical: 150, Building: 90 }
 
 missile:
   Weapon:
@@ -35,7 +35,7 @@ missile:
     Damage: 35
     ReloadTicks: 48
     WindupTicks: 4
-    Versus: {Living: 100, Mechanical: 100, Building: 100}
+    Versus: { Living: 100, Mechanical: 100, Building: 100 }
 
 grenade:
   Weapon:
@@ -47,7 +47,7 @@ grenade:
     Damage: 45
     ReloadTicks: 65
     WindupTicks: 4
-    Versus: {Living: 140, Mechanical: 20, Building: 160}
+    Versus: { Living: 140, Mechanical: 20, Building: 160 }
 
 repair:
   Weapon:
@@ -58,27 +58,26 @@ repair:
     ReloadTicks: 8
     WindupTicks: 1
     AnimationTicks: 6
-    Versus: {Living: 0, Mechanical: 100, Building: 100}
-
+    Versus: { Living: 0, Mechanical: 100, Building: 100 }
 
 factory-repair:
   Inherits: repair
-  Weapon: {Range: 4096, AcquireRange: 4096}
+  Weapon: { Range: 4096, AcquireRange: 4096 }
 
 sniper-rifle:
   Weapon:
-    Range: 8192
-    AcquireRange: 8192
-    Damage: 45
+    Range: 12192
+    AcquireRange: 12192
+    Damage: 110
     ReloadTicks: 65
     WindupTicks: 6
     PassengerDamage: 110
     PassengerDamageSpill: false
-    Versus: {Living: 100, Mechanical: 0, Building: 0}
+    Versus: { Living: 100, Mechanical: 1, Building: 1 }
 
 crane-repair:
   Inherits: repair
-  Weapon: {Range: 8192, AcquireRange: 8192, Versus: {Mechanical: 0}}
+  Weapon: { Range: 8192, AcquireRange: 8192, Versus: { Mechanical: 0 } }
 
 fighter-missile:
   Inherits: missile

@@ -48,6 +48,38 @@ public sealed partial class CombatEffectsView
         return (direction, tail + direction * halfLength);
     }
 
+    private (Vector3 Direction, Vector3 Center)? LaunchVisual(int unit, int mount, ProjectileDeparture launch, EffectStyle style, Vector3 direction)
+    {
+        float body = SpriteWorldView.Angle(launch.BodyFacing, launch.BodyFacing, 1);
+        float weapon = SpriteWorldView.Angle(launch.MountFacing, launch.MountFacing, 1);
+        var origin = Position(launch.Origin);
+        if (style.MountedRocket is { } rocket)
+            return MountedRocket(rocket, origin, body, weapon, 1, (float)style.Size);
+        if (_models[unit] is not { } model) return null;
+        var mountId = _units.Units[unit].Weapons[mount].Id;
+        Span<Vector2> pivots = stackalloc Vector2[model.Parts.Count];
+        Span<float> angles = stackalloc float[model.Parts.Count];
+        for (int i = 0; i < model.Parts.Count; i++)
+        {
+            var part = model.Parts[i];
+            float angle = part.Facing == ModelFacing.Body ? body : weapon;
+            if (part.Facings > 1)
+            {
+                float step = MathF.Tau / part.Facings;
+                angle = MathF.Floor(Mathf.PosMod(angle, MathF.Tau) / step + 0.5f) * step;
+            }
+            angles[i] = angle;
+            var offset = new Vector2((float)part.OffsetX, (float)part.OffsetY);
+            pivots[i] = part.Parent < 0 ? offset.Rotated(body) : pivots[part.Parent] + offset.Rotated(angles[part.Parent]);
+            if (part.Mount != mountId || part.Muzzle is not { } point) continue;
+            var local = new Vector2((float)((point.X - part.PivotX) * part.Width), (float)((point.Y - part.PivotY) * part.Height));
+            float drawAngle = (part.Facings == 0 ? angle : 0) + Mathf.DegToRad((float)part.SpriteRotation);
+            var muzzle = pivots[i] + local.Rotated(drawAngle);
+            return (direction, origin + new Vector3(muzzle.X, 0, muzzle.Y));
+        }
+        return null;
+    }
+
     private void ProjectileSprite(string path, Vector3 point, Vector3 direction, float halfLength, Vector3 eye)
     {
         var (batch, aspect) = _projectileSprites[path];

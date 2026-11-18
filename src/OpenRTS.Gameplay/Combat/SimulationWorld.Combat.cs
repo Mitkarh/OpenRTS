@@ -231,8 +231,15 @@ public sealed partial class SimulationWorld
                             if (!ground) impactPoint = WeaponPoint(impactPoint, weapon, Airborne(_entityHandles[target]));
                             var hover = sourceType.Flight?.Mode == FlightMode.Hover ? HoverEndpoints.Source : HoverEndpoints.None;
                             if (!ground && TypeOf(_entityHandles[target]).Flight?.Mode == FlightMode.Hover) hover |= HoverEndpoints.Target;
+                            var departure = stored ? default : CaptureDeparture(origin, state.Facing);
+                            var fan = FanDirection(weapon, state.BurstRemaining, state.Facing);
+                            if (weapon.ScatterRadius > 0)
+                                impactPoint = ScatterImpact(ground ? impactPoint : WeaponPoint(
+                                    _entityHandles[target].Get<SpatialState>().Position, weapon, Airborne(_entityHandles[target])),
+                                    weapon.ScatterRadius, _nextProjectileId, entityIdentity.Id);
                             EmitEvent(new(Tick, WorldEventKind.WeaponFired, entityIdentity.Id, impactPoint, entityIdentity.Type,
-                                state.Animation.Animation, state.Animation.DurationTicks, TargetEntity: state.Target, Mount: mountIndex, SourcePosition: muzzle) { Hover = hover });
+                                state.Animation.Animation, state.Animation.DurationTicks, TargetEntity: state.Target, Mount: mountIndex, SourcePosition: muzzle)
+                            { Hover = hover, Departure = departure });
                             if (weapon.Projectile == ProjectileKind.Hitscan)
                             {
                                 var hit = state.Target;
@@ -246,8 +253,7 @@ public sealed partial class SimulationWorld
                                 }
                                 Impact(weapon, entityOwnership.Owner, hit, impactPoint, entityIdentity.Id, entityIdentity.Type, mountIndex);
                             }
-                            else Launch(origin, target, mountIndex, weapon, ground ? point : null, entityIdentity.Type, hover,
-                                stored ? default : state.Facing);
+                            else Launch(origin, target, mountIndex, weapon, muzzle, impactPoint, entityIdentity.Type, hover, departure, fan);
                             if (manual && state.BurstRemaining == 0) { entityOrders.HasOrder = false; entityOrders.CombatTarget = default; entityOrders.OrderPhase = OrderPhase.Idle; }
                         }
                     }

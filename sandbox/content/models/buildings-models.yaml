@@ -510,6 +510,7 @@ bunker-upgradable:
       cannon:
         Facing: Weapon
         Mount: cannon
+        Muzzle: [0.50, 0.09]
         Resource: res://resources/units/tank-turret.tres
         Size: [1.7, 1.7]
         Pivot: [0.5, 0.73]
@@ -519,6 +520,7 @@ bunker-upgradable:
       machinegun:
         Facing: Weapon
         Mount: machinegun
+        Muzzle: [0.50, 0.13]
         Resource: res://resources/units/apc-mg-turret.tres
         Size: [1.1, 1.1]
         Offset: [-0.37, 0]
@@ -528,6 +530,7 @@ bunker-upgradable:
       missiles:
         Facing: Weapon
         Mount: missiles
+        Muzzle: [0.50, 0.20]
         Resource: res://resources/units/apc-rocket-turret.tres
         Size: [1.1, 1.1]
         Offset: [0.37, 0]

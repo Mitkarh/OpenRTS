@@ -9,6 +9,7 @@ public sealed partial class CombatEffectsView
 {
     private readonly UnitCatalog _units;
     private readonly EffectCatalog _effects;
+    private readonly ModelDefinition?[] _models;
     private readonly List<WorldEvent> _events = [];
     private readonly Dictionary<EntityId, EntityPose> _workSources = [];
     private readonly Dictionary<string, (ColoredMeshBatch Batch, float Aspect)> _projectileSprites = new(StringComparer.Ordinal);
@@ -18,9 +19,10 @@ public sealed partial class CombatEffectsView
     public Node3D Node { get; } = new() { Name = "CombatEffects" };
     public int ProjectileCount { get; private set; }
     public int ActiveEffects => _events.Count;
-    public CombatEffectsView(UnitCatalog units, EffectCatalog effects)
+    public CombatEffectsView(UnitCatalog units, EffectCatalog effects, ModelCatalog? models = null)
     {
         _units = units; _effects = effects;
+        _models = units.Presentations.Select(binding => binding.Model is { } id ? models?.Models.GetValueOrDefault(id) : null).ToArray();
         foreach (var type in units.Units) foreach (var mount in type.Weapons)
         {
             if (!effects.Weapons.TryGetValue(mount.Weapon.Id, out var style)) throw new ArgumentException("Missing effect: " + mount.Weapon.Id);
@@ -84,13 +86,12 @@ public sealed partial class CombatEffectsView
             }
             var forward = previous.DirectionTo(current);
             if (forward == Vector3.Zero) forward = new(MathF.Sin(heading), 0, MathF.Cos(heading));
-            if (style.MountedRocket is { } mount && shot.Departure.Tick > 0 && tick - shot.Departure.Tick <= 4)
+            if (shot.Departure.Tick > 0 && tick - shot.Departure.Tick <= 4 &&
+                LaunchVisual(shot.UnitType, shot.Mount, shot.Departure, style, forward) is { } launch)
             {
-                var launch = shot.Departure;
-                var (direction, center) = MountedRocket(mount, Position(launch.Origin),
-                    SpriteWorldView.Angle(launch.BodyFacing, launch.BodyFacing, 1),
-                    SpriteWorldView.Angle(launch.MountFacing, launch.MountFacing, 1), 1, (float)style.Size);
-                float age = tick - launch.Tick;
+                var (direction, center) = launch;
+                if (!reliefProjection) center.Z -= Lift(shot.Departure.Origin.Elevation, HoverEndpoints.Source, projection.Hover, flightSurface);
+                float age = tick - shot.Departure.Tick;
                 float speed = weapon.ProjectileSpeed / 1024f;
                 previous = JoinFlight(previous, Math.Max(0, age - 1));
                 current = JoinFlight(current, age);
@@ -141,6 +142,8 @@ public sealed partial class CombatEffectsView
                         sourcePoint = WorkSource(actor, value.Position, alpha);
                 }
                 var source = Position(sourcePoint);
+                if (value.Departure.Tick > 0 && LaunchVisual(value.UnitType, value.Mount, value.Departure, style, Vector3.Forward) is { } launch)
+                    source = style.MountedRocket is null ? launch.Center : launch.Center - launch.Direction * (float)style.Size;
                 if (!reliefProjection) source.Z -= Lift(sourcePoint.Elevation, HoverEndpoints.Source, value.Hover, flightSurface);
                 if (weapon.Projectile == ProjectileKind.Hitscan)
                 {

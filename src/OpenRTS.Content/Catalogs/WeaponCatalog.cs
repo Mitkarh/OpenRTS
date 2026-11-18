@@ -26,7 +26,7 @@ public sealed class WeaponCatalog
                 o.Speed, o.TravelLimit, o.SplashRadius, o.Burst, o.BurstIntervalTicks, o.AnimationTicks,
                 o.Versus.Living, o.Versus.Mechanical, o.Versus.Building, o.FriendlyFire, o.PassengerDamage, o.PassengerDamageSpill, new TargetCategories(o.Targets), o.SpatialTrajectory ?? false,
                 o.ExcludedTargets.Length == 0 ? null : new TargetCategories(o.ExcludedTargets), o.MinimumContact, o.Trajectory,
-                o.TrajectoryHeight, o.Homing)); }
+                o.TrajectoryHeight, o.Homing, o.ScatterRadius, o.LaunchFan)); }
             catch (ArgumentException error) { throw node.Error(id + ".Weapon", error.Message); }
         }
         return new(weapons);
@@ -39,6 +39,8 @@ public sealed class WeaponCatalog
         public ProjectileTrajectory? Trajectory { get; set; }
         public int? TrajectoryHeight { get; set; }
         public bool? Homing { get; set; }
+        public int ScatterRadius { get; set; }
+        public int LaunchFan { get; set; }
         public SensorDisplay MinimumContact { get; set; } = SensorDisplay.Model;
         public int Range { get; set; } = 4096;
         public int? AcquireRange { get; set; }

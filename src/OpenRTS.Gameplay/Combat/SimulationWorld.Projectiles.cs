@@ -15,38 +15,58 @@ public sealed partial class SimulationWorld
         public HoverEndpoints Hover;
         public int LaunchElevation;
         public ProjectileDeparture Departure;
+        public FacingDirection FanDirection;
     }
     private readonly List<ProjectileState> _projectiles = [];
     private long _nextProjectileId = 1;
     public int ProjectileCount => _projectiles.Count;
-    private void Launch(int source, int target, int mount, WeaponDefinition weapon, WorldPosition? point, int weaponUnitType,
-        HoverEndpoints hover, FacingDirection mountFacing)
+    private ProjectileDeparture CaptureDeparture(int source, FacingDirection facing)
     {
-        ref var actor = ref _entityHandles[source];
-        ref var actorSpatial = ref actor.Get<SpatialState>();
-        var actorIdentity = actor.Get<EntityIdentity>();
-        ref var actorOwnership = ref actor.Get<OwnershipState>();
-        WorldPosition muzzle, destination;
-        if (point is { } p)
+        var actor = _entityHandles[source];
+        var spatial = actor.Get<SpatialState>();
+        var origin = spatial.Position;
+        var motion = new FacingDirection(origin.X - spatial.Previous.X, origin.Y - spatial.Previous.Y);
+        var body = TypeOf(actor).Flight is null && motion != default ? motion : actor.Get<PresentationState>().BodyFacing;
+        return new(Tick, actor.Get<EntityIdentity>().Id, origin, body, facing);
+    }
+
+    private WorldPosition ScatterImpact(WorldPosition target, int radius, long projectileId, EntityId source)
+    {
+        var random = new DeterministicRandom(_random.State ^ (ulong)projectileId ^ ((ulong)source.Value << 32));
+        int minX = Math.Max(-radius, -target.X), maxX = Math.Min(radius, Width - 1 - target.X);
+        int minY = Math.Max(-radius, -target.Y), maxY = Math.Min(radius, Depth - 1 - target.Y);
+        if (minX > maxX || minY > maxY) return target;
+        int closestX = Math.Clamp(0, minX, maxX), closestY = Math.Clamp(0, minY, maxY);
+        if (closestX * closestX + closestY * closestY > radius * radius) return target;
+        int x, y;
+        do
         {
-            destination = p;
-            muzzle = ObjectGeometry.ClosestPoint(TypeOf(actor), actorSpatial.Position, p) with { Elevation = actorSpatial.Position.Elevation };
-        }
-        else ObjectGeometry.DistanceSquared(TypeOf(actor), actorSpatial.Position, TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, out muzzle, out destination);
-        muzzle = WeaponPoint(muzzle, weapon, Airborne(actor));
-        if (point is null) destination = WeaponPoint(destination, weapon, Airborne(_entityHandles[target]));
-        ProjectileDeparture departure = default;
-        if (weapon.Projectile == ProjectileKind.Missile && weapon.HasFlightProfile && mountFacing != default)
-        {
-            var origin = actorSpatial.Position;
-            var motion = new FacingDirection(origin.X - actorSpatial.Previous.X, origin.Y - actorSpatial.Previous.Y);
-            var bodyFacing = TypeOf(actor).Flight is null && motion != default ? motion : actor.Get<PresentationState>().BodyFacing;
-            departure = new(Tick, actorIdentity.Id, origin, bodyFacing, mountFacing);
-        }
-        _projectiles.Add(new() { Id = checked(_nextProjectileId++), BornTick = Tick, Source = actorIdentity.Id, Target = target < 0 ? default : _entityHandles[target].Get<EntityIdentity>().Id,
-            Owner = actorOwnership.Owner, UnitType = weaponUnitType < 0 ? actorIdentity.Type : weaponUnitType, Mount = mount, Previous = muzzle, Position = muzzle,
-            Destination = destination, Weapon = weapon, Remaining = weapon.TravelLimit, Hover = hover, LaunchElevation = muzzle.Elevation, Departure = departure,
-            InitialDistance = Math.Max(1, (int)SquareRoot((ulong)DistanceSquared(muzzle, destination))) });
+            x = minX + random.NextInt(maxX - minX + 1);
+            y = minY + random.NextInt(maxY - minY + 1);
+        } while (x * x + y * y > radius * radius);
+        var point = target with { X = target.X + x, Y = target.Y + y };
+        return _baseGrid is { } grid ? point with { Elevation = grid.SurfaceElevationAt(point) + 128 } : point;
+    }
+
+    private static FacingDirection FanDirection(WeaponDefinition weapon, int remaining, FacingDirection aim)
+    {
+        if (weapon.LaunchFan == 0) return default;
+        int edge = weapon.Burst - 1;
+        int lane = edge - 2 * remaining;
+        int offset = weapon.LaunchFan * lane / edge;
+        return new(aim.X + (int)((long)-aim.Y * offset / 1000),
+            aim.Y + (int)((long)aim.X * offset / 1000));
+    }
+
+    private void Launch(int source, int target, int mount, WeaponDefinition weapon, WorldPosition muzzle, WorldPosition destination,
+        int weaponUnitType, HoverEndpoints hover, ProjectileDeparture departure, FacingDirection fan)
+    {
+        var actor = _entityHandles[source];
+        _projectiles.Add(new() { Id = checked(_nextProjectileId++), BornTick = Tick, Source = actor.Get<EntityIdentity>().Id,
+            Target = target < 0 ? default : _entityHandles[target].Get<EntityIdentity>().Id,
+            Owner = actor.Get<OwnershipState>().Owner, UnitType = weaponUnitType, Mount = mount, Previous = muzzle, Position = muzzle,
+            Destination = destination, Weapon = weapon, Remaining = weapon.TravelLimit, Hover = hover, LaunchElevation = muzzle.Elevation,
+            Departure = departure, FanDirection = fan, InitialDistance = Math.Max(1, (int)SquareRoot((ulong)DistanceSquared(muzzle, destination))) });
     }
     private void UpdateProjectiles()
     {
@@ -177,7 +197,8 @@ public sealed partial class SimulationWorld
             destination[i] = new(shot.Id, shot.UnitType, shot.Mount, previous, current,
                 shot.Weapon.HasFlightProfile && (current.X != previous.X || current.Y != previous.Y)
                     ? new(current.X - previous.X, current.Y - previous.Y)
-                    : new(shot.Destination.X - shot.Position.X, shot.Destination.Y - shot.Position.Y))
+                    : shot.BornTick == Tick && shot.FanDirection != default ? shot.FanDirection :
+                        new(shot.Destination.X - shot.Position.X, shot.Destination.Y - shot.Position.Y))
             {
                 Projection = shot.Hover == HoverEndpoints.None ? default :
                     new(shot.Hover, shot.LaunchElevation, shot.Destination, shot.Weapon.TravelLimit - shot.Remaining),
@@ -195,6 +216,7 @@ public sealed partial class SimulationWorld
             writer.Write(shot.Position.X); writer.Write(shot.Position.Y); writer.Write(shot.Position.Elevation);
             writer.Write(shot.Destination.X); writer.Write(shot.Destination.Y); writer.Write(shot.Destination.Elevation);
             if (shot.Weapon.HasFlightProfile) writer.Write(shot.LaunchElevation);
+            if (shot.Weapon.LaunchFan > 0) { writer.Write(shot.FanDirection.X); writer.Write(shot.FanDirection.Y); }
         }
     }
 }

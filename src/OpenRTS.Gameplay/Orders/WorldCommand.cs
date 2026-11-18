@@ -40,6 +40,7 @@ public readonly record struct WorldEvent(long Tick, WorldEventKind Kind, EntityI
     /// <summary>Sprite projection of the emitter and the actual target at the time of the event.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public HoverEndpoints Hover { get; init; }
+    [JsonIgnore] public ProjectileDeparture Departure { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public GameplayConditions Condition { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]

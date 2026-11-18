@@ -39,7 +39,7 @@ public partial class MapAuthoringChecks : Node
         var players = new Dictionary<string, PlayerDefinition> { ["blue"] = new(1, "Blue"), ["red"] = new(2, "Red") };
         using var world = map.Prepare(players).CreateWorld();
         var effects = EffectCatalog.Load(manifest.Effects);
-        var view = new CombatEffectsView(catalog, effects);
+        var view = new CombatEffectsView(catalog, effects, ModelCatalog.Load(manifest.Models));
         AddChild(view.Node);
         var rounds = new ProjectilePose[128];
         var actors = new EntityPose[world.Count];
@@ -49,6 +49,7 @@ public partial class MapAuthoringChecks : Node
             .Where(batch => !string.IsNullOrEmpty(batch.Texture?.ResourcePath))
             .ToDictionary(batch => batch.Texture!.ResourcePath, batch => batch.Multimesh);
         var smoke = view.Node.GetNode<MultiMeshInstance3D>("RocketSmoke").Multimesh;
+        var flashes = view.Node.GetNode<MultiMeshInstance3D>("Impacts").Multimesh;
         var kinds = new HashSet<ProjectileTrajectory>();
         var hits = new HashSet<string>();
         var loaded = new HashSet<string>();
@@ -58,9 +59,11 @@ public partial class MapAuthoringChecks : Node
         var pitched = new HashSet<string>();
         int texturedBatches = 0;
         bool descending = false;
+        bool checkedMuzzle = false;
         for (int tick = 0; tick < 300; tick++)
         {
             if (tick > 0) world.Step();
+            foreach (var e in world.Events) view.Accept(e);
             var active = rounds.AsSpan(0, world.ProjectileCount);
             world.CopyPoses(actors); world.CopyWeaponPoses(mounts); world.CopyProjectilePoses(active);
             view.Apply(active, 1, world.Tick, reliefProjection: true, actors: actors, weapons: mounts);
@@ -90,6 +93,21 @@ public partial class MapAuthoringChecks : Node
                 var effect = effects.Weapons[weapon.Id];
                 var batch = batches[effect.ProjectileTexture!];
                 if (shot.Current.Elevation > 1536) kinds.Add(weapon.Trajectory);
+                if (!checkedMuzzle && shot.Departure.Tick == world.Tick && weapon.Id == "howitzer")
+                {
+                    var shotPosition = Instance(batch).Position;
+                    var launch = shot.Departure;
+                    float body = SpriteWorldView.Angle(launch.BodyFacing, launch.BodyFacing, 1);
+                    float aim = SpriteWorldView.Angle(launch.MountFacing, launch.MountFacing, 1);
+                    var offset = new Vector2(0, 0.18f).Rotated(body) + new Vector2(0, (0.10f - 0.71f) * 1.65f).Rotated(aim);
+                    var expected = new Vector3(launch.Origin.X / 1024f + offset.X,
+                        launch.Origin.Elevation / 1024f + SpriteWorldView.OverlayHeight, launch.Origin.Y / 1024f + offset.Y);
+                    bool flashAtMuzzle = Enumerable.Range(0, flashes.VisibleInstanceCount)
+                        .Any(i => Instance(flashes, i).Position.DistanceTo(expected) < 0.001f);
+                    Check(shotPosition.DistanceTo(expected) < 0.001f && flashAtMuzzle,
+                        "The first projectile sprite and the flash must share the rotated muzzle position.");
+                    checkedMuzzle = true;
+                }
                 if (shot.Departure.Tick == world.Tick && effect.MountedRocket is { } mount)
                 {
                     Check(batch.VisibleInstanceCount == 1 && raised.TryGetValue(weapon.Id, out _), weapon.Id + ": launch did not replace the mounted sprite.");
@@ -116,8 +134,7 @@ public partial class MapAuthoringChecks : Node
                     }
                     departures.Add(weapon.Id);
                 }
-                if (batch.VisibleInstanceCount == 1 && shot.Previous != shot.Current &&
-                    (effect.MountedRocket is null || world.Tick - shot.Departure.Tick >= 5))
+                if (batch.VisibleInstanceCount == 1 && shot.Previous != shot.Current && world.Tick - shot.Departure.Tick >= 5)
                 {
                     var delta = new Vector3(shot.Current.X - shot.Previous.X, shot.Current.Elevation - shot.Previous.Elevation,
                         shot.Current.Y - shot.Previous.Y).Normalized();
@@ -128,11 +145,19 @@ public partial class MapAuthoringChecks : Node
                 }
             }
             foreach (var e in world.Events)
-                if (e.Kind == WorldEventKind.ProjectileImpact && e.TargetEntity != default)
-                    hits.Add(catalog.Units[e.UnitType].Weapons[e.Mount].Weapon.Id);
+                if (e.Kind == WorldEventKind.ProjectileImpact)
+                {
+                    var weapon = catalog.Units[e.UnitType].Weapons[e.Mount].Weapon;
+                    if (e.TargetEntity != default || weapon.ScatterRadius > 0 && actors.Any(actor =>
+                        actor.Presentation.Owner == 2 &&
+                        Math.Abs(actor.Current.Elevation - e.Position.Elevation) <= weapon.SplashRadius + 256 &&
+                        ObjectGeometry.WithinRadius(catalog.Units[actor.UnitType], actor.Current, e.Position, weapon.SplashRadius)))
+                        hits.Add(weapon.Id);
+                }
             texturedBatches = Math.Max(texturedBatches, batches.Values.Count(batch => batch.VisibleInstanceCount > 0));
         }
         string[] launchers = ["ballistic-missile", "cruise-missile"];
+        Check(checkedMuzzle, "The indirect-fire fixture never exercised a muzzle anchor.");
         Check(loaded.SetEquals(launchers) && departures.SetEquals(launchers) && emptied.SetEquals(launchers),
             "Both launchers must render the loaded, launch and empty states.");
         Check(pitched.Contains("howitzer") && pitched.Contains("ballistic-missile") && descending,
@@ -143,10 +168,11 @@ public partial class MapAuthoringChecks : Node
         view.Apply([], 1, world.Tick + 120);
         Check(smoke.VisibleInstanceCount == 0, "Rocket smoke should expire after flight.");
 
-        static (Vector3 Position, Vector3 Direction) Instance(MultiMesh batch)
+        static (Vector3 Position, Vector3 Direction) Instance(MultiMesh batch, int index = 0)
         {
             var data = batch.Buffer;
-            return (new(data[3], data[7], data[11]), -new Vector3(data[2], data[6], data[10]).Normalized());
+            int n = index * 16;
+            return (new(data[n + 3], data[n + 7], data[n + 11]), -new Vector3(data[n + 2], data[n + 6], data[n + 10]).Normalized());
         }
     }
 

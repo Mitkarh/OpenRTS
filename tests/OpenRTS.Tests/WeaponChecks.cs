@@ -12,6 +12,52 @@ internal static class WeaponChecks
     private static WeaponPose[] Mounts(SimulationWorld world) { var poses = new WeaponPose[world.WeaponCount]; world.CopyWeaponPoses(poses); return poses; }
     public static void Run(Action<string, Action> test)
     {
+        test("Weapons: artillery scatter and salvo fan keep their sampled destinations through snapshot and target removal", () =>
+        {
+            const int radius = 680;
+            var weapon = new WeaponDefinition(16000, 16000, 25, 1000, 0, projectile: ProjectileKind.Missile,
+                projectileSpeed: 440, burst: 4, burstIntervalTicks: 2, trajectory: ProjectileTrajectory.Ballistic,
+                homing: false, scatterRadius: radius, launchFan: 500);
+            var target = new WorldPosition(12288, 8192);
+            SimulationWorld Create()
+            {
+                var world = new SimulationWorld([Armed("salvo", weapon, movable: false), new("target", 100)], 16384, 16384);
+                world.AddInitialUnit(0, new(2048, 8192), 1);
+                world.AddInitialUnit(1, target, 2);
+                return world;
+            }
+            using var world = Create();
+            var points = new List<WorldPosition>();
+            var lanes = new List<int>();
+            var impacts = new List<WorldPosition>();
+            var shots = new ProjectilePose[4];
+            world.Step([Attack(world)]);
+            using var restored = SimulationWorld.RestoreSnapshot(world.CaptureSnapshot(), Create);
+            for (int tick = 1; tick <= 90; tick++)
+            {
+                foreach (var e in world.Events)
+                {
+                    if (e.Kind == WorldEventKind.WeaponFired) points.Add(e.Position);
+                    if (e.Kind == WorldEventKind.ProjectileImpact) impacts.Add(e.Position);
+                }
+                if (tick is 2 or 4 or 6 or 8)
+                {
+                    world.CopyProjectilePoses(shots);
+                    var shot = shots[world.ProjectileCount - 1];
+                    lanes.Add(shot.Current.Y - shot.Previous.Y);
+                }
+                WorldCommand[] commands = tick == 8 ? [new(9, 0, 2, CommandKind.Remove, new(2))] : [];
+                world.Step(commands); restored.Step(commands);
+                NavigationChecks.Check(world.Report() == restored.Report(), "The salvo diverged after recovery.");
+            }
+            NavigationChecks.Check(lanes.Count == 4 && lanes.Zip(lanes.Skip(1)).All(pair => pair.First < pair.Second) &&
+                lanes[0] < 0 && lanes[^1] > 0, "The first flight steps did not form a fan.");
+            NavigationChecks.Check(points.Distinct().Count() == 4 && points.All(p =>
+                (p.X - target.X) * (p.X - target.X) + (p.Y - target.Y) * (p.Y - target.Y) <= radius * radius),
+                "The salvo did not select four distinct points inside the spread disk.");
+            NavigationChecks.Check(impacts.Count == 4 && impacts.ToHashSet().SetEquals(points),
+                "A missile stopped following its original sampled point after the target was removed.");
+        });
         test("Weapons: Trajectory chooses direct or planar flight and supports legacy YAML", () =>
         {
             WeaponDefinition Load(string fields) => WeaponCatalog.Load([new("test weapon", $"test: {{Weapon: {{{fields}}}}}")]).Weapons["test"];

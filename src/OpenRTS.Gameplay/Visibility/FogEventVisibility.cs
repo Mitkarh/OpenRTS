@@ -17,6 +17,6 @@ public sealed record FogEventVisibility(IReadOnlyList<uint> Players, ulong Audie
         bool entity = (Entities & (1ul << slot)) != 0, target = (Targets & (1ul << slot)) != 0;
         return value with { Entity = entity ? value.Entity : default, UnitType = entity ? value.UnitType : -1,
             TargetEntity = target ? value.TargetEntity : default, SourcePosition = entity ? value.SourcePosition : default,
-            Hover = entity && target ? value.Hover : default, Visibility = null };
+            Hover = entity && target ? value.Hover : default, Departure = entity ? value.Departure : default, Visibility = null };
     }
 }

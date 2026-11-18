@@ -3,6 +3,7 @@ howitzer:
     Projectile: Cannon
     Trajectory: Arc
     TrajectoryHeight: 2304
+    ScatterRadius: 580
     Range: 12168
     AcquireRange: 12168
     TravelLimit: 16384
@@ -18,16 +19,18 @@ salvo-rocket:
     Trajectory: Ballistic
     TrajectoryHeight: 4096
     Homing: false
+    ScatterRadius: 720
+    LaunchFan: 480
     Range: 8168
     AcquireRange: 8168
     TravelLimit: 20480
     Speed: 340
-    SplashRadius: 640
-    Burst: 4
-    BurstIntervalTicks: 4
+    SplashRadius: 440
+    Burst: 6
+    BurstIntervalTicks: 2
     ReloadTicks: 100
     WindupTicks: 2
-    Damage: 30
+    Damage: 20
 
 cruise-missile:
   Weapon:

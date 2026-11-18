@@ -3,7 +3,7 @@ using OpenRTS.Core.Visibility;
 
 namespace OpenRTS.Core.Combat;
 
-public enum ArmorKind { Living, Mechanical, Building }
+public enum ArmorKind { Living, Light, Mechanical, Building }
 public enum ProjectileKind { Hitscan, Cannon, Missile, Grenade }
 public enum ProjectileTrajectory { Planar, Direct, Arc, Ballistic, Cruise }
 public enum WeaponEffect { Damage, Repair }
@@ -21,6 +21,8 @@ public sealed record WeaponDefinition
     public bool HasFlightProfile => Trajectory is ProjectileTrajectory.Arc or ProjectileTrajectory.Ballistic or ProjectileTrajectory.Cruise;
     public int TrajectoryHeight { get; }
     public bool Homing { get; }
+    public int ScatterRadius { get; }
+    public int LaunchFan { get; }
     public SensorDisplay MinimumContact { get; }
     public int Range { get; }
     public int AcquireRange { get; }
@@ -47,7 +49,7 @@ public sealed record WeaponDefinition
         int burst = 1, int burstIntervalTicks = 2, int animationTicks = 4,
         int livingModifier = 100, int mechanicalModifier = 100, int buildingModifier = 100, bool friendlyFire = false, int passengerDamage = 0, bool passengerDamageSpill = false, TargetCategories? targets = null, bool spatialTrajectory = false, TargetCategories? excludedTargets = null,
         SensorDisplay minimumContact = SensorDisplay.Model, ProjectileTrajectory? trajectory = null,
-        int? trajectoryHeight = null, bool? homing = null)
+        int? trajectoryHeight = null, bool? homing = null, int scatterRadius = 0, int launchFan = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         Targets = targets ?? TargetCategories.Ground; ExcludedTargets = excludedTargets;
@@ -60,6 +62,11 @@ public sealed record WeaponDefinition
             _ => 0,
         });
         Homing = homing ?? projectile == ProjectileKind.Missile;
+        if (scatterRadius is < 0 or > 8192 || scatterRadius > 0 && (!HasFlightProfile || Homing))
+            throw new ArgumentOutOfRangeException(nameof(scatterRadius), "ScatterRadius requires an unguided flight profile and a radius in 0..8192.");
+        if (launchFan is < 0 or > 1000 || launchFan > 0 && (Trajectory != ProjectileTrajectory.Ballistic || projectile != ProjectileKind.Missile || Homing || burst < 2))
+            throw new ArgumentOutOfRangeException(nameof(launchFan), "LaunchFan requires a ballistic missile burst without homing and a spread in 0..1000.");
+        ScatterRadius = scatterRadius; LaunchFan = launchFan;
         MinimumContact = minimumContact;
         if (range is < 512 or > MaximumRange) throw new ArgumentOutOfRangeException(nameof(range), $"Weapon range must be in 512..{MaximumRange}.");
         if (acquireRange < range || acquireRange > MaximumRange)
@@ -89,6 +96,7 @@ public sealed record WeaponDefinition
     public bool CanAttackContact(SensorDisplay level) => Effect == WeaponEffect.Damage && level >= MinimumContact;
     public void WriteState(BinaryWriter writer)
     {
+        if (ScatterRadius != 0 || LaunchFan != 0) { writer.Write(-33); writer.Write(ScatterRadius); writer.Write(LaunchFan); }
         if (MinimumContact != SensorDisplay.Model) { writer.Write(-31); writer.Write((byte)MinimumContact); }
         if (HasFlightProfile || Homing != (Projectile == ProjectileKind.Missile))
         { writer.Write(-32); writer.Write((byte)Trajectory); writer.Write(TrajectoryHeight); writer.Write(Homing); }

@@ -9,7 +9,7 @@ public enum ModelDrawLayer { Surface, World, Foreground }
 public sealed record ModelPart(string Id, int Parent, string Resource, ModelFacing Facing,
     double Width, double Height, double PivotX, double PivotY, double OffsetX, double OffsetY, int Layer, string? Mount = null, ReadOnlyCollection<string>? VisibleWhen = null, ReadOnlyCollection<string>? HiddenWhen = null,
     double Spin = 0, string? SpinWhen = null, string? LoopWhen = null, string? LoopAnimation = null, int Facings = 0,
-    ModelDrawLayer? DrawLayer = null, bool EmitterSpin = false, double SpriteRotation = 0);
+    ModelDrawLayer? DrawLayer = null, bool EmitterSpin = false, double SpriteRotation = 0, (double X, double Y)? Muzzle = null);
 public sealed record ModelAnimation(string Sequence, ReadOnlyCollection<string> Parts, double Bob, double Recoil, double Flash, double ScaleFrom = 1, double OpacityFrom = 1, double SlideX = 0, double SlideY = 0, ModelFacing? Facing = null);
 public sealed record ModelState(double Red, double Green, double Blue, double Scale, double Opacity, double Pulse = 0);
 public sealed record ModelDefinition(string Id, ReadOnlyCollection<ModelPart> Parts,
@@ -49,7 +49,13 @@ public sealed class ModelCatalog
                     if (part.DrawLayer is { } layer && !Enum.IsDefined(layer))
                         throw node.Error(id + ".Model.Parts." + name + ".DrawLayer", "Unknown sprite layer.");
                     ValidateVector(part.Size, 0.01, 32, "Size"); ValidateVector(part.Pivot, 0, 1, "Pivot"); ValidateVector(part.Offset, -32, 32, "Offset");
-                    ordered.Add(new(name, parent, part.Resource, part.Facing, part.Size[0], part.Size[1], part.Pivot[0], part.Pivot[1], part.Offset[0], part.Offset[1], part.Layer, part.Mount, Array.AsReadOnly(part.VisibleWhen), Array.AsReadOnly(part.HiddenWhen), part.Spin, part.SpinWhen, part.LoopWhen, part.LoopAnimation, part.Facings, part.DrawLayer, part.EmitterSpin, part.SpriteRotation));
+                    if (part.Muzzle is { } muzzle)
+                    {
+                        ValidateVector(muzzle, 0, 1, "Muzzle");
+                        if (part.Mount is null || ordered.Any(other => other.Mount == part.Mount && other.Muzzle.HasValue))
+                            throw node.Error(id + ".Model.Parts." + name + ".Muzzle", "Each muzzle must name a distinct Mount.");
+                    }
+                    ordered.Add(new(name, parent, part.Resource, part.Facing, part.Size[0], part.Size[1], part.Pivot[0], part.Pivot[1], part.Offset[0], part.Offset[1], part.Layer, part.Mount, Array.AsReadOnly(part.VisibleWhen), Array.AsReadOnly(part.HiddenWhen), part.Spin, part.SpinWhen, part.LoopWhen, part.LoopAnimation, part.Facings, part.DrawLayer, part.EmitterSpin, part.SpriteRotation, part.Muzzle is { } point ? (point[0], point[1]) : null));
                     pending.RemoveAt(i--); progress = true;
                 }
                 if (!progress) throw node.Error(id + ".Model.Parts", "Part parent cycle.");
@@ -115,6 +121,7 @@ public sealed class ModelCatalog
         [Required] public string Resource { get; set; } = "";
         public string? Parent { get; set; }
         public string? Mount { get; set; }
+        public double[]? Muzzle { get; set; }
         public string[] VisibleWhen { get; set; } = [];
         public string[] HiddenWhen { get; set; } = [];
         [Range(-720.0, 720.0)] public double Spin { get; set; }

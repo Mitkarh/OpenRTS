@@ -253,7 +253,7 @@ public partial class Sandbox : Node3D
         {
             _modelCatalog = ModelCatalog.Load(_manifest.Models);
             _sprites = new(catalog, _modelCatalog, TeamColor);
-            _combatEffects = new(catalog, EffectCatalog.Load(_manifest.Effects));
+            _combatEffects = new(catalog, EffectCatalog.Load(_manifest.Effects), _modelCatalog);
             AddChild(_combatEffects.Node);
             var entry = InstantiateMapScene(_mapMatch?.Map);
             Texture2D TextureFor(string id) => entry is not null && entry.VisualTextures.TryGetValue(id, out var texture) && texture is not null

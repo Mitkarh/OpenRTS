@@ -171,6 +171,17 @@ public sealed partial class SimulationWorld
         if ((ulong)((long)distance * distance) < squared) distance++;
         int horizontal = Math.Min(weapon.ProjectileSpeed, (distance + remainingTicks - 1) / remainingTicks);
         var next = StepTowards(shot.Position, shot.Destination, horizontal);
+        if (shot.FanDirection != default && age < duration && age <= 6 && distance > horizontal)
+        {
+            int strength = Math.Min(5, 7 - age);
+            var launchHeading = new WorldPosition(shot.Position.X + shot.FanDirection.X, shot.Position.Y + shot.FanDirection.Y);
+            var fanStep = StepTowards(shot.Position, launchHeading, horizontal);
+            next = next with
+            {
+                X = Math.Clamp(next.X + (fanStep.X - next.X) * strength / 5, 0, Width - 1),
+                Y = Math.Clamp(next.Y + (fanStep.Y - next.Y) * strength / 5, 0, Depth - 1)
+            };
+        }
         const long one = 65536;
         long t = age * one / duration;
         long height = weapon.TrajectoryHeight;
