@@ -4,7 +4,7 @@ using OpenRTS.Core;
 public partial class Sandbox
 {
     private long _rampCheckTick;
-    private bool _reachedPlateau, _descendedRamp;
+    private bool _reachedPlateau, _descendedRamp, _climbedDiagonally, _detouredAroundCliff;
 
     private void VerifyRamps(FrameExchange.FrameLease frame)
     {
@@ -12,17 +12,23 @@ public partial class Sandbox
         var session = _session!;
         var grid = frame.Grid!;
         var scout = frame.Poses[0];
+        bool diagonal = _mapMatch?.Map.Id == "diagonal-ramps";
+        const int size = RampScenario.CellSize;
+        var highGoal = diagonal ? new WorldPosition(13 * size + 256, 12 * size + 384, size) : RampScenario.PlateauGoal;
+        var lowGoal = diagonal ? highGoal with { Y = 20 * size + 384, Elevation = 0 } : RampScenario.LowGoal;
         if (frame.Tick == 0)
         {
-            Require(frame.Poses.Length == RampScenario.UnitCount && grid.HasSlopedSurface &&
-                _rampTerrain!.Mesh.GetSurfaceCount() == 3, "The ramp scenario or its three terrain materials did not load.");
+            Require(frame.Poses.Length == (diagonal ? 2 : RampScenario.UnitCount) && grid.HasSlopedSurface &&
+                _rampTerrain!.Mesh.GetSurfaceCount() == (diagonal ? 4 : 3), "The ramp scenario or its terrain materials did not load.");
             foreach (var pose in frame.Poses)
                 Require(pose.Current.Elevation == grid.SurfaceElevationAt(pose.Current), "A unit started off its surface.");
-            Require(CommandPoint(Pixel(RampScenario.PlateauGoal)) == RampScenario.PlateauGoal, "Plateau picking lost height or position.");
-            var ramp = new WorldPosition(16 * RampScenario.CellSize + 256, 16 * RampScenario.CellSize + 256);
+            Require(CommandPoint(Pixel(highGoal)) == highGoal, "Plateau picking lost height or position.");
+            int rampCell = diagonal ? 8 : 16;
+            var ramp = new WorldPosition(rampCell * size + 256, rampCell * size + 256);
             ramp = ramp with { Elevation = grid.SurfaceElevationAt(ramp) };
             Require(CommandPoint(Pixel(ramp)) == ramp, "Picking the ramp lost the sub-cell position.");
-            var cliff = new WorldPosition(8 * RampScenario.CellSize + 256, RampScenario.PlateauSouth * RampScenario.CellSize, RampScenario.CellSize);
+            var cliff = diagonal ? new WorldPosition(highGoal.X, 17 * size, size / 2)
+                : new WorldPosition(8 * size + 256, RampScenario.PlateauSouth * size, size);
             Require(CommandPoint(Pixel(cliff)) is null, "An exposed cliff face accepted a ground order.");
             var cameraPosition = _camera!.Position;
             float cameraSize = _camera.Size;
@@ -37,33 +43,42 @@ public partial class Sandbox
             Click(MouseButton.Left, scoutPixel);
             Click(MouseButton.Left, scoutPixel, pressed: false);
             Require(_selected == scout.Id, $"The usual sandbox selection did not pick the scout at {scoutPixel}.");
-            Click(MouseButton.Right, Pixel(RampScenario.PlateauGoal));
-            Click(MouseButton.Right, Pixel(RampScenario.LowGoal), shift: true);
+            Click(MouseButton.Right, Pixel(highGoal));
+            Click(MouseButton.Right, Pixel(lowGoal), shift: true);
         }
         else
         {
             if (frame.Tick == 1)
             {
                 var commands = session.GetCommandLog();
-                Require(commands.Length == 2 && commands[0].Position == RampScenario.PlateauGoal &&
-                    commands[1].Position == RampScenario.LowGoal && commands[1].Queued,
+                Require(commands.Length == 2 && commands[0].Position == highGoal &&
+                    commands[1].Position == lowGoal && commands[1].Queued,
                     "Sandbox mouse commands lost the exact target or queue flag.");
             }
             Require(scout.Current.Elevation == grid.SurfaceElevationAt(scout.Current), "The scout lost contact with its surface.");
             int step = scout.Current.Elevation - scout.Previous.Elevation;
             Require(Math.Abs(step) <= RampScenario.RisePerCell / 4, "The scout crossed a cliff discontinuity.");
-            if (step != 0)
+            if (diagonal)
+            {
+                var rise = grid.SurfaceRiseAt(grid.CellAt(scout.Current));
+                _climbedDiagonally |= step > 0 && rise is { X: not 0, Y: not 0 };
+                // The second command points straight across the south wall. Leaving the plateau requires a route around it.
+                _detouredAroundCliff |= _reachedPlateau && (scout.Current.X < 10 * size || scout.Current.Y < 10 * size);
+            }
+            else if (step != 0)
                 Require(scout.Current.X >= RampScenario.RampLeft * RampScenario.CellSize &&
                     scout.Current.X < RampScenario.RampRight * RampScenario.CellSize, "Height changed outside the ramp.");
             _descendedRamp |= _reachedPlateau && step < 0;
-            if (!_reachedPlateau && scout.Current == RampScenario.PlateauGoal)
+            if (!_reachedPlateau && scout.Current == highGoal)
             {
                 _reachedPlateau = true;
                 if (_capturePath is not null && DisplayServer.GetName() != "headless") CaptureRampTerrain();
             }
-            if (_reachedPlateau && scout.Current == RampScenario.LowGoal)
+            if (_reachedPlateau && scout.Current == lowGoal)
             {
                 Require(_descendedRamp, "The scout did not descend the ramp.");
+                Require(!diagonal || _climbedDiagonally && _detouredAroundCliff,
+                    "The route did not climb a two-axis ramp and detour around the cliff.");
                 using var replay = _mapMatch is { } match
                     ? match.CreateWorld(new(), speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, tickRate: _manifest.Settings.Simulation.TickRate)
                     : _rampScenario!.CreateWorld(1);
@@ -80,7 +95,8 @@ public partial class Sandbox
                 replay.CopyPoses(poses);
                 Require(frame.Poses.SequenceEqual(poses), "Replaying the same orders produced different poses.");
                 _verificationDone = true;
-                GD.Print($"OPENRTS_RAMPS:PASS exact clicks, rock occlusion, ascent, descent and replay at tick {frame.Tick}");
+                string route = diagonal ? "diagonal ascent, descent and cliff detour" : "ascent and descent";
+                GD.Print($"OPENRTS_RAMPS:PASS exact clicks, rock occlusion, {route} and replay at tick {frame.Tick}");
                 GetTree().Quit();
                 return;
             }

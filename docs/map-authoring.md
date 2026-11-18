@@ -63,3 +63,26 @@ YAML позволяет задать карту непосредственно �
 [Диагностический сценарий и проверка рамп](sandbox.md#диагностические-сценарии).
 
 Для своего диагонального склона задайте в TileSet явный тайл с ненулевыми компонентами `Rise.x` и `Rise.y`. Например, `Rise = (128, -128)` даёт уклон 182 для `MaximumSlope`. На стыке с соседним тайлом сравните высоты обоих концов общей грани. Совпадение обеспечивает плавный переход. Чтобы локомотор с `MaximumStep = 0` мог пройти с диагональной рампы на плато, соедините их переходными участками с уклоном по одной оси. Скальные стенки строятся вдоль границ клеток. Диагональный контур на спрайте сам по себе оставляет геометрию клетки прежней.
+
+## Полигон диагональных рамп и обрывов
+
+Откройте [DiagonalRamps.tscn](../sandbox/examples/maps/DiagonalRamps.tscn) в Godot и нажмите **Build and play map**. На северо-западе карты находится диагональный подъём, с юга и востока плато обрывается. Выберите пехотинца или танк, отдайте приказ подняться на плато, затем нажмите ПКМ на низине за южным обрывом. Чтобы попасть туда, юнит обходит стенку и спускается по склону.
+
+```sh
+./tools/dev.sh map-build res://examples/maps/DiagonalRamps.tscn --verify
+./tools/dev.sh run --map=res://artifacts/maps/diagonal-ramps.ortmap.json --mod=res://rocky-pass-game.yaml
+./tools/dev.sh run --map=res://artifacts/maps/diagonal-ramps.ortmap.json --mod=res://rocky-pass-game.yaml --verify-ramps
+```
+
+В [TileSet полигона](../sandbox/examples/maps/DiagonalRampTiles.tres) есть участки с подъёмом по двум осям, переходы к ровной поверхности и скальная кромка. Атлас использует существующие фактуры травы, рампы, гор и скальной стенки. В игровом sandbox стенки строятся по перепаду высот общей грани.
+
+## Диагональный обрыв внутри клетки
+
+Откройте [DiagonalCliffs.tscn](../sandbox/examples/maps/DiagonalCliffs.tscn). В [палитре](../sandbox/examples/maps/DiagonalCliffTiles.tres) слева идут низина, плато и четыре разреза. Для собственной палитры задайте в custom data `Elevation` для нижней половины, `Rise = (0, 0)`, `UpperCorner` от 1 до 4 по часовой стрелке от северо-запада и `UpperElevation` для верхней половины. У обычного тайла оба поля `UpperCorner` и `UpperElevation` равны нулю. Выбирайте вариант нужного направления в палитре **Tiles**. [Контракт карты v4](decisions/047-map-compilation.md#версия-4--диагональные-обрывы).
+
+Нажмите **Build and play map**. Нижний пехотинец обойдёт плато при приказе двигаться на противоположную сторону. Верхнего можно направить на верхнюю половину пограничного тайла. Клик по самой стенке пропускается.
+
+```sh
+./tools/dev.sh map-build res://examples/maps/DiagonalCliffs.tscn --verify
+./tools/dev.sh run --map=res://artifacts/maps/diagonal-cliffs.ortmap.json --mod=res://rocky-pass-game.yaml
+```

@@ -6,6 +6,23 @@ public readonly record struct SurfaceSample(int Elevation = 0, int Slope = 0, in
 /// <summary>Height change across a cell along each positive ground axis. The sample elevation is at the center.</summary>
 public readonly record struct SurfaceRise(int X = 0, int Y = 0);
 
+public enum SurfaceCorner { None, NorthWest, NorthEast, SouthEast, SouthWest }
+
+/// <summary>Two flat triangles separated by a diagonal wall. The sample stores the lower elevation.</summary>
+public readonly record struct SurfaceCut(SurfaceCorner UpperCorner, int UpperElevation)
+{
+    public bool DescendingDiagonal => UpperCorner is SurfaceCorner.NorthEast or SurfaceCorner.SouthWest;
+
+    public bool IsUpper(int x, int y, int size) => UpperCorner switch
+    {
+        SurfaceCorner.NorthWest => x + y <= size,
+        SurfaceCorner.NorthEast => x >= y,
+        SurfaceCorner.SouthEast => x + y >= size,
+        SurfaceCorner.SouthWest => x <= y,
+        _ => false
+    };
+}
+
 /// <summary>Immutable terrain sampling layer, independent of exact body positions and collision bins.</summary>
 public sealed partial class NavigationGrid
 {
@@ -15,11 +32,13 @@ public sealed partial class NavigationGrid
     private readonly uint[]? _noStop;
     private readonly SurfaceSample[]? _surface;
     private readonly SurfaceRise[]? _rises;
+    private readonly Dictionary<int, SurfaceCut>? _cuts;
     private readonly WorldBox[] _obstacles;
     private readonly Dictionary<int, int[]> _obstacleCells;
     public bool HasGeometry => _surface is not null || _obstacles.Length > 0;
     public bool HasSurface => _surface is not null;
     public bool HasSlopedSurface => _rises is not null;
+    public bool HasSurfaceCuts => _cuts is not null;
     public IReadOnlyList<WorldBox> Obstacles => Array.AsReadOnly(_obstacles);
     public bool HasTerrain => _terrain is not null;
     public bool HasStoppingRestrictions => _noStop is not null;
@@ -32,7 +51,7 @@ public sealed partial class NavigationGrid
 
     public NavigationGrid(int width, int height, IEnumerable<GridCell>? blocked = null, int cellSize = WorldPosition.UnitsPerCell,
         IEnumerable<byte>? terrain = null, IEnumerable<SurfaceSample>? surface = null, IEnumerable<WorldBox>? obstacles = null,
-        IEnumerable<SurfaceRise>? rises = null)
+        IEnumerable<SurfaceRise>? rises = null, IReadOnlyDictionary<int, SurfaceCut>? cuts = null)
     {
         if (cellSize < 1 || cellSize > WorldPosition.MaximumExtent) throw new ArgumentOutOfRangeException(nameof(cellSize));
         if (width < 1 || width > WorldPosition.MaximumExtent / cellSize) throw new ArgumentOutOfRangeException(nameof(width));
@@ -65,6 +84,18 @@ public sealed partial class NavigationGrid
             }
             if (values.Any(rise => rise != default)) _rises = values;
         }
+        if (cuts is { Count: > 0 })
+        {
+            _cuts = new(cuts.Count);
+            foreach (var (cell, cut) in cuts)
+            {
+                if (_surface is null || (uint)cell >= CellCount || SurfaceRiseAt(cell) != default ||
+                    cut.UpperCorner is < SurfaceCorner.NorthWest or > SurfaceCorner.SouthWest ||
+                    cut.UpperElevation <= _surface[cell].Elevation || cut.UpperElevation > 1048576)
+                    throw new ArgumentException("A cut requires two bounded flat heights and an upper corner.", nameof(cuts));
+                _cuts.Add(cell, cut);
+            }
+        }
         _obstacles = obstacles?.Distinct().OrderBy(b => b.MinY).ThenBy(b => b.MinX).ThenBy(b => b.MaxY).ThenBy(b => b.MaxX).ToArray() ?? [];
         if (_obstacles.Length > 65536 || _obstacles.Any(b => b.MinX < 0 || b.MinY < 0 || b.MaxX > Width * CellSize || b.MaxY > Height * CellSize || b.MinX >= b.MaxX || b.MinY >= b.MaxY)) throw new ArgumentException("Invalid partial obstacles.", nameof(obstacles));
         var obstacleCells = new Dictionary<int, List<int>>();
@@ -90,7 +121,7 @@ public sealed partial class NavigationGrid
         CellSize = previous.CellSize;
         Revision = checked(previous.Revision + 1);
         _terrain = previous._terrain; MaximumTerrain = previous.MaximumTerrain; _noStop = previous._noStop;
-        _surface = previous._surface; _rises = previous._rises; _obstacles = previous._obstacles; _obstacleCells = previous._obstacleCells;
+        _surface = previous._surface; _rises = previous._rises; _cuts = previous._cuts; _obstacles = previous._obstacles; _obstacleCells = previous._obstacleCells;
         _blocked = (uint[])previous._blocked.Clone();
         uint bit = 1u << (cell & 31);
         if (blocked) _blocked[cell >> 5] |= bit;
@@ -101,7 +132,7 @@ public sealed partial class NavigationGrid
     {
         Width = basis.Width; Height = basis.Height; CellSize = basis.CellSize; Revision = revision;
         _blocked = blocked; _terrain = terrain; _noStop = noStop; MaximumTerrain = terrain?.Max() ?? 0;
-        _surface = basis._surface; _rises = basis._rises; _obstacles = basis._obstacles; _obstacleCells = basis._obstacleCells;
+        _surface = basis._surface; _rises = basis._rises; _cuts = basis._cuts; _obstacles = basis._obstacles; _obstacleCells = basis._obstacleCells;
     }
     /// <summary>Overlays valid cell indices on this base grid and compares against the current revision of the same grid.</summary>
     public NavigationGrid Compose(IReadOnlyDictionary<int, CellOverride> patches, NavigationGrid current)
@@ -124,6 +155,7 @@ public sealed partial class NavigationGrid
     public bool CanStop(int cell) => !IsBlocked(cell) && (_noStop is null || (_noStop[cell >> 5] & (1u << (cell & 31))) == 0);
     public SurfaceSample SurfaceAt(int cell) => _surface?[cell] ?? default;
     public SurfaceRise SurfaceRiseAt(int cell) => _rises?[cell] ?? default;
+    public SurfaceCut SurfaceCutAt(int cell) => _cuts?.GetValueOrDefault(cell) ?? default;
 
     public int SurfaceElevationAt(WorldPosition position) => SurfaceElevationAt(CellAt(position), position.X, position.Y);
 
@@ -131,12 +163,26 @@ public sealed partial class NavigationGrid
     public int SurfaceElevationAt(int cell, int x, int y)
     {
         int elevation = SurfaceAt(cell).Elevation;
+        var cut = SurfaceCutAt(cell);
+        if (cut != default)
+            return cut.IsUpper(x - cell % Width * CellSize, y - cell / Width * CellSize, CellSize)
+                ? cut.UpperElevation : elevation;
         var rise = SurfaceRiseAt(cell);
         if (rise == default) return elevation;
         int offsetX = x - cell % Width * CellSize, offsetY = y - cell / Width * CellSize;
         long scale = 2L * CellSize;
         long height = elevation * scale + (2L * offsetX - CellSize) * rise.X + (2L * offsetY - CellSize) * rise.Y;
         return (int)((height < 0 ? height - scale + 1 : height) / scale);
+    }
+
+    /// <summary>Evaluate an edge endpoint on the triangle that owns the open edge.</summary>
+    public int SurfaceElevationAtEdge(int cell, int x, int y, int otherX, int otherY)
+    {
+        var cut = SurfaceCutAt(cell);
+        if (cut == default) return SurfaceElevationAt(cell, x, y);
+        int left = cell % Width * CellSize, top = cell / Width * CellSize;
+        return cut.IsUpper(x + otherX - 2 * left, y + otherY - 2 * top, 2 * CellSize)
+            ? cut.UpperElevation : SurfaceAt(cell).Elevation;
     }
     public ReadOnlySpan<int> ObstaclesAt(int cell) => _obstacleCells.TryGetValue(cell, out var values) ? values : [];
     public WorldBox Obstacle(int index) => _obstacles[index];
@@ -204,9 +250,16 @@ public sealed partial class NavigationGrid
         writer.Write(HasTerrain);
         if (_terrain is not null) writer.Write(_terrain);
         writer.Write(_noStop is not null); if (_noStop is not null) foreach (uint bits in _noStop) writer.Write(bits);
-        writer.Write((byte)(_surface is null ? 0 : _rises is null ? 1 : 2));
+        int surfaceFormat = _surface is null ? 0 : _rises is null ? 1 : 2;
+        writer.Write((byte)(surfaceFormat | (_cuts is null ? 0 : 4)));
         if (_surface is not null) foreach (var sample in _surface) { writer.Write(sample.Elevation); writer.Write(sample.Slope); writer.Write(sample.Depth); }
         if (_rises is not null) foreach (var rise in _rises) { writer.Write(rise.X); writer.Write(rise.Y); }
+        if (_cuts is not null)
+        {
+            writer.Write(_cuts.Count);
+            foreach (var (cell, cut) in _cuts.OrderBy(pair => pair.Key))
+            { writer.Write(cell); writer.Write((byte)cut.UpperCorner); writer.Write(cut.UpperElevation); }
+        }
         writer.Write(_obstacles.Length); foreach (var box in _obstacles) { writer.Write(box.MinX); writer.Write(box.MinY); writer.Write(box.MaxX); writer.Write(box.MaxY); }
     }
 }

@@ -18,6 +18,7 @@ public partial class MapAuthoringChecks : Node
             Run();
             MapTerrainChecks.Run(Check);
             CheckDiagonalRelief();
+            CheckDiagonalCliffMap();
             GD.Print($"OPENRTS_AUTHORING_CHECKS:{_checks} passed"); GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
@@ -77,6 +78,60 @@ public partial class MapAuthoringChecks : Node
             layer.EraseCell(cell);
             atlas.RemoveAlternativeTile(ramp, alternative);
         }
+    }
+
+    private void CheckDiagonalCliffMap()
+    {
+        var map = GD.Load<PackedScene>("res://examples/maps/DiagonalCliffs.tscn").Instantiate<OpenRtsMap2D>();
+        AddChild(map);
+        var catalog = GameManifest.Load(ProjectSettings.GlobalizePath(map.ContentManifest)).LoadUnits();
+        var source = MapSceneExtractor2D.Extract(map);
+        var compiled = MapCompiler.Compile(MapSource.Read(new("diagonal cliffs source", source.Write())), catalog);
+        var game = MapCompiler.Read(new("diagonal cliffs artifact", compiled.Write()), catalog).Map;
+        var grid = game.Grid;
+        Check(source.Surface!.Where(cell => cell.Cut != default).Select(cell => cell.Cut.UpperCorner).Distinct().Count() == 4 &&
+            grid.HasSurfaceCuts && !grid.HasSlopedSurface, "The four diagonal cliff tiles did not round-trip.");
+
+        var terrain = new TerrainSurface(grid);
+        using var mesh = terrain.Mesh;
+        var camera = new Camera3D { Projection = Camera3D.ProjectionType.Orthogonal, Size = 20 };
+        AddChild(camera);
+        camera.Position = new(8, 15, 8);
+        camera.RotationDegrees = new(-90, 0, 0);
+        const int size = WorldPosition.UnitsPerCell;
+        var low = new WorldPosition(6 * size + 256, 5 * size + 256);
+        var high = new WorldPosition(6 * size + 768, 5 * size + 768, size);
+        Check(Pick(low) == low && Pick(high) == high, "Picking the two halves lost XY or selected the wrong floor.");
+        var wall = new Vector3(6.5f, 0.5f, 5.5f);
+        camera.Position = wall + new Vector3(-5, 4, -5);
+        camera.LookAt(wall);
+        Check(terrain.Pick(camera, camera.UnprojectPosition(wall)) is null, "The diagonal rock face accepted a ground order.");
+
+        var players = new Dictionary<string, PlayerDefinition> { ["blue"] = new(1, "Blue") };
+        using var world = game.Prepare(players).CreateWorld();
+        using var replay = game.Prepare(players).CreateWorld(4);
+        var poses = new EntityPose[2];
+        world.CopyPoses(poses);
+        Check(poses[0].Current.Elevation == 0 && poses[1].Current.Elevation == size, "The two scouts loaded at incorrect elevations.");
+        var goal = new WorldPosition(13 * size + 512, poses[0].Current.Y);
+        WorldCommand[] orders = [new(1, 0, 1, CommandKind.Move, poses[0].Id, goal),
+            new(1, 1, 1, CommandKind.Move, poses[1].Id, high)];
+        world.Step(orders);
+        replay.Step(orders);
+        bool detoured = false, grounded = true;
+        for (int t = 0; t < 350 && world.MovingCount != 0; t++)
+        {
+            world.Step();
+            replay.Step();
+            world.CopyPoses(poses);
+            grounded &= poses[0].Current.Elevation == 0 && poses[1].Current.Elevation == size;
+            detoured |= Math.Abs(poses[0].Current.Y - goal.Y) >= 3 * size;
+        }
+        Check(grounded && detoured && poses[0].Current == goal && poses[1].Current == high &&
+            world.Report() == replay.Report(), "Movement across the plateau outline, either half, or replay was incorrect.");
+
+        WorldPosition? Pick(WorldPosition position) => terrain.Pick(camera,
+            camera.UnprojectPosition(new Vector3(position.X, position.Elevation, position.Y) / size));
     }
 
     private void Run()

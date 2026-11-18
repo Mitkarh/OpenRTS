@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using DeclarativeContent;
 using OpenRTS.Core;
+using OpenRTS.Core.Navigation;
 
 namespace OpenRTS.Content;
 
@@ -28,9 +29,10 @@ public sealed class CompiledMap
 
 public static class MapCompiler
 {
-    public const int Version = 3;
+    public const int Version = 4;
     public const string Geometry = "ground-plane-v1";
     internal const string SurfaceGeometry = "single-surface-v1";
+    internal const string CutSurfaceGeometry = "single-surface-cuts-v1";
     public const int MaximumDocumentBytes = 64 * 1024 * 1024;
     public const int MaximumPaletteEntries = 65536;
     public const int MaximumObjects = 1000000;
@@ -66,6 +68,10 @@ public static class MapCompiler
                 var cell = surface[i];
                 if (2 * Math.Abs((long)cell.Elevation) + Math.Abs((long)cell.RiseX) + Math.Abs((long)cell.RiseY) > 2 * 1048576)
                     throw Error($"surface[{i}]", "Sloped surface corners exceed the elevation limits.");
+                if (cell.Cut != default && (cell.Rise != default ||
+                    cell.Cut.UpperCorner is < SurfaceCorner.NorthWest or > SurfaceCorner.SouthWest ||
+                    cell.Cut.UpperElevation <= cell.Elevation || cell.Cut.UpperElevation > 1048576))
+                    throw Error($"surface[{i}]", "A cut requires two bounded flat heights and an upper corner.");
             }
         }
         var locomotion = catalog.Locomotion ?? throw Error("terrain", "Maps require a terrain catalog.");

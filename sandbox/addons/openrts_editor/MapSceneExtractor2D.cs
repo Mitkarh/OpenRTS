@@ -2,6 +2,7 @@ using DeclarativeContent;
 using Godot;
 using OpenRTS.Content;
 using OpenRTS.Core;
+using OpenRTS.Core.Navigation;
 
 namespace OpenRTS.Godot.Authoring;
 
@@ -40,8 +41,15 @@ internal static class MapSceneExtractor2D
             throw Error(layer, "TileSet", "DirectionalVisual custom data must be boolean.");
         int elevationLayer = tiles.GetCustomDataLayerByName("Elevation");
         int riseLayer = tiles.GetCustomDataLayerByName("Rise");
+        int upperCornerLayer = tiles.GetCustomDataLayerByName("UpperCorner");
+        int upperElevationLayer = tiles.GetCustomDataLayerByName("UpperElevation");
+        bool hasCuts = upperCornerLayer >= 0 || upperElevationLayer >= 0;
+        if (hasCuts && (upperCornerLayer < 0 || upperElevationLayer < 0 ||
+            tiles.GetCustomDataLayerType(upperCornerLayer) != Variant.Type.Int ||
+            tiles.GetCustomDataLayerType(upperElevationLayer) != Variant.Type.Int))
+            throw Error(layer, "TileSet", "Diagonal cliff tiles require integer UpperCorner and UpperElevation custom data.");
         MapSurfaceCell[]? surface = null;
-        if (elevationLayer >= 0 || riseLayer >= 0)
+        if (elevationLayer >= 0 || riseLayer >= 0 || hasCuts)
         {
             if (elevationLayer < 0 || riseLayer < 0 || tiles.GetCustomDataLayerType(elevationLayer) != Variant.Type.Int ||
                 tiles.GetCustomDataLayerType(riseLayer) != Variant.Type.Vector2I)
@@ -79,11 +87,20 @@ internal static class MapSceneExtractor2D
             {
                 long elevation = tile.GetCustomData("Elevation").AsInt64();
                 var rise = tile.GetCustomData("Rise").AsVector2I();
-                if (rise != default && HasTransform(tile, cell))
-                    throw Error(layer, $"cell {cell}.Rise", "Use an explicit ramp tile for each direction instead of flipping or transposing it.");
+                SurfaceCut cut = default;
+                if (hasCuts)
+                {
+                    long corner = tile.GetCustomDataByLayerId(upperCornerLayer).AsInt64();
+                    long upper = tile.GetCustomDataByLayerId(upperElevationLayer).AsInt64();
+                    if (corner < 0 || corner > 4 || upper is < int.MinValue or > int.MaxValue || corner == 0 && upper != 0)
+                        throw Error(layer, $"cell {cell}.UpperCorner", "Expected an upper corner from 1 to 4 with an Int32 height, or two zeroes.");
+                    cut = new((SurfaceCorner)corner, (int)upper);
+                }
+                if ((rise != default || cut != default) && HasTransform(tile, cell))
+                    throw Error(layer, $"cell {cell}.Elevation", "Use an explicit relief tile for each direction instead of flipping or transposing it.");
                 if (elevation is < int.MinValue or > int.MaxValue)
                     throw Error(layer, $"cell {cell}.Elevation", "Expected an Int32 height.");
-                surface[i] = new((int)elevation, rise.X, rise.Y);
+                surface[i] = new((int)elevation, rise.X, rise.Y, cut);
             }
         }
 

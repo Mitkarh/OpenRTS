@@ -18,7 +18,7 @@ public sealed class DestinationResolver
     {
         ArgumentNullException.ThrowIfNull(grid); ArgumentNullException.ThrowIfNull(profile);
         if (profile.Rules.Count <= grid.MaximumTerrain) throw new ArgumentException("Profile does not cover this terrain.");
-        Grid = grid; Profile = profile; Geometry = new(grid, profile, exactGeometry);
+        Grid = grid; Profile = profile; Geometry = new(grid, profile, exactGeometry || grid.HasSurfaceCuts);
     }
     public int Component(int cell, CancellationToken token = default)
     {

@@ -19,7 +19,7 @@ public sealed partial class SimulationWorld
         if (_flightSurfaceValidated) return;
         if (_baseGrid is { HasSurface: true } grid)
         {
-            if (grid.HasSlopedSurface)
+            if (grid.HasSlopedSurface || grid.HasSurfaceCuts)
                 throw new ArgumentException("The current aircraft controller requires a flat flight surface; variable-height flight needs terrain anticipation.");
             int plane = grid.SurfaceAt(0).Elevation;
             for (int cell = 1; cell < grid.CellCount; cell++)

@@ -11,7 +11,7 @@ internal static class TerrainGeometry
         if (Math.Min(from.X, to.X) < body.HalfWidth || Math.Min(from.Y, to.Y) < body.HalfHeight ||
             Math.Max(from.X, to.X) > width - body.HalfWidth || Math.Max(from.Y, to.Y) > height - body.HalfHeight) return false;
         int size = grid.CellSize;
-        bool graded = grid.HasSlopedSurface && locomotor is not null;
+        bool graded = (grid.HasSlopedSurface || grid.HasSurfaceCuts) && locomotor is not null;
         // Include edges owned by the cell just beyond a tangent on a grid line.
         int reachX = (body.HalfWidth + size - (graded ? 0 : 1)) / size;
         int reachY = (body.HalfHeight + size - (graded ? 0 : 1)) / size;
@@ -49,14 +49,19 @@ internal static class TerrainGeometry
         WorldPosition from, WorldPosition to, BodyShape body)
     {
         int size = grid.CellSize, left = x * size, top = y * size, right = left + size, bottom = top + size;
+        var cut = grid.SurfaceCutAt(cell);
+        if (cut != default && cut.UpperElevation - grid.SurfaceAt(cell).Elevation > maximumStep &&
+            BodyGeometry.SweptSegment(from, to, new(left, cut.DescendingDiagonal ? top : bottom),
+                new(right, cut.DescendingDiagonal ? bottom : top), body)) return true;
+
         // A flat edge can meet a ramp at the same height. Test the shared edge, keeping the full body clear of a cliff.
         return x + 1 < grid.Width && Blocks(cell + 1, right, top, right, bottom) ||
             y + 1 < grid.Height && Blocks(cell + grid.Width, left, bottom, right, bottom);
 
         bool Blocks(int neighbor, int x0, int y0, int x1, int y1)
         {
-            int start = grid.SurfaceElevationAt(cell, x0, y0) - grid.SurfaceElevationAt(neighbor, x0, y0);
-            int end = grid.SurfaceElevationAt(cell, x1, y1) - grid.SurfaceElevationAt(neighbor, x1, y1);
+            int start = grid.SurfaceElevationAtEdge(cell, x0, y0, x1, y1) - grid.SurfaceElevationAtEdge(neighbor, x0, y0, x1, y1);
+            int end = grid.SurfaceElevationAtEdge(cell, x1, y1, x0, y0) - grid.SurfaceElevationAtEdge(neighbor, x1, y1, x0, y0);
             return BlocksAbove(start, end) || BlocksAbove(-start, -end);
 
             bool BlocksAbove(int a, int b)

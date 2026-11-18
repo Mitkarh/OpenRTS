@@ -239,6 +239,31 @@ internal static class FootprintChecks
                 NavigationChecks.Check(Pose(world, 1).Current == goal, "The route follower could not move through the shallow crossing.");
             }
         });
+        test("Diagonal cliff halves: height, clearance and step limit apply within one cell", () =>
+        {
+            const int size = WorldPosition.UnitsPerCell;
+            var grid = new NavigationGrid(1, 1, surface: [default],
+                cuts: new Dictionary<int, SurfaceCut> { [0] = new(SurfaceCorner.NorthEast, size) });
+            var high = new WorldPosition(768, 256, size);
+            var low = new WorldPosition(256, 768);
+            NavigationChecks.Check(grid.SurfaceElevationAt(high) == size && grid.SurfaceElevationAt(low) == 0 &&
+                grid.SurfaceElevationAt(new WorldPosition(512, 512)) == size, "A triangle or diagonal tie used the wrong height.");
+            foreach (var body in new[] { BodyShape.Circle(128), BodyShape.Box(128, 64) })
+            {
+                var strict = new Locomotor("strict", [TerrainRule.Ground], body, maximumStep: size - 1);
+                var resolver = new DestinationResolver(grid, strict);
+                NavigationChecks.Check(resolver.CanStop(high) && resolver.CanStop(low) && !resolver.CanReach(high, low) &&
+                    !resolver.CanStop(new(560, 512)), "One triangle was blocked or a swept body crossed the wall.");
+
+                var stepping = new Locomotor("step", [TerrainRule.Ground], body, maximumStep: size);
+                using var world = new SimulationWorld([new("unit", 100, body: body, locomotor: stepping)], size, size, navigationGrid: grid);
+                world.AddInitialUnit(0, high with { Elevation = -1 });
+                NavigationChecks.Check(Pose(world, 1).Current == high, "Spawn did not select the upper triangle.");
+                Move(world, 1, low);
+                Finish(world);
+                NavigationChecks.Check(Pose(world, 1).Current == low, "A locomotor with sufficient step could not cross the wall.");
+            }
+        });
         test("N2: weapon range reaches the nearest building cell rather than its center", () =>
         {
             var gun = new UnitDefinition("gun", 100, ["idle", "move", "fire"], weapon: new(5120, 5120, 20, 100, 0), body: BodyShape.Circle(512));

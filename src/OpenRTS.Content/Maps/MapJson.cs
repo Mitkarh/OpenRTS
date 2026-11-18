@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using DeclarativeContent;
 using OpenRTS.Core;
+using OpenRTS.Core.Navigation;
 
 namespace OpenRTS.Content;
 
@@ -48,8 +49,15 @@ internal static class MapJson
     private static void Header(Utf8JsonWriter writer, string format, int version)
     {
         writer.WriteStartObject(); writer.WriteString("format", format); writer.WriteNumber("version", version);
-        writer.WriteString("geometry", version == 3 ? MapCompiler.SurfaceGeometry : MapCompiler.Geometry);
+        writer.WriteString("geometry", Geometry(version));
     }
+
+    private static string Geometry(int version) => version switch
+    {
+        3 => MapCompiler.SurfaceGeometry,
+        4 => MapCompiler.CutSurfaceGeometry,
+        _ => MapCompiler.Geometry
+    };
 
     private static void WriteMap(Utf8JsonWriter writer, MapSource source, bool gameplayOnly, CancellationToken stop)
     {
@@ -85,6 +93,11 @@ internal static class MapJson
                 writer.WriteNumberValue(cell.Elevation);
                 writer.WriteNumberValue(cell.RiseX);
                 writer.WriteNumberValue(cell.RiseY);
+                if (cell.Cut != default)
+                {
+                    writer.WriteNumberValue((int)cell.Cut.UpperCorner);
+                    writer.WriteNumberValue(cell.Cut.UpperElevation);
+                }
                 writer.WriteEndArray();
             }
             writer.WriteEndArray();
@@ -168,8 +181,8 @@ internal static class MapJson
                 : ["format", "version", "geometry", "map"]);
             int version = Number(Required(root, "version"), "version");
             if (Text(Required(root, "format"), "format") != (compiled ? CompiledFormat : SourceFormat) ||
-                version is not (1 or 2 or 3) ||
-                Text(Required(root, "geometry"), "geometry") != (version == 3 ? MapCompiler.SurfaceGeometry : MapCompiler.Geometry))
+                version is not (1 or 2 or 3 or 4) ||
+                Text(Required(root, "geometry"), "geometry") != Geometry(version))
                 throw Error("format", "Unsupported map format, version or geometry.");
             string content = "", gameplay = "", data = "", effectiveContent = "";
             if (compiled)
@@ -187,7 +200,7 @@ internal static class MapJson
                 effectiveContent = version >= 2 ? Fingerprint("effectiveContentFingerprint") : content;
                 gameplay = Fingerprint("gameplayFingerprint"); data = Fingerprint("dataFingerprint");
             }
-            var map = Fields(Required(root, "map"), "map", version == 3
+            var map = Fields(Required(root, "map"), "map", version >= 3
                 ? ["id", "kind", "size", "cellSize", "terrain", "visual", "slots", "objects", "surface"]
                 : ["id", "kind", "size", "cellSize", "terrain", "visual", "slots", "objects"]);
             var size = Pair(Required(map, "size"), "size");
@@ -195,7 +208,7 @@ internal static class MapJson
             MapCompiler.ValidateDimensions(size.X, size.Y, cellSize, new(source.Name, 1, 1));
             int count = checked(size.X * size.Y);
             MapSurfaceCell[]? surface = null;
-            if (version == 3)
+            if (version >= 3)
             {
                 var cells = Array(Required(map, "surface"), "surface", count);
                 if (cells.GetArrayLength() != count) throw Error("surface", "The surface must cover every map cell.");
@@ -204,9 +217,12 @@ internal static class MapJson
                 foreach (var node in cells.EnumerateArray())
                 {
                     string path = $"surface[{i}]";
-                    var cell = Array(node, path, 3);
-                    if (cell.GetArrayLength() != 3) throw Error(path, "Expected [elevation, riseX, riseY].");
-                    surface[i++] = new(Number(cell[0], path), Number(cell[1], path), Number(cell[2], path));
+                    var cell = Array(node, path, version == 4 ? 5 : 3);
+                    int length = cell.GetArrayLength();
+                    if (length is not (3 or 5)) throw Error(path, "Expected [elevation, riseX, riseY] optionally followed by upper corner and elevation.");
+                    var cut = length == 5 ? new SurfaceCut((SurfaceCorner)Number(cell[3], path), Number(cell[4], path)) : default;
+                    if (length == 5 && cut.UpperCorner == SurfaceCorner.None) throw Error(path, "Expected an upper corner.");
+                    surface[i++] = new(Number(cell[0], path), Number(cell[1], path), Number(cell[2], path), cut);
                 }
             }
             MapLayer Layer(string name)

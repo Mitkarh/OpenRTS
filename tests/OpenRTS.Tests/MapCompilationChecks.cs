@@ -95,6 +95,26 @@ internal static class MapCompilationChecks
             NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(cells), catalog));
         });
 
+        test("Maps compiled: v4 diagonal cuts affect identity and reject invalid surfaces", () =>
+        {
+            var grass = new MapLayer(["grass"], new int[4]);
+            var cells = new MapSurfaceCell[4];
+            MapSource Source() => new("cuts", false, 2, 2, grass, grass, [], [], surface: cells);
+            var flat = MapCompiler.Compile(Source(), catalog);
+            cells[0] = new(0, Cut: new(OpenRTS.Core.Navigation.SurfaceCorner.NorthWest, 1024));
+            var cut = MapCompiler.Compile(Source(), catalog);
+            cells[0] = cells[0] with { Cut = cells[0].Cut with { UpperCorner = OpenRTS.Core.Navigation.SurfaceCorner.SouthEast } };
+            var opposite = MapCompiler.Compile(Source(), catalog);
+            NavigationChecks.Check(flat.GameplayFingerprint != cut.GameplayFingerprint &&
+                cut.GameplayFingerprint != opposite.GameplayFingerprint &&
+                MapCompiler.Read(new("cut map", cut.Write()), catalog).Write() == cut.Write(),
+                "A diagonal cut or its orientation was lost in the map identity.");
+            cells[0] = cells[0] with { RiseX = 128 };
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(), catalog));
+            cells[0] = new(1024, Cut: cells[0].Cut);
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(), catalog));
+        });
+
         test("Maps compiled: independent input and artifact preserve exact world and every journal hash", () =>
         {
             var baseline = JsonNode.Parse(File.ReadAllText("docs/verification/047-map-compilation/baseline.json"))!;

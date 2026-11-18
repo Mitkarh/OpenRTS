@@ -20,6 +20,31 @@ public readonly record struct BodyShape
 
 internal static class BodyGeometry
 {
+    internal static bool SweptSegment(WorldPosition from, WorldPosition to, WorldPosition a, WorldPosition b, BodyShape body)
+    {
+        if (body.Kind == BodyKind.Circle)
+        {
+            int radius = body.HalfWidth;
+            if (Separated(1, 0, radius, radius) || Separated(0, 1, radius, radius)) return false;
+            // For disjoint segments the closest pair contains an endpoint of at least one segment.
+            return Intersects(0, 0) || SegmentCircle(from, to, a, radius) || SegmentCircle(from, to, b, radius) ||
+                SegmentCircle(a, b, from, radius) || SegmentCircle(a, b, to, radius);
+        }
+        return Intersects(body.HalfWidth, body.HalfHeight);
+
+        bool Intersects(int halfWidth, int halfHeight) => !Separated(1, 0, halfWidth, halfHeight) &&
+            !Separated(0, 1, halfWidth, halfHeight) && !Separated(a.Y - b.Y, b.X - a.X, halfWidth, halfHeight) &&
+            !Separated(from.Y - to.Y, to.X - from.X, halfWidth, halfHeight);
+
+        bool Separated(long nx, long ny, int halfWidth, int halfHeight)
+        {
+            long p = nx * from.X + ny * from.Y, q = nx * to.X + ny * to.Y;
+            long u = nx * a.X + ny * a.Y, v = nx * b.X + ny * b.Y;
+            long padding = Math.Abs(nx) * halfWidth + Math.Abs(ny) * halfHeight;
+            return Math.Max(p, q) + padding < Math.Min(u, v) || Math.Max(u, v) < Math.Min(p, q) - padding;
+        }
+    }
+
     internal static bool SweptBox(WorldPosition a, WorldPosition b, WorldBox box, BodyShape body)
     {
         if (body.Kind == BodyKind.Box) return TerrainGeometry.IntersectsBox(a, b, box.MinX - body.HalfWidth, box.MinY - body.HalfHeight, box.MaxX + body.HalfWidth, box.MaxY + body.HalfHeight);

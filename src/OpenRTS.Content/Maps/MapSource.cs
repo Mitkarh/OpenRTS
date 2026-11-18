@@ -26,7 +26,7 @@ public sealed record MapSlotSource(string Id, WorldPosition? Position = null, bo
 public sealed record MapHealthVariant(string Id, int MaxHealth);
 
 /// <summary>Height at the center and signed height change across each cell axis.</summary>
-public readonly record struct MapSurfaceCell(int Elevation, int RiseX = 0, int RiseY = 0)
+public readonly record struct MapSurfaceCell(int Elevation, int RiseX = 0, int RiseY = 0, SurfaceCut Cut = default)
 {
     internal SurfaceSample Sample => new(Elevation);
     internal SurfaceRise Rise => new(RiseX, RiseY);
@@ -67,9 +67,11 @@ public sealed partial class MapSource
         Terrain = terrain; Visual = visual; Slots = Array.AsReadOnly(slots.ToArray()); Objects = Array.AsReadOnly(objects.ToArray());
         Origin = origin ?? new("<map>", 1, 1);
         Surface = surface is null ? null : Array.AsReadOnly(surface.ToArray());
+        FormatVersion = Surface is not null ? (Surface.Any(cell => cell.Cut != default) ? 4 : 3) :
+            Objects.Any(obj => obj.HasInitialProperties) ? 2 : 1;
     }
 
-    internal int FormatVersion => Surface is not null ? 3 : Objects.Any(obj => obj.HasInitialProperties) ? 2 : 1;
+    internal int FormatVersion { get; }
 
     public string Write() => MapJson.Write(this);
     public static MapSource Read(ContentSource source) => MapJson.ReadSource(source);
