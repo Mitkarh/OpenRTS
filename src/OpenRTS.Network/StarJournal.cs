@@ -46,6 +46,15 @@ public sealed class StarJournal : IDisposable
         while (reader.Next() is { } turn) Apply(world, turn, cancellationToken);
         return world.Report();
     }
+
+    public static SimulationReport Replay(Stream input, Func<ReplayInfo, SimulationWorld> createWorld,
+        CancellationToken cancellationToken = default)
+    {
+        using var reader = new StarJournalReader(input, stop: cancellationToken);
+        using var world = createWorld(reader.Info); ValidateWorld(world, reader.Info);
+        while (reader.Next() is { } turn) Apply(world, turn, cancellationToken);
+        return world.Report();
+    }
     internal static void ValidateWorld(SimulationWorld world, ReplayInfo info)
     {
         if (world.Tick != 0 || world.TickRate != info.Descriptor.TickRate) throw new InvalidDataException("Expected matching tick-zero world.");

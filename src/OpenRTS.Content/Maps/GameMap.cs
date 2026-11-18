@@ -16,6 +16,7 @@ public sealed class GameMap
     private readonly TerrainLayout _layout;
     public UnitCatalog Catalog => _catalog;
     public string Id { get; }
+    public string GameplayFingerprint { get; }
     public bool IsSkirmish { get; }
     public NavigationGrid Grid { get; }
     public IReadOnlyList<string> Slots { get; }
@@ -23,9 +24,10 @@ public sealed class GameMap
     public IReadOnlyList<string> VisualIds { get; }
     public IEnumerable<WorldPosition> ObjectPositions => _objects.Select(obj => obj.Position);
 
-    internal GameMap(MapSource data, UnitCatalog catalog)
+    internal GameMap(MapSource data, UnitCatalog catalog, string gameplayFingerprint)
     {
         Id = data.Id; IsSkirmish = data.IsSkirmish; _catalog = catalog; _source = data.Origin;
+        GameplayFingerprint = gameplayFingerprint;
         _types = catalog.Units.Select((type, index) => (type.Id, index)).ToDictionary(p => p.Id, p => p.index, StringComparer.Ordinal);
         var terrainIds = data.Terrain.Palette.Select(id => (byte)catalog.Locomotion!.Terrains.IndexOf(id)).ToArray();
         _layout = new(data.Width, data.Height, data.Terrain.Cells.Select(i => terrainIds[i]), data.Visual.Cells.Select(i => data.Visual.Palette[i]));

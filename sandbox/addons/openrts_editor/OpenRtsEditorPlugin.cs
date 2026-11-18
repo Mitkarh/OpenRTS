@@ -45,6 +45,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         Button("Compile map", () => _ = BuildAsync());
         _buildBundle = Button("Build scene-map bundle", () => _ = BuildAsync(bundle: true));
         Button("Build and play map", () => ChoosePlaytest(verify: false));
+        Button("Build and record playtest", () => ChoosePlaytest(verify: false, record: true));
         Button("Build and verify map", () => ChoosePlaytest(verify: true));
         Button("Cancel build", () => Invalidate("Cancelled; previous file retained."));
         _status = new Label { Text = "Open a map scene, or create an empty scene.", AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -221,7 +222,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
     }
 
     internal async Task<MapBuild?> BuildAsync(bool sourceOnly = false, bool bundle = false, bool play = false, bool saveScene = true,
-        string[]? selectedStarts = null, string? selectedStartSet = null, bool verify = false)
+        string[]? selectedStarts = null, string? selectedStartSet = null, bool verify = false, bool record = false)
     {
         try { CommitStroke(); } catch (Exception error) { Fail(error); return null; }
         _lastError = null;
@@ -299,7 +300,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
                 staged = null;
             }
             string resource = ProjectSettings.LocalizePath(output);
-            if (play) PlayMap(resource, contentPath, receipt!);
+            if (play) PlayMap(resource, contentPath, receipt!, record);
             string validation = verification is not null ? $"Godot and headless agree after {verification.Tick} ticks ({verification.EntityCount} objects)." :
                 receipt is not null ? "Selected local match validated." :
                 sourceOnly ? "Structural validation only." : "Placed objects validated; starting armies are checked at match creation.";

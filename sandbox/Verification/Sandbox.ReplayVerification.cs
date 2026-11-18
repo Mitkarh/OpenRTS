@@ -39,6 +39,8 @@ public partial class Sandbox
             var speed = (OptionButton)FindChild("ReplaySpeed", owned: false); speed.Select(5); speed.EmitSignal(OptionButton.SignalName.ItemSelected, 5);
             ((Button)FindChild("ReplayPause", owned: false)).EmitSignal(Button.SignalName.Pressed);
             await Wait(() => replay.Status == "Конец повтора"); CheckSkirmish(replay.Position == replay.Info.EndTick && replay.IsPaused, "Replay did not validate/pause at its end.");
+            ((Button)FindChild("ReplayRestart", owned: false)).EmitSignal(Button.SignalName.Pressed);
+            await Wait(() => replay.Position == 0 && !replay.IsSeeking && _replayGeneration == replay.Generation);
             timeline.Value = middle; seek.EmitSignal(Button.SignalName.Pressed); await Wait(() => replay.Position == middle && !replay.IsSeeking);
             if (_capturePath is not null && DisplayServer.GetName() != "headless") await CaptureNetworkFrame(_capturePath);
             GD.Print("OPENRTS_REPLAY_PASS:" + replay.Info.FinalHash);

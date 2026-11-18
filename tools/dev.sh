@@ -54,6 +54,7 @@ case "$action" in
     ;;
   match-directory) build tools/OpenRTS.MatchDirectory/OpenRTS.MatchDirectory.csproj; exec dotnet run --project tools/OpenRTS.MatchDirectory --no-build --no-launch-profile -- "$@" ;;
   headless) build; dotnet run --project tools/OpenRTS.Headless --no-build --no-launch-profile -- "$@" ;;
+  replay) build tools/OpenRTS.Replay/OpenRTS.Replay.csproj; exec dotnet run --project tools/OpenRTS.Replay --no-build --no-launch-profile -- "$@" ;;
   benchmark)
     build tools/OpenRTS.Headless/OpenRTS.Headless.csproj Release
     DOTNET_TieredCompilation=0 dotnet run --project tools/OpenRTS.Headless --configuration Release --no-build --no-launch-profile -- --benchmark "$@"
@@ -148,5 +149,5 @@ case "$action" in
     ;;
   verify-network) build; import_assets; python3 tools/verify_network.py "$godot_bin" "$@" ;;
   verify) "$0" test; import_assets; python3 tools/verify.py "$godot_bin" ;;
-  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|run3d|editor3d|verify3d|map-build|scene-map|scene-map-pack|verify|verify-authoring|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
+  *) echo 'Usage: tools/dev.sh [build|test|headless|replay|benchmark|run|editor|run3d|editor3d|verify3d|map-build|scene-map|scene-map-pack|verify|verify-authoring|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
 esac

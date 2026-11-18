@@ -1,7 +1,5 @@
 using System;
 using System.IO;
-using System.Security.Cryptography;
-using System.Text;
 using Godot;
 using OpenRTS.Content;
 using OpenRTS.Core;
@@ -42,18 +40,19 @@ public partial class Sandbox
     private sealed record NetworkLobby(string Name, MatchDirectoryClient? Directory, MatchJoinGrant? Grant,
         bool Publish, string PublicAddress, bool Private, MatchEndpoint? Relay);
     private NetworkLobby? _networkLobby;
-    private void StartNetworkSession(MapMatch map, UnitCatalog catalog)
+    private void StartNetworkSession(MapMatch map)
     {
-        var directory = ProjectSettings.GlobalizePath("user://network"); Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.journal");
+        var path = NewJournalPath();
         var ownerOptions = _configuredOptions!; var ownerMap = map;
         var policies = new System.Collections.Generic.Dictionary<uint, (SkirmishAi Ai, long Tick, WorldCommand[] Commands)>();
-        MatchDescriptor Descriptor(MatchSetupOptions options, MapMatch match) => new("openrts-lobby-v3", catalog.Summary.Fingerprint,
-            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(options.Serialize()))),
-            match.Seed, TickRate: options.TickRate, InputDelay: options.Delay, EndTick: 0);
+        MatchDescriptor Descriptor(MatchSetupOptions options, MapMatch match) => options.Describe(_installedCatalog.Summary.Fingerprint, match.Seed);
         (MatchDescriptor, SimulationWorld) Prepare(string data)
         {
-            var options = MatchSetupOptions.Parse(data); var preparedMap = PrepareMap(options);
+            var options = MatchSetupOptions.Parse(data);
+            options.RequireIdentity();
+            if (options.Local) throw new InvalidDataException("Локальная запись не является сетевым матчем.");
+            if (data != options.Serialize()) throw new InvalidDataException("Неверное кодирование параметров матча.");
+            var preparedMap = PrepareMap(options);
             var world = CreateConfiguredWorld(preparedMap, options);
             ownerOptions = options; ownerMap = preparedMap; policies.Clear();
             return (Descriptor(options, preparedMap), world);
@@ -63,8 +62,8 @@ public partial class Sandbox
             policies.TryGetValue(player, out var previous);
             if (previous.Ai is not null && previous.Tick == world.Tick) return previous.Commands;
             var ai = previous.Ai is not null && previous.Tick + 1 == world.Tick ? previous.Ai :
-                SkirmishAiScenario.Create(catalog, _opponentProfile!, ownerMap.Map, player,
-                    ownerOptions.Seats.Take(ownerMap.Map.Slots.Count).Select(s => ownerMap.Map.Slots[s.Start]).ToArray(), initialTick: world.Tick, opponents: ownerOptions.Opponents(player));
+                SkirmishAiScenario.Create(ownerMap.Map.Catalog, _opponentProfile!, ownerMap.Map, player,
+                    ownerOptions.PlayerSlots(ownerMap.Map), initialTick: world.Tick, opponents: ownerOptions.Opponents(player));
             var commands = ai.Plan(world); policies[player] = (ai, world.Tick, commands); return commands;
         }
         if (_matchSetup is { } setup)

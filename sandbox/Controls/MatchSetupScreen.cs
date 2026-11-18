@@ -54,8 +54,10 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     public OpenRTS.Core.Visibility.FogMode SelectedFog => (OpenRTS.Core.Visibility.FogMode)_fog.Selected;
     public OpenRTS.Godot.Rendering.FogDisplayStyle SelectedFogStyle => (OpenRTS.Godot.Rendering.FogDisplayStyle)_fogStyle.Selected;
     public OpenRTS.Godot.Rendering.ContactDisplayStyle SelectedRadarStyle => (OpenRTS.Godot.Rendering.ContactDisplayStyle)_radarStyle.Selected;
-    public MatchSetupOptions Options => new(CurrentMap.Id, _modeChoices[_modes.Selected].Set.Id, _fog.Selected, (int)_delay.Value, new[] { 15, 25, 40 }[_speed.Selected], _seats.ToArray(), _simulationSpeed, _retentionTicks);
+    public MatchSetupOptions Options => new MatchSetupOptions(CurrentMap.Id, _modeChoices[_modes.Selected].Set.Id, _fog.Selected, (int)_delay.Value,
+        new[] { 15, 25, 40 }[_speed.Selected], _seats.ToArray(), _simulationSpeed, _retentionTicks).Bind(CurrentMap, _modeChoices[_modes.Selected].Set);
     private GameMap CurrentMap => _mapChoices[_maps.Selected].Map;
+    private int Capacity => Math.Min(MapScenario.MaximumPlayers, CurrentMap.Slots.Count);
     private bool Editable => NetworkMode != 2 && (!_busy || NetworkMode == 1 && _networkSession?.State.Phase == MatchPhase.Lobby);
 
     public void Build(Theme theme, LocomotionCatalog terrain, (string Title, string Description, GameMap Map)[] maps,
@@ -85,13 +87,13 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         _network.ItemSelected += _ => { ShowPage("lobby"); RefreshControls(); };
         _modes.ItemSelected += _ => { if (_modeChoices[_modes.Selected].Set.Id != "supply") for (int i = 1; i < 4; i++) if (_seats[i].Controller == SlotController.Ai) _seats[i] = _seats[i] with { Controller = SlotController.Human }; RebuildPlayers(); Changed(); };
         _fog.ItemSelected += _ => { RefreshControls(); Changed(); }; _speed.ItemSelected += _ => Changed(); _delay.ValueChanged += _ => Changed();
-        _networkAi.ValueChanged += value => { for (int i = 1; i < CurrentMap.Slots.Count; i++) _seats[i] = _seats[i] with { Controller = i >= CurrentMap.Slots.Count - (int)value ? SlotController.Ai : SlotController.Human }; RebuildPlayers(); Changed(); };
+        _networkAi.ValueChanged += value => { for (int i = 1; i < Capacity; i++) _seats[i] = _seats[i] with { Controller = i >= Capacity - (int)value ? SlotController.Ai : SlotController.Human }; RebuildPlayers(); Changed(); };
         _opponent.Toggled += enabled => { _seats[1] = _seats[1] with { Controller = enabled ? SlotController.Ai : SlotController.Human }; RebuildPlayers(); };
         _launch.Pressed += LaunchMatch; _readyNetwork.Pressed += () => _networkSession?.Ready(_networkSession.State.Revision); _startNetwork.Pressed += () => _networkSession?.Start();
         SelectMap(); ShowPage("main");
     }
     private void LaunchMatch() => Launch?.Invoke(CurrentMap, _modeChoices[_modes.Selected].Set, AssignedSlots(), _seats.Any(s => s.Controller == SlotController.Ai));
-    private string[] AssignedSlots() => _seats.Take(CurrentMap.Slots.Count).Select(s => CurrentMap.Slots[s.Start]).ToArray();
+    private string[] AssignedSlots() => Options.PlayerSlots(CurrentMap);
     public void OpenSkirmish()
     {
         _network.Select(0); _busy = false;
@@ -100,7 +102,7 @@ public sealed partial class MatchSetupScreen : CanvasLayer
     }
     private void SelectMap()
     {
-        int capacity = Math.Min(4, CurrentMap.Slots.Count), previous = _count.Selected;
+        int capacity = Capacity, previous = _count.Selected;
         _count.Clear(); for (int i = 1; i <= capacity; i++) _count.AddItem(i.ToString()); _count.Select(Math.Clamp(previous, 0, capacity - 1));
         if (previous < 0) _count.Select(Math.Min(1, capacity - 1));
         for (int i = 0; i < 4; i++) _seats[i] = _seats[i] with { Start = i % capacity, Controller = i >= capacity ? SlotController.None : _seats[i].Controller };
@@ -114,7 +116,7 @@ public sealed partial class MatchSetupScreen : CanvasLayer
         foreach (var child in _players.GetChildren()) { _players.RemoveChild(child); child.QueueFree(); }
         _starts.Clear(); _roles.Clear(); _teams.Clear(); _readyLabels.Clear();
         foreach (string label in new[] { "СТОРОНА", "УЧАСТНИК", "ФРАКЦИЯ", "АЛЬЯНС", "СТАРТ", "ГОТОВ" }) _players.AddChild(new Label { Text = label });
-        for (int i = 0; i < CurrentMap.Slots.Count; i++)
+        for (int i = 0; i < Capacity; i++)
         {
             int row = i;
             var name = new Label { Text = MapScenario.PlayerName(i), CustomMinimumSize = new(82, 36), VerticalAlignment = VerticalAlignment.Center };
@@ -135,10 +137,10 @@ public sealed partial class MatchSetupScreen : CanvasLayer
                 int old = _seats[row].Start;
                 int other = Array.FindIndex(_seats, s => s.Start == (int)value);
                 if (other >= 0 && other != row) { _seats[other] = _seats[other] with { Start = old }; if (other < _starts.Count) _starts[other].Select(old); }
-                _seats[row] = _seats[row] with { Start = (int)value }; _preview.SetAssignments(_seats.Take(CurrentMap.Slots.Count).Select(s => s.Start).ToArray()); Changed();
+                _seats[row] = _seats[row] with { Start = (int)value }; _preview.SetAssignments(_seats.Take(Capacity).Select(s => s.Start).ToArray()); Changed();
             };
         }
-        _preview.SetAssignments(_seats.Take(CurrentMap.Slots.Count).Select(s => s.Start).ToArray()); RefreshControls();
+        _preview.SetAssignments(_seats.Take(Capacity).Select(s => s.Start).ToArray()); RefreshControls();
     }
     private void RefreshControls()
     {

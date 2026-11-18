@@ -5,7 +5,7 @@ using OpenRTS.Godot.Authoring;
 public partial class Sandbox
 {
     private string _activeManifestPath = "";
-    private readonly Dictionary<string, SceneMapBundle> _sceneMaps = new(StringComparer.Ordinal);
+    private readonly Dictionary<GameMap, SceneMapBundle> _sceneMaps = new();
 
     private GameMap LoadSceneMap(string path, UnitCatalog catalog, LocalMapPlaytest? playtest = null)
     {
@@ -17,7 +17,7 @@ public partial class Sandbox
         var compiled = bundle.LoadMap(path, ReadMapSource, catalog);
         playtest?.CheckMap(compiled);
         var map = compiled.Map;
-        _sceneMaps.Add(map.Id, bundle);
+        _sceneMaps.Add(map, bundle);
         return map;
     }
 
@@ -54,7 +54,7 @@ public partial class Sandbox
 
     private OpenRtsMap? InstantiateMapScene(GameMap? map)
     {
-        if (map is null || !_sceneMaps.TryGetValue(map.Id, out var bundle)) return null;
+        if (map is null || !_sceneMaps.TryGetValue(map, out var bundle)) return null;
         CheckSceneMapDependencies(bundle);
         var packed = ResourceLoader.Load<PackedScene>(bundle.Scene, cacheMode: ResourceLoader.CacheMode.IgnoreDeep)
             ?? throw new IOException($"Scene-map entry is missing: {bundle.Scene}.");

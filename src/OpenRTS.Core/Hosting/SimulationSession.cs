@@ -19,6 +19,7 @@ public class SimulationSession<TWorld, TCommand, TEvent> : IDisposable
     private readonly Thread _thread;
     private readonly Func<TWorld, bool>? _tryPublish;
     private readonly Func<TWorld, TCommand[]>? _collectCommands;
+    private readonly Action<TWorld, IReadOnlyList<TCommand>>? _validateTurn;
     private readonly ConcurrentQueue<TCommand> _input = new();
     private readonly ConcurrentQueue<TEvent> _events = new();
     private readonly List<TCommand> _journal = [];
@@ -116,7 +117,8 @@ public class SimulationSession<TWorld, TCommand, TEvent> : IDisposable
 
     public SimulationSession(Func<TWorld> createWorld, IEnumerable<TCommand>? scriptedCommands = null,
         long? endTick = null, bool realtime = true, int maximumEventBacklog = 65536, double playbackSpeed = 1, bool startPaused = false,
-        Func<TWorld, bool>? tryPublish = null, Func<TWorld, TCommand[]>? collectCommands = null)
+        Func<TWorld, bool>? tryPublish = null, Func<TWorld, TCommand[]>? collectCommands = null,
+        Action<TWorld, IReadOnlyList<TCommand>>? validateTurn = null)
     {
         ArgumentNullException.ThrowIfNull(createWorld);
         if (endTick is <= 0) throw new ArgumentOutOfRangeException(nameof(endTick));
@@ -130,6 +132,7 @@ public class SimulationSession<TWorld, TCommand, TEvent> : IDisposable
         _endTick = endTick;
         _tryPublish = tryPublish;
         _collectCommands = collectCommands;
+        _validateTurn = validateTurn;
         _maximumEventBacklog = maximumEventBacklog;
         _thread = new Thread(() => Run(createWorld, script, realtime)) { IsBackground = true, Name = "OpenRTS simulation" };
         _thread.Start();
@@ -196,6 +199,7 @@ public class SimulationSession<TWorld, TCommand, TEvent> : IDisposable
                             if (command.Issuer < 2) throw new InvalidOperationException("Generated commands must use an issuer other than script or live input.");
                             batch.Add(command);
                         }
+                    _validateTurn?.Invoke(world, batch);
                     world.Step(CollectionsMarshal.AsSpan(batch), _stop.Token);
                     if (world.AppliedCommands.Length > 0)
                         lock (_journalGate)

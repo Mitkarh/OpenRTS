@@ -81,7 +81,7 @@ public sealed partial class MatchSetupScreen
             _directoryShowingInvite = false;
             var client = GetDirectoryClient(); string content = _directoryContent;
             QueueDirectory(async cancellation => {
-                var games = await client.FindAsync("openrts-lobby-v3", content, cancellation);
+                var games = await client.FindAsync(MatchSetupOptions.Rules, content, cancellation);
                 return () => { _directoryGames = games; _directoryStatus.Text = $"Каталог · найдено {games.Length} · прямые игры с хостом-игроком"; RefreshGames(); };
             });
         }

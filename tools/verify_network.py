@@ -18,8 +18,10 @@ parser.add_argument('--net3', action='store_true', help='Three human clients plu
 parser.add_argument('--reconnect', action='store_true', help='Break guest transport and return through the real in-game button')
 parser.add_argument('--slow-client-ms', type=int, default=0, help='Delay one client UI verification while its network owner keeps running')
 parser.add_argument('--output', type=Path)
+parser.add_argument('--map', help='Use a compiled skirmish map or scene-map bundle for the match')
 args = parser.parse_args()
 if not 0 <= args.slow_client_ms <= 10000: parser.error('--slow-client-ms must be 0..10000')
+if args.map and args.net3: parser.error('--map uses the two-player scenario')
 root = Path(__file__).resolve().parent.parent
 output = (args.output or Path(tempfile.mkdtemp(prefix='openrts-network-'))).resolve()
 output.mkdir(parents=True, exist_ok=True)
@@ -87,6 +89,7 @@ try:
             command += ['--headless']
         command += ['--path', str(root / 'sandbox'), '--', '--verify-network=' + role,
                     '--network-port=' + str(relay_port if args.reconnect and role == 'join' else port), '--network-pin-file=' + str(pin)]
+        if args.map: command += ['--network-map=' + args.map]
         if args.reconnect: command += ['--network-reconnect']
         if args.spectator: command += ['--network-spectators=1']
         if args.slow_client_ms and role in (('join3' if args.net3 else 'join'), 'watch'):
@@ -112,6 +115,7 @@ try:
     for process in processes:
         process.wait(timeout=55)
     hashes = []
+    map_identities = []
     for role, process in zip(roles, processes):
         text = (output / (role + '.log')).read_text()
         if process.returncode or 'OPENRTS_NETWORK_INPUT:' not in text or 'OPENRTS_NETWORK_MENU:' not in text:
@@ -122,8 +126,11 @@ try:
         if args.net3 and 'OPENRTS_NETWORK_PAUSE:' not in text:
             raise RuntimeError(role + ' did not observe agreed pause')
         hashes.extend(results)
+        map_identities.append(next(line for line in text.splitlines() if line.startswith('OPENRTS_NETWORK_MAP:')))
     if len(set(hashes)) != 1:
         raise RuntimeError('Final hashes differ: ' + str(hashes))
+    if len(set(map_identities)) != 1:
+        raise RuntimeError('Map identities differ: ' + str(map_identities))
     if args.reconnect:
         text = (output / 'join.log').read_text()
         if 'OPENRTS_NETWORK_RECONNECT_BUTTON:pressed' not in text or 'OPENRTS_NETWORK_REJOIN:2' not in text:

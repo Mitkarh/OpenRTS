@@ -7,13 +7,17 @@ public sealed class SimulationSession : SimulationSession<SimulationWorld, World
 
     public SimulationSession(Func<SimulationWorld> createWorld, IEnumerable<WorldCommand>? scriptedCommands = null,
         long? endTick = null, bool realtime = true, int maximumEventBacklog = 65536, double playbackSpeed = 1, bool startPaused = false,
-        Func<SimulationWorld, WorldCommand[]>? collectCommands = null)
-        : this(new FrameExchange(), createWorld, scriptedCommands, endTick, realtime, maximumEventBacklog, playbackSpeed, startPaused, collectCommands) { }
+        Func<SimulationWorld, WorldCommand[]>? collectCommands = null,
+        Action<SimulationWorld, IReadOnlyList<WorldCommand>>? validateTurn = null, Action<SimulationWorld>? observeTick = null)
+        : this(new FrameExchange(), createWorld, scriptedCommands, endTick, realtime, maximumEventBacklog, playbackSpeed, startPaused,
+            collectCommands, validateTurn, observeTick) { }
 
     private SimulationSession(FrameExchange frames, Func<SimulationWorld> createWorld, IEnumerable<WorldCommand>? scriptedCommands,
         long? endTick, bool realtime, int maximumEventBacklog, double playbackSpeed, bool startPaused,
-        Func<SimulationWorld, WorldCommand[]>? collectCommands)
-        : base(createWorld, scriptedCommands, endTick, realtime, maximumEventBacklog, playbackSpeed, startPaused, frames.TryPublish, collectCommands)
+        Func<SimulationWorld, WorldCommand[]>? collectCommands, Action<SimulationWorld, IReadOnlyList<WorldCommand>>? validateTurn,
+        Action<SimulationWorld>? observeTick)
+        : base(createWorld, scriptedCommands, endTick, realtime, maximumEventBacklog, playbackSpeed, startPaused,
+            observeTick is null ? frames.TryPublish : world => { observeTick(world); return frames.TryPublish(world); }, collectCommands, validateTurn)
     {
         Frames = frames;
     }

@@ -30,10 +30,18 @@ public partial class Sandbox
         foreach (var choice in mapChoices)
         {
             try { availableMaps.Add((choice, Map(choice.Path))); }
-            catch (Exception error) when (SceneMapBundle.IsPath(choice.Path) && error is IOException or InvalidDataException or ContentException or System.Text.Json.JsonException)
+            catch (Exception error) when ((SceneMapBundle.IsPath(choice.Path) || choice.Path.EndsWith(".ortmap.json", StringComparison.OrdinalIgnoreCase)) &&
+                error is IOException or InvalidDataException or ContentException or System.Text.Json.JsonException)
             {
                 GD.PushWarning($"Карта {choice.Title} недоступна. {error.Message}");
             }
+        }
+        if (_networkVerifyMapPath is { } verificationPath)
+        {
+            var map = Map(verificationPath);
+            availableMaps.RemoveAll(item => item.Map.Id == map.Id);
+            availableMaps.Add((new MatchChoice { Path = verificationPath, Title = map.Id }, map));
+            _networkVerifyMapId = map.Id;
         }
         if (availableMaps.Count == 0) throw new InvalidDataException("Нет доступных карт матча.");
         var maps = availableMaps.Select(item => (item.Choice.Title, item.Choice.Description, item.Map)).ToArray();
@@ -51,6 +59,7 @@ public partial class Sandbox
         _matchSetup.ConfigurationChanged += () => _pendingLobbySettings = _matchSetup.Options.Serialize();
         _matchSetup.CancelNetwork += () => { if (_session?.Network is not null || _session?.Replay is not null) MatchSetupFailed(new OperationCanceledException("Подключение отменено."), true); };
         if (_verifyReplayPath is not null) { _ = VerifyReplayFlow(); }
+        else if (_openReplayPath is not null) { _matchSetup.OpenReplayPage(); BeginReplay(_openReplayPath); }
         else if (_verifyMenu) { _ = VerifyMenuFlow(); }
         else if (_verifyNetwork) SelectNetworkVerificationMatch();
         else if (_verifyAiMatch) SelectAiVerificationMatch();
@@ -83,7 +92,7 @@ public partial class Sandbox
             _matchSetup!.SetLaunching(true, "Подготовка поля боя…");
             StartSession();
         }
-        catch (Exception error) when (error is ContentException or ArgumentException or System.IO.IOException or System.Security.Cryptography.CryptographicException or OpenRTS.Network.MatchDirectoryException)
+        catch (Exception error) when (error is ContentException or ArgumentException or InvalidDataException or IOException or System.Security.Cryptography.CryptographicException or OpenRTS.Network.MatchDirectoryException)
         {
             MatchSetupFailed(error, canRetry: true);
         }
@@ -128,7 +137,7 @@ public partial class Sandbox
                 _configuredOptions = MatchSetupOptions.Parse(joined.LobbySettings);
                 _mapMatch = PrepareMap(_configuredOptions); _matchFogMode = (OpenRTS.Core.Visibility.FogMode)_configuredOptions.Fog;
                 _fogViewer = joined.Player; _networkPlayer = joined.Player;
-                _opponentStarts = _configuredOptions.Seats.Take(_mapMatch.Map.Slots.Count).Select(s => _mapMatch.Map.Slots[s.Start]).ToArray();
+                _opponentStarts = _configuredOptions.PlayerSlots(_mapMatch.Map);
             }
             _startedFromSetup = true;
             BuildBattleScene(_mapMatch?.Map.Catalog ?? _catalog!);
@@ -147,23 +156,15 @@ public partial class Sandbox
 
     private MapMatch PrepareMap(MatchSetupOptions options)
     {
-        if (!_setupMaps.TryGetValue(options.Map, out var map) || !_setupSets.TryGetValue(options.Mode, out var set)) throw new ArgumentException("Карта или стартовый набор не установлены.");
-        if (_networkMode != 0 && _sceneMaps.ContainsKey(map.Id))
-            throw new ArgumentException("Scene-map bundles are available for local matches.");
-        int capacity = map.Slots.Count;
-        if (options.Seats.Where((seat, i) => seat.Controller != OpenRTS.Network.SlotController.None && (i >= capacity || seat.Start >= capacity)).Any() ||
-            options.Seats.Any(s => s.Controller == OpenRTS.Network.SlotController.Ai) && set.Id != "supply") throw new ArgumentException("Недоступные места или ИИ для этой карты/режима.");
-        var active = options.Seats.Take(capacity).Select(s => s.Controller != OpenRTS.Network.SlotController.None).ToArray();
-        return MapScenario.Prepare(map, set, options.Seats.Take(capacity).Select(s => map.Slots[s.Start]).ToArray(), active);
+        if (!_setupMaps.TryGetValue(options.Map, out var map))
+            throw new InvalidDataException($"Не установлена версия карты '{options.Map}' с отпечатком {options.MapFingerprint}.");
+        if (!_setupSets.TryGetValue(options.Mode, out var set))
+            throw new InvalidDataException($"Не установлена версия стартового набора '{options.Mode}' с отпечатком {options.StartingSetFingerprint}.");
+        return options.Prepare(map, set);
     }
     private SimulationWorld CreateConfiguredWorld(MapMatch map, MatchSetupOptions options)
     {
-        var fog = (OpenRTS.Core.Visibility.FogMode)options.Fog;
-        var world = map.CreateWorld(new GameplayMechanics { FogCellSize = fog == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024,
-            FogMode = fog, FogVisibilityHoldTicks = options.FogHoldTicks }, speedPerTick: options.SpeedPerTick,
-            workers: _workers, restrictPlayerCommands: _networkMode != 0 || options.Seats.Any(s => s.Controller == OpenRTS.Network.SlotController.Ai), tickRate: options.TickRate);
-        try { world.SetInitialTeams(options.Seats.Select((s, i) => (s, i)).Where(p => p.s.Controller != OpenRTS.Network.SlotController.None).ToDictionary(p => (uint)p.i + 1, p => p.s.Team)); return world; }
-        catch { world.Dispose(); throw; }
+        return options.CreateWorld(map, _workers, _networkMode != 0 || options.Local || options.Seats.Any(s => s.Controller == OpenRTS.Network.SlotController.Ai));
     }
 
     private void MatchSetupFailed(Exception error, bool canRetry)
@@ -179,8 +180,9 @@ public partial class Sandbox
         _opponentProfile = null;
         _opponent = null;
         _opponentStarts = null;
-        if (_verifyMatchSetup || !canRetry) GD.PushError(error.ToString());
-        if (_verifyMatchSetup) GetTree().Quit(1);
+        bool verification = _verifyMatchSetup || _verifyNetwork || _verifyReplayPath is not null;
+        if (verification || !canRetry) GD.PushError(error.ToString());
+        if (verification) GetTree().Quit(1);
         else _matchSetup?.SetLaunching(!canRetry, "Матч не запущен. " + error.Message);
     }
 }

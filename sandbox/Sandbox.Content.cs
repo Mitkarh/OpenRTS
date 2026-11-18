@@ -7,6 +7,7 @@ using OpenRTS.Content;
 public partial class Sandbox
 {
     private GameManifest _manifest = null!;
+    private UnitCatalog _installedCatalog = null!;
 
     private static GameManifest LoadManifest(string path)
     {

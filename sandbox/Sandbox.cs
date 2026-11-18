@@ -72,8 +72,13 @@ public partial class Sandbox : Node3D
                 if (arg.StartsWith("--directory-test=", StringComparison.Ordinal)) { _networkVerifyDirectoryUrl = arg[17..]; continue; }
                 if (arg.StartsWith("--verify-network=", StringComparison.Ordinal)) { _verifyNetwork = true; _networkVerifyRole = arg[17..]; continue; }
                 if (arg.StartsWith("--network-port=", StringComparison.Ordinal)) { _networkVerifyPort = int.Parse(arg[15..]); continue; }
+                if (arg.StartsWith("--network-map=", StringComparison.Ordinal)) { _networkVerifyMapPath = arg[14..]; continue; }
                 if (arg.StartsWith("--network-pin-file=", StringComparison.Ordinal)) { _networkVerifyPinFile = arg[19..]; continue; }
                 if (arg.StartsWith("--verify-replay=", StringComparison.Ordinal)) { _verifyReplayPath = arg[16..]; continue; }
+                if (arg.StartsWith("--replay=", StringComparison.Ordinal)) { _openReplayPath = arg[9..]; continue; }
+                if (arg.StartsWith("--replay-map=", StringComparison.Ordinal)) { _replayMapPath = arg[13..]; continue; }
+                if (arg.StartsWith("--replay-start-set=", StringComparison.Ordinal)) { _replaySetPath = arg[19..]; continue; }
+                if (arg == "--record-playtest") { _recordPlaytest = true; continue; }
                 if (arg == "--verify-menu") { _verifyMenu = true; continue; }
                 if (arg.StartsWith("--menu-captures=", StringComparison.Ordinal)) { _menuCaptures = arg[16..]; continue; }
                 if (arg == "--network-net3") { _networkVerifyNet3 = true; continue; }
@@ -129,6 +134,14 @@ public partial class Sandbox : Node3D
                 throw new ArgumentException("Параметры: --ramps, --verify-ramps, --mod=path, --sensors, --fog, --fog-hold=0..250, --skirmish, --verify-match-setup, --verify-ai-match, --ai-profile=id, --map=path, --start-set=path, --buildings, --verify-buildings, --verify-actions, --verify-production, --showcase, --verify-presentation, --capture=path, --verify, --verify-simulation, --verify-controls, --realtime, --navigation, --workers=1..64, --reverse-jobs, --count=1..1000000 (лимит диагностического стенда), --ticks=1..1000000, --fps=1..240.");
             }
             if (_verifyRamps && mapPath is null) _ramps = _showcase = true;
+            bool replayRequested = _openReplayPath is not null || _verifyReplayPath is not null;
+            if (replayRequested && (mapPath is not null || _skirmish || _verifySimulation) ||
+                !replayRequested && (_replayMapPath is not null || _replaySetPath is not null))
+                throw new ArgumentException("Выберите повтор и при необходимости укажите --replay-map и --replay-start-set.");
+            if (_recordPlaytest && localPlaytest is null)
+                throw new ArgumentException("Запись playtest требует проверенных параметров запуска из редактора.");
+            if (_networkVerifyMapPath is not null && !_verifyNetwork)
+                throw new ArgumentException("--network-map is a network verification option.");
             if (localPlaytest is not null && (mapPath is null || startSetPath is not null || _skirmish || mapPath == AviationScenario.Map))
                 throw new ArgumentException("Local playtest requires its compiled map and uses its validated starting set.");
             if (mapPath is not null && (_showcase || _navigation || _verifyControls || verify))
@@ -152,9 +165,9 @@ public partial class Sandbox : Node3D
             if (_verifyBuildings) { _verifySimulation = true; _ticks = BuildingScenario.VerificationTicks; }
             if (_verifyPresentation) { _verifySimulation = true; _ticks = 12; }
             if ((verify ? 1 : 0) + (_verifySimulation ? 1 : 0) + (_verifyControls ? 1 : 0) > 1) throw new ArgumentException("Выберите один режим проверки.");
-            if (mapPath is not null && SceneMapBundle.IsPath(mapPath))
+            if ((mapPath ?? _replayMapPath) is { } bundleMap && SceneMapBundle.IsPath(bundleMap))
             {
-                string bundlePath = Path.IsPathRooted(mapPath) || mapPath.StartsWith("res://", StringComparison.Ordinal) ? mapPath : "res://" + mapPath;
+                string bundlePath = Path.IsPathRooted(bundleMap) || bundleMap.StartsWith("res://", StringComparison.Ordinal) ? bundleMap : "res://" + bundleMap;
                 modPath ??= SceneMapBundle.Read(ReadFile(bundlePath)).Mod;
             }
             _activeManifestPath = modPath ?? (_buildings || _ramps || checkBundles ? "res://game.yaml" : "res://diagnostic-game.yaml");
@@ -169,6 +182,7 @@ public partial class Sandbox : Node3D
             });
             _catalog = _ramps ? LoadRampCatalog() : _manifest.LoadUnits(unitSources, _sensorScenario ?
                 _manifest.Weapons.Select(source => source with { Text = FogScenario.AddRadarWeapons(source.Text) }) : null);
+            _installedCatalog = _catalog;
             if (_ramps) _rampScenario = new(_catalog);
             _sensorVisibility = _catalog.Units.Any(unit => unit.Sensors is not null);
             if (_verifySkirmish) _sensorVisibility = false; // This scripted laboratory controls and inspects both players.
@@ -202,6 +216,7 @@ public partial class Sandbox : Node3D
                     ? MapScenario.PrepareDefault(LoadSceneMap(selectedPath, _catalog), ReadMapSource, startSetPath, _manifest.Settings.Match.DefaultStartSet)
                     : mapPath == AviationScenario.Map ? AviationScenario.Load(_catalog, ReadMapSource) : MapScenario.Load(_catalog, ReadMapSource, mapPath ?? _manifest.Settings.Match.DefaultMap, startSetPath, _manifest.Settings.Match.DefaultStartSet);
                 if (_sensorScenario) _matchFogMode = OpenRTS.Core.Visibility.FogMode.Hidden;
+                if (_recordPlaytest) BindLocalRecording(localPlaytest!);
                 _skirmish = _mapMatch.Map.IsSkirmish || mapPath == AviationScenario.Map;
                 if (_mapMatch.Map.Grid.HasSurface && !_skirmish) _buildings = false;
                 if (_verifyRamps && !_mapMatch.Map.Grid.HasSlopedSurface)
@@ -226,7 +241,7 @@ public partial class Sandbox : Node3D
         catch (Exception error)
         {
             GD.PushError(error.ToString());
-            if (checkBundles || _verifyMenu || _verifyNetwork || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup || _verifyRamps) GetTree().Quit(1);
+            if (checkBundles || _verifyMenu || _verifyNetwork || _verifyReplayPath is not null || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup || _verifyRamps) GetTree().Quit(1);
             else AddOverlay("Ошибка загрузки контента\n" + error.Message);
         }
     }
@@ -281,18 +296,20 @@ public partial class Sandbox : Node3D
         _rtsOverlay?.RadarContacts.Clear();
         var map = _mapMatch;
         _opponent = null;
-        if (_networkMode != 0) { StartNetworkSession(map!, catalog); return; }
+        if (_networkMode != 0) { StartNetworkSession(map!); return; }
         var offlineAis = _configuredOptions is { } configured && map is not null && _opponentProfile is not null
             ? configured.Seats.Select((seat, i) => (seat, i)).Where(p => p.seat.Controller == OpenRTS.Network.SlotController.Ai)
                 .Select(p => SkirmishAiScenario.Create(catalog, _opponentProfile, map.Map, (uint)p.i + 1, _opponentStarts, opponents: configured.Opponents((uint)p.i + 1))).ToArray() : [];
         _opponent = offlineAis.FirstOrDefault();
+        var recorder = _recordPlaytest ? CreateLocalRecorder() : null;
         _session = new SandboxSession(new SimulationSession(() => _rampScenario is { } ramps ? ramps.CreateWorld(_workers) : _jammingScenario ? JammingScenario.Create(catalog) : _fogScenario && (!_sensorScenario || map is null) ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? _configuredOptions is { } selectedOptions ? CreateConfiguredWorld(map, selectedOptions) : map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, workers: _workers, restrictPlayerCommands: offlineAis.Length != 0, tickRate: _manifest.Settings.Simulation.TickRate) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
             _verifySensors ? FogScenario.RadarCommands : _verifyFog ? FogScenario.Commands : _verifyAviation ? AviationScenario.Commands.Where(c => c.Tick <= _ticks).ToArray() : map is not null ? [] : _productionScenario ? ProductionScenario.Commands(catalog) : _buildings ? BuildingScenario.Commands(catalog) : _showcase ? (_verifyPresentation ? ShowcaseScenario.VerificationCommands(catalog) : []) : _navigation ? (_verifySimulation ? NavigationScenario.Commands(_count, _ticks) : [])
                 : DiagnosticScenario.Commands(_count, _verifySimulation ? _ticks : long.MaxValue),
             _verifySimulation ? _ticks : null, realtime: !_verifySimulation || _pacedVerification,
             maximumEventBacklog: Math.Max(65536, _count + 1024),
             playbackSpeed: _verifySimulation ? 1 : _playbackSpeed, startPaused: !_verifySimulation && (_paused || _matchSetup is not null),
-            collectCommands: offlineAis.Length == 0 ? null : world => offlineAis.SelectMany(ai => ai.Plan(world)).OrderBy(c => c.Issuer).ThenBy(c => c.Sequence).ToArray()));
+            collectCommands: offlineAis.Length == 0 ? null : world => offlineAis.SelectMany(ai => ai.Plan(world)).OrderBy(c => c.Issuer).ThenBy(c => c.Sequence).ToArray(),
+            validateTurn: recorder is null ? null : recorder.ValidateTurn, observeTick: recorder is null ? null : recorder.ObserveTick), recorder);
     }
 
     private static Color TeamColor(uint owner) => owner switch
@@ -426,6 +443,7 @@ public partial class Sandbox : Node3D
                 if (frame.Tick != report.Tick || frame.Poses.Length != report.EntityCount)
                     throw new InvalidOperationException("Не опубликован конечный кадр карты.");
                 _verificationDone = true;
+                if (_recordPlaytest) SaveLocalReplay();
                 GD.Print("OPENRTS_SIMULATION:" + JsonSerializer.Serialize(report));
                 GetTree().Quit();
                 return;
@@ -483,7 +501,7 @@ public partial class Sandbox : Node3D
             _session = null;
             bool verifyReconnect = _verifyNetwork && _networkVerifyReconnect && _networkVerifyRole == "join" && !_networkReconnectAttempted &&
                 _networkResume is not null && error is System.IO.IOException;
-            if ((_verifyNetwork && !verifyReconnect) || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup || _verifyRamps) GetTree().Quit(1);
+            if ((_verifyNetwork && !verifyReconnect) || _verifyReplayPath is not null || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup || _verifyRamps) GetTree().Quit(1);
             else if (replayFailed) ShowNetworkFailure(error.Message, "Ошибка повтора");
             else if (_networkMode != 0) ShowNetworkFailure(error.Message);
             else if (_label is not null)

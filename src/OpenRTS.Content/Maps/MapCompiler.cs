@@ -15,11 +15,12 @@ public sealed class CompiledMap
     public string GameplayFingerprint { get; }
     public string DataFingerprint { get; }
 
-    internal CompiledMap(MapSource source, GameMap map, string content, CancellationToken stop)
+    internal CompiledMap(MapSource source, UnitCatalog effective, string content, CancellationToken stop)
     {
-        Source = source; Map = map; ContentFingerprint = content;
+        Source = source; ContentFingerprint = content;
         GameplayFingerprint = Digest(MapJson.Write(source, gameplayOnly: true, stop));
         DataFingerprint = Digest(MapJson.Write(source, stop: stop));
+        Map = new GameMap(source, effective, GameplayFingerprint);
     }
     private static string Digest(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     public string Write(CancellationToken cancellationToken = default) => MapJson.Write(this, cancellationToken);
@@ -134,7 +135,7 @@ public static class MapCompiler
         var normalized = new MapSource(source.Id, source.IsSkirmish, source.Width, source.Height, terrain, visual,
             source.Slots.OrderBy(s => s.Id, StringComparer.Ordinal).ToArray(), source.Objects, source.CellSize, source.Origin, source.Surface);
         var effective = catalog.PrepareMapUnits(normalized, cancellationToken);
-        var result = new CompiledMap(normalized, new GameMap(normalized, effective), catalog.Summary.Fingerprint, cancellationToken);
+        var result = new CompiledMap(normalized, effective, catalog.Summary.Fingerprint, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return result;
     }

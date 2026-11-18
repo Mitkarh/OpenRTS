@@ -43,6 +43,7 @@ public partial class Sandbox
     private System.Threading.Tasks.Task? _networkCapture;
     private long _networkInputTick, _networkMenuTick;
     private string _networkVerifyRole = "", _networkVerifyPinFile = "";
+    private string? _networkVerifyMapPath, _networkVerifyMapId;
     private int _networkVerifyPort = 17771;
     private double _networkVerifyElapsed;
     private void SelectNetworkVerificationMatch()
@@ -53,7 +54,13 @@ public partial class Sandbox
             button.Select(value); button.EmitSignal(OptionButton.SignalName.ItemSelected, value);
         }
         Choose("NetworkMode", _networkVerifyRole == "host" ? 1 : 2);
-        if (_networkVerifyNet3 && _networkVerifyRole == "host") Choose("Maps", Array.FindIndex(_manifest.Settings.Match.Maps, map => map.Path == MapScenario.CrossroadsMap));
+        if (_networkVerifyMapId is { } mapId && _networkVerifyRole == "host")
+        {
+            Choose("Maps", Array.IndexOf(_setupMaps.Keys.ToArray(), mapId));
+            Choose("Modes", Array.IndexOf(_setupSets.Keys.ToArray(), "infantry"));
+        }
+        else if (_networkVerifyNet3 && _networkVerifyRole == "host")
+            Choose("Maps", Array.FindIndex(_manifest.Settings.Match.Maps, map => map.Path == MapScenario.CrossroadsMap));
         Choose("PlayerCount", _networkVerifyNet3 && _networkVerifyRole == "host" ? 3 : 1);
         ((SpinBox)_matchSetup!.FindChild("NetworkPlayer", owned: false)).Value = _networkVerifyRole == "join3" ? 3 : 2;
         if (_networkVerifyRole == "watch") Choose("JoinRole", 1);
@@ -186,12 +193,15 @@ public partial class Sandbox
         }
         if (network.Completion.IsCompletedSuccessfully)
         {
+            if (_networkVerifyMapId is not null && _mapMatch?.Map.Id != _networkVerifyMapId)
+                throw new InvalidOperationException("Verification did not play the requested map.");
             if (network.Latencies.Count == 0 || _networkLabel?.Text.Contains("RTT", StringComparison.Ordinal) != true)
                 throw new InvalidOperationException("Measured RTT did not reach the native status label.");
             using var log = File.OpenRead(network.JournalPath);
             var replay = OpenRTS.Network.StarJournal.Replay(log, network.Descriptor, () => CreateNetworkWorld(_mapMatch!));
             if (replay != network.Completion.Result) throw new InvalidOperationException("Godot match replay differs.");
             GD.Print("OPENRTS_NETWORK_JOURNAL:" + network.JournalPath);
+            GD.Print($"OPENRTS_NETWORK_MAP:{_mapMatch!.Map.Id}:{_mapMatch.Map.GameplayFingerprint}");
             GD.Print("OPENRTS_NETWORK_PASS:" + network.Completion.Result.StateHash);
             _verificationDone = true; GetTree().Quit();
         }

@@ -3,4 +3,5 @@
   <ItemGroup><ProjectReference Include="../../src/OpenRTS.Network/OpenRTS.Network.csproj" /></ItemGroup>
   <ItemGroup><ProjectReference Include="../../src/OpenRTS.Content/OpenRTS.Content.csproj" /></ItemGroup>
   <ItemGroup><Compile Include="../../sandbox/Scenarios/**/*.cs" Link="Scenarios/%(Filename)%(Extension)" /></ItemGroup>
+  <ItemGroup><Compile Include="../../sandbox/Controls/MatchSetupOptions.cs" Link="MatchSetupOptions.cs" /></ItemGroup>
 </Project>

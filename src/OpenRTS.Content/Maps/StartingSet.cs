@@ -1,4 +1,6 @@
 using DeclarativeContent;
+using System.Security.Cryptography;
+using System.Text;
 using OpenRTS.Core;
 
 namespace OpenRTS.Content;
@@ -9,12 +11,27 @@ public sealed class StartingSet
     internal IReadOnlyList<Entry> Units { get; }
     public string Id { get; }
     public long Credits { get; }
+    public string Fingerprint { get; }
 
     private StartingSet(string id, long credits, Entry[] units)
     {
         Id = id;
         Credits = credits;
         Units = units;
+        using var data = new MemoryStream();
+        using var writer = new BinaryWriter(data, Encoding.UTF8, leaveOpen: true);
+        writer.Write(1);
+        writer.Write(id);
+        writer.Write(credits);
+        writer.Write(units.Length);
+        foreach (var entry in units)
+        {
+            writer.Write(entry.Type);
+            writer.Write(entry.Offset.X);
+            writer.Write(entry.Offset.Y);
+        }
+        writer.Flush();
+        Fingerprint = Convert.ToHexString(SHA256.HashData(data.GetBuffer().AsSpan(0, (int)data.Length)));
     }
 
     public static StartingSet Load(ContentSource source)

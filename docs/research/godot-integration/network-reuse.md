@@ -1,5 +1,7 @@
 # B6. Network и replay для карт OpenRTS
 
+**Реализовано 18 ноября 2026.** Игровые отпечатки, локальная запись и воспроизведение через существующий StarJournal описаны в [решении 052](../../decisions/052-map-match-replays.md). [Результаты B6](../../verification/052-map-match-replays.md) подтверждают прямой матч и воспроизведение для обоих форматов и M1. Ниже сохранено исходное исследование.
+
 **Дата:** 17 ноября 2026 года. **Основа:** статическое чтение чистого OpenRTS `afb7aef5a46bb937b39c8b63269e935c2a5b91da`, включая NET4.1–NET5 и аудит 045/046. Ниже отделены существующие возможности от необходимых изменений. Новые сетевые/редакторские запуски здесь не выполнялись.
 
 [Проект B](stage-b-design.md) · [Общий план](roadmap.md) · [Network README](../../../src/OpenRTS.Network/README.md) · [Replay ADR042](../../decisions/042-net4-replay-recovery.md) · [Snapshot/rejoin ADR043](../../decisions/043-net4-runtime-snapshot-rejoin.md).

@@ -67,6 +67,90 @@ internal static class ReplayChecks
     }
     internal static void Run(Action<string, Action> test)
     {
+        test("B6 gameplay recipe binds a compiled map, starting set and committed local playtest", () =>
+        {
+            var catalog = Catalog.Value;
+            const string path = "content/scene-maps/initial-properties-sample.scenemap.json";
+            var compiled = SceneMapBundle.Read(Read(path)).LoadMap(path, Read, catalog);
+            var source = compiled.Source;
+            var setInput = Read(MapScenario.InfantryStartSet);
+            var set = StartingSet.Load(setInput);
+            var options = new MatchSetupOptions(source.Id, set.Id, 2, 1, 25,
+                [new(SlotController.Human, 1), new(SlotController.None, 0), new(SlotController.None, 0), new(SlotController.None, 0)],
+                Local: true).Bind(compiled.Map, set);
+            var match = options.Prepare(compiled.Map, set);
+            var descriptor = options.Describe(catalog.Summary.Fingerprint, match.Seed);
+            CompiledMap Rebuild(MapLayer visual, MapObjectSource[] objects) => MapCompiler.Compile(new(source.Id, source.IsSkirmish,
+                source.Width, source.Height, source.Terrain, visual, source.Slots, objects, source.CellSize, source.Origin, source.Surface), catalog);
+            var visuals = new MapLayer(["different-visual"], new int[source.Width * source.Height]);
+            var restyled = Rebuild(visuals, source.Objects.ToArray());
+            Check(restyled.DataFingerprint != compiled.DataFingerprint && options.Prepare(restyled.Map, set).UnitCount == match.UnitCount);
+            var changedObjects = source.Objects.ToArray();
+            int wounded = Array.FindIndex(changedObjects, obj => obj.InitialHealth.HasValue);
+            changedObjects[wounded] = changedObjects[wounded] with { InitialHealth = changedObjects[wounded].InitialHealth + 1 };
+            Reject(() => options.Prepare(Rebuild(source.Visual, changedObjects).Map, set));
+            Reject(() => options.Prepare(compiled.Map, StartingSet.Load(setInput with { Text = setInput.Text.Replace("5000", "5001", StringComparison.Ordinal) })));
+            Check(StartingSet.Load(setInput with { Text = setInput.Text + "\n# formatting only\n" }).Fingerprint == set.Fingerprint);
+
+            string directory = Directory.CreateTempSubdirectory("openrts-b6-").FullName;
+            try
+            {
+                string journal = Path.Combine(directory, "recorded.journal");
+                using var recorder = new LocalReplayRecorder(journal, descriptor, options.Serialize(), options.Seats.Select(s => s.Controller).ToArray());
+                SimulationWorld World() => options.CreateWorld(match, 1, restrict: true);
+                using var session = new SimulationSession(World, startPaused: true, validateTurn: recorder.ValidateTurn, observeTick: recorder.ObserveTick);
+                Reject(() => LocalReplayRecorder.ValidateInput(new(0, 0, 0, CommandKind.Spawn)));
+                Check(!File.Exists(journal), "A partial recording was visible before completion.");
+                var intent = new WorldCommand(0, 0, 0, CommandKind.Stop, new(1));
+                LocalReplayRecorder.ValidateInput(intent);
+                session.Submit(intent);
+                session.StepOnce();
+                Check(SpinWait.SpinUntil(() =>
+                {
+                    using var frame = session.Frames.AcquireLatest();
+                    return frame?.Tick == 1 || session.Completion.IsCompleted;
+                }, TimeSpan.FromSeconds(5)));
+                if (session.Completion.IsCompleted) session.Completion.GetAwaiter().GetResult();
+                var recorded = recorder.Complete();
+                Check(recorded.Tick == 1 && session.GetCommandLog().Length == 1);
+                using var complete = File.OpenRead(journal);
+                Check(StarJournal.Replay(complete, info => MatchSetupOptions.ReadReplay(info, catalog.Summary.Fingerprint)
+                    .CreateWorld(options.Prepare(restyled.Map, set), 2, restrict: true)) == recorded);
+                byte[] bytes = File.ReadAllBytes(journal);
+                Reject(() => StarJournal.Replay(new MemoryStream(bytes[..^1]), _ => World()));
+                Reject(() => StarJournal.Replay(new MemoryStream(bytes), info =>
+                    MatchSetupOptions.ReadReplay(info with { Recipe = info.Recipe.Replace("\"Fog\":2", "\"Fog\":1", StringComparison.Ordinal) }, catalog.Summary.Fingerprint)
+                        .CreateWorld(match, 1, restrict: true)));
+                using var aborted = new LocalReplayRecorder(Path.Combine(directory, "aborted.journal"), descriptor,
+                    options.Serialize(), options.Seats.Select(s => s.Controller).ToArray());
+                using var initial = World();
+                aborted.ObserveTick(initial);
+                Reject(() => aborted.ValidateTurn(initial, Enumerable.Range(1, 257).Select(i => intent.WithStamp(1, 1, i)).ToArray()));
+                Check(initial.Tick == 0 && Directory.EnumerateFiles(directory).SequenceEqual([journal]),
+                    "A rejected turn advanced the world or published a replay.");
+
+                foreach (string legacy in new[] { "openrts-lobby-v2", "openrts-lobby-v3" })
+                {
+                    string recipe = System.Text.Json.JsonSerializer.Serialize(new { Map = source.Id, Mode = set.Id, Fog = 2, Delay = 6, TickRate = 25, options.Seats });
+                    var oldDescriptor = descriptor with { Rules = legacy, InputDelay = 6 };
+                    using var oldHistory = new MemoryStream();
+                    var state = new MatchState(Guid.NewGuid(), 1, 0, MatchPhase.Playing,
+                        [new(1, SlotController.Human, true, true), new(2, SlotController.None, false, false)], "start");
+                    using (var writer = new StarJournal(oldHistory, oldDescriptor, initial.Report().StateHash, StarProtocol.WriteState(state), recipe))
+                    {
+                        writer.Write(StarProtocol.Check(StarProtocol.Finish, 0, initial.Report().StateHash));
+                        writer.Complete();
+                    }
+                    oldHistory.Position = 0;
+                    Check(StarJournal.Replay(oldHistory, info =>
+                    {
+                        var old = MatchSetupOptions.ReadReplay(info, catalog.Summary.Fingerprint);
+                        return old.CreateWorld(old.Prepare(compiled.Map, set), 1, restrict: true);
+                    }) == initial.Report());
+                }
+            }
+            finally { Directory.Delete(directory, recursive: true); }
+        });
         test("Replay bootstrap rejects a mismatched authored map initializer", () =>
         {
             var catalog = Catalog.Value;

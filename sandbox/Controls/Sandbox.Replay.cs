@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Godot;
+using OpenRTS.Content;
 using OpenRTS.Core;
 using OpenRTS.Network;
 
@@ -11,24 +12,87 @@ public partial class Sandbox
     private Button? _replayPause;
     private long _replayGeneration;
     private bool _replayDragging;
+    private string? _openReplayPath, _replayMapPath, _replaySetPath;
+    private bool _recordPlaytest;
+    private string? _localJournalPath;
+
+    private static string NewJournalPath()
+    {
+        string directory = ProjectSettings.GlobalizePath("user://network");
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.journal");
+    }
+
+    private void BindLocalRecording(LocalMapPlaytest receipt)
+    {
+        var map = _mapMatch!.Map;
+        var set = receipt.ReadStartingSet(_manifest);
+        if (receipt.Slots.Length == 0) throw new ArgumentException("Для записи нужен хотя бы один активный игрок.");
+        string[] slots = map.Slots.ToArray();
+        var seats = Enumerable.Range(0, MapScenario.MaximumPlayers).Select(i => i < receipt.Slots.Length
+            ? new MatchSeat(SlotController.Human, Array.IndexOf(slots, receipt.Slots[i]))
+            : new MatchSeat(SlotController.None, 0)).ToArray();
+        _configuredOptions = new MatchSetupOptions(map.Id, set?.Id ?? "", (int)OpenRTS.Core.Visibility.FogMode.Visible,
+            1, receipt.TickRate, seats, receipt.SpeedPerTick, Local: true).Bind(map, set);
+        _configuredOptions.RequireIdentity();
+    }
+
+    private LocalReplayRecorder CreateLocalRecorder()
+    {
+        var options = _configuredOptions!;
+        _localJournalPath = NewJournalPath();
+        return new(_localJournalPath, options.Describe(_installedCatalog.Summary.Fingerprint, _mapMatch!.Seed),
+            options.Serialize(), options.Seats.Select(seat => seat.Controller).ToArray());
+    }
+
+    private void SaveLocalReplay()
+    {
+        if (_session?.Recorder is not { } recorder || _session.Completion.IsFaulted || _session.Completion.IsCanceled)
+            throw new InvalidOperationException("Запись матча прервана.");
+        var report = recorder.Complete();
+        GD.Print("OPENRTS_LOCAL_JOURNAL:" + _localJournalPath);
+        GD.Print("OPENRTS_LOCAL_REPLAY_HASH:" + report.StateHash);
+    }
+
     private void BeginReplay(string path)
     {
         if (_session is not null) return;
+        GameMap? replayArtifact = null;
         try
         {
             using var input = File.OpenRead(path); var info = StarJournal.ReadInfo(input);
-            if (info.Descriptor.Rules is not ("openrts-lobby-v2" or "openrts-lobby-v3") || info.Descriptor.ContentHash != _catalog!.Summary.Fingerprint)
-                throw new InvalidDataException("Правила или версия контента повтора не совпадают с установленными.");
-            _configuredOptions = MatchSetupOptions.Parse(info.Recipe); _mapMatch = PrepareMap(_configuredOptions);
+            var options = MatchSetupOptions.ReadReplay(info, _installedCatalog.Summary.Fingerprint);
+            GameMap map;
+            if (_replayMapPath is { } artifact)
+                replayArtifact = map = SceneMapBundle.IsPath(artifact)
+                    ? LoadSceneMap(artifact, _installedCatalog) : GameMap.Load(ReadMapSource(artifact), _installedCatalog);
+            else if (!_setupMaps.TryGetValue(options.Map, out map!))
+                throw new InvalidDataException($"Не установлена версия карты '{options.Map}' с отпечатком {options.MapFingerprint}.");
+            StartingSet? set = null;
+            if (_replaySetPath is { } startSet) set = StartingSet.Load(ReadMapSource(startSet));
+            else if (options.Mode.Length != 0 && !_setupSets.TryGetValue(options.Mode, out set))
+                throw new InvalidDataException($"Не установлена версия стартового набора '{options.Mode}' с отпечатком {options.StartingSetFingerprint}.");
+            var match = options.Prepare(map, set);
+            if (match.Seed != info.Descriptor.Seed) throw new InvalidDataException("Seed повтора не совпадает с фабрикой карты.");
+            _configuredOptions = options; _mapMatch = match;
             _networkMode = 0; _fogViewer = 0; _constructionViewer = 0; _opponentProfile = null; _opponent = null;
             _matchFogMode = (OpenRTS.Core.Visibility.FogMode)_configuredOptions.Fog;
-            _matchPlayers = _mapMatch.Map.Slots.Count; _count = _mapMatch.UnitCount; _paused = true; _playbackSpeed = 1;
-            var map = _mapMatch; var options = _configuredOptions;
-            _session = new SandboxSession(new ReplaySession(path, _ => CreateConfiguredWorld(map, options)));
+            _matchPlayers = options.Seats.Count(seat => seat.Controller != SlotController.None);
+            _count = match.UnitCount; _paused = true; _playbackSpeed = 1;
+            _session = new SandboxSession(new ReplaySession(path, actual =>
+            {
+                if (actual.Descriptor != info.Descriptor || actual.Recipe != info.Recipe || actual.InitialHash != info.InitialHash ||
+                    actual.InitialState.Match != info.InitialState.Match) throw new InvalidDataException("Файл повтора изменился.");
+                return options.CreateWorld(match, _workers, restrict: true);
+            }));
             _matchSetup!.SetLaunching(true, "Проверка и загрузка повтора…");
         }
-        catch (Exception error) when (error is IOException or InvalidDataException or ArgumentException or System.Text.Json.JsonException)
-        { _matchSetup!.SetLaunching(false, "Не удалось открыть повтор: " + error.Message); }
+        catch (Exception error) when (error is IOException or InvalidDataException or ArgumentException or DeclarativeContent.ContentException or System.Text.Json.JsonException)
+        {
+            if (replayArtifact is not null) _sceneMaps.Remove(replayArtifact);
+            _matchSetup!.SetLaunching(false, "Не удалось открыть повтор: " + error.Message);
+            if (_verifyReplayPath is not null) { GD.PushError(error.Message); GetTree().Quit(1); }
+        }
     }
     private void AddReplayControls()
     {
@@ -42,6 +106,8 @@ public partial class Sandbox
         var controls = new HBoxContainer(); box.AddChild(controls);
         _replayPause = new Button { Name = "ReplayPause", Text = "Воспроизвести" };
         _replayPause.Pressed += () => replay.SetPlayback(replay.PlaybackSpeed, !replay.IsPaused); controls.AddChild(_replayPause);
+        var restart = new Button { Name = "ReplayRestart", Text = "С начала" };
+        restart.Pressed += () => replay.Seek(0); controls.AddChild(restart);
         var step = new Button { Name = "ReplayStep", Text = "+1 тик" }; step.Pressed += replay.StepOnce; controls.AddChild(step);
         var speed = new OptionButton { Name = "ReplaySpeed" }; foreach (string value in new[] { "0.25×", "0.5×", "1×", "2×", "4×", "8×" }) speed.AddItem(value); speed.Select(2);
         speed.ItemSelected += value => replay.SetPlayback(new double[] { .25, .5, 1, 2, 4, 8 }[value], replay.IsPaused); controls.AddChild(speed);

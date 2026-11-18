@@ -189,13 +189,14 @@ public partial class Sandbox
     private bool Controls(uint owner)
     {
         if (_session?.Replay is not null) return false;
+        if (_recordPlaytest) return owner == 1 && _session?.Completion.IsCompleted == false;
         if (_networkMode != 0)
             return _session?.Network is { Player: > 0 } n && !n.Completion.IsCompleted &&
                 n.State.Phase is OpenRTS.Network.MatchPhase.Playing or OpenRTS.Network.MatchPhase.Paused &&
                 n.State.Slots[(int)n.Player - 1].Controller == OpenRTS.Network.SlotController.Human && owner == _fogViewer;
         return PlayerFog ? owner == _fogViewer : owner == 1 || _opponentProfile is null && _mapMatch is not null && owner is >= 2 and <= MapScenario.MaximumPlayers;
     }
-    private uint CommandOwner => _networkMode != 0 ? _fogViewer : PlayerFog ? _fogViewer : _opponentProfile is null ? Selected()?.Presentation.Owner ?? 1 : 1;
+    private uint CommandOwner => _recordPlaytest ? 1 : _networkMode != 0 ? _fogViewer : PlayerFog ? _fogViewer : _opponentProfile is null ? Selected()?.Presentation.Owner ?? 1 : 1;
     private bool SetupAllied(uint a, uint b) => a != 0 && b != 0 && (a == b || _configuredOptions is { } options && a <= 4 && b <= 4 && options.Seats[a - 1].Team != 0 && options.Seats[a - 1].Team == options.Seats[b - 1].Team);
     private bool Ally(EntityPose pose) => pose.Presentation.Owner != 0 && pose.Presentation.Owner == CommandOwner;
     private bool Enemy(EntityPose pose) => pose.Presentation.Owner != 0 && !SetupAllied(pose.Presentation.Owner, CommandOwner) && _catalog!.Units[pose.UnitType].Destruction != DestructionPolicy.Invulnerable;
