@@ -6,7 +6,7 @@ namespace OpenRTS.Content;
 public sealed class GameMap
 {
     private const string Neutral = "neutral";
-    private sealed record Placed(string Id, int Type, WorldPosition Position, string Owner, Source Source);
+    private sealed record Placed(string Id, int Type, WorldPosition Position, string Owner, Source Source, int QuarterTurns, int? InitialHealth);
     private sealed record Slot(WorldPosition Position, bool Reverse);
     private readonly UnitCatalog _catalog;
     private readonly Dictionary<string, int> _types;
@@ -14,6 +14,7 @@ public sealed class GameMap
     private readonly Placed[] _objects;
     private readonly Source _source;
     private readonly TerrainLayout _layout;
+    public UnitCatalog Catalog => _catalog;
     public string Id { get; }
     public bool IsSkirmish { get; }
     public NavigationGrid Grid { get; }
@@ -28,7 +29,7 @@ public sealed class GameMap
         _types = catalog.Units.Select((type, index) => (type.Id, index)).ToDictionary(p => p.Id, p => p.index, StringComparer.Ordinal);
         _slots = data.Slots.ToDictionary(s => s.Id, s => new Slot(s.Position ?? default, s.Reverse), StringComparer.Ordinal);
         Slots = Array.AsReadOnly(_slots.Keys.Order(StringComparer.Ordinal).ToArray());
-        _objects = data.Objects.Select(o => new Placed(o.Id, _types[o.Type], o.Position, o.Owner, o.Origin ?? data.Origin)).ToArray();
+        _objects = data.Objects.Select(o => new Placed(o.Id, _types[UnitCatalog.MapTypeId(data.Id, o)], o.Position, o.Owner, o.Origin ?? data.Origin, o.QuarterTurns, o.InitialHealth)).ToArray();
         var terrainIds = data.Terrain.Palette.Select(id => (byte)catalog.Locomotion!.Terrains.IndexOf(id)).ToArray();
         _layout = new(data.Width, data.Height, data.Terrain.Cells.Select(i => terrainIds[i]), data.Visual.Cells.Select(i => data.Visual.Palette[i]));
         Grid = _layout.CreateGrid();
@@ -95,7 +96,7 @@ public sealed class GameMap
 
         // Starting entities keep their IDs in the default skirmish journal and HUD checks.
         foreach (var obj in _objects)
-            placements.Add(new($"{Id}.objects.{obj.Id}", obj.Type, obj.Position, obj.Owner == Neutral ? 0 : assigned[obj.Owner].Id, obj.Source));
+            placements.Add(new($"{Id}.objects.{obj.Id}", obj.Type, obj.Position, obj.Owner == Neutral ? 0 : assigned[obj.Owner].Id, obj.Source, QuarterTurns: obj.QuarterTurns, InitialHealth: obj.InitialHealth));
 
         return new(this, _catalog, players.ToArray(), placements.ToArray(), seed);
     }

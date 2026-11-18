@@ -22,7 +22,13 @@ public sealed class MapLayer
 }
 
 public sealed record MapSlotSource(string Id, WorldPosition? Position = null, bool Reverse = false);
-public sealed record MapObjectSource(string Id, string Type, WorldPosition Position, string Owner, Source? Origin = null);
+public sealed record MapHealthVariant(string Id, int MaxHealth);
+
+public sealed record MapObjectSource(string Id, string Type, WorldPosition Position, string Owner, Source? Origin = null,
+    int QuarterTurns = 0, int? InitialHealth = null, MapHealthVariant? HealthVariant = null)
+{
+    internal bool HasInitialProperties => QuarterTurns != 0 || InitialHealth.HasValue || HealthVariant is not null;
+}
 
 /// <summary>Numeric map input shared by M1 and future scene extraction; not a running world or a Godot scene.</summary>
 public sealed partial class MapSource
@@ -50,6 +56,8 @@ public sealed partial class MapSource
         Terrain = terrain; Visual = visual; Slots = Array.AsReadOnly(slots.ToArray()); Objects = Array.AsReadOnly(objects.ToArray());
         Origin = origin ?? new("<map>", 1, 1);
     }
+
+    internal int FormatVersion => Objects.Any(obj => obj.HasInitialProperties) ? MapCompiler.Version : 1;
 
     public string Write() => MapJson.Write(this);
     public static MapSource Read(ContentSource source) => MapJson.ReadSource(source);

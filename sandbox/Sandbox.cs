@@ -97,6 +97,7 @@ public partial class Sandbox : Node3D
                 if (arg.StartsWith("--start-set=", StringComparison.Ordinal) && arg.Length > 12) { startSetPath = arg[12..]; continue; }
                 if (arg == "--skirmish") { _skirmish = _buildings = _showcase = true; continue; }
                 if (arg == "--check-scene-maps") { checkBundles = true; continue; }
+                if (arg == "--verify-initial-properties") { _verifyInitialProperties = _verifySceneMapMenu = _verifyMatchSetup = true; continue; }
                 if (arg == "--verify-scene-map-menu") { _verifySceneMapMenu = _verifyMatchSetup = true; continue; }
                 if (arg == "--verify-match-setup") { _verifyMatchSetup = true; continue; }
                 if (arg == "--verify-ai-match") { _verifyAiMatch = _verifyMatchSetup = true; continue; }
@@ -189,7 +190,7 @@ public partial class Sandbox : Node3D
             }
             else
             {
-                BuildBattleScene(_catalog);
+                BuildBattleScene(_mapMatch?.Map.Catalog ?? _catalog);
                 StartSession();
             }
         }
@@ -203,6 +204,7 @@ public partial class Sandbox : Node3D
 
     private void BuildBattleScene(UnitCatalog catalog)
     {
+        _catalog = catalog;
         if (_showcase)
         {
             _modelCatalog = ModelCatalog.Load(_manifest.Models);
@@ -243,7 +245,7 @@ public partial class Sandbox : Node3D
         _focusStartingBase = _terminal is not null;
         ResetPlacementRotation();
         _sitePlacement = null; _selectedProject = default; _visibleProjects = []; _visibleProjectsTick = -1; _constructionViewer = _networkMode != 0 ? _fogViewer : 1;
-        var catalog = _catalog ?? throw new InvalidOperationException("Контент не загружен.");
+        var catalog = _mapMatch?.Map.Catalog ?? _catalog ?? throw new InvalidOperationException("Контент не загружен.");
         _combatEffects?.Clear(); _sprites?.ClearWrecks();
         _rtsOverlay?.RadarContacts.Clear();
         var map = _mapMatch;

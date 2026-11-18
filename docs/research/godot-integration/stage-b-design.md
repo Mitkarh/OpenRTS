@@ -1,6 +1,6 @@
 # Этап B — редактор карт Godot и независимая компиляция
 
-**План:** 17 ноября 2026 года; уточнён 18 ноября. **Статус:** B0–B1 реализованы: [контракт 047](../../decisions/047-map-compilation.md), [проверки](../../verification/047-map-compilation.md). B2 добавил [опциональный scene authoring addon и извлечение 048](../../decisions/048-godot-map-authoring.md). B3 добавил [terrain brushes и Models/physical preview 049](../../decisions/049-godot-terrain-models-preview.md). B4 добавил [scene-map bundle и запуск 050](../../decisions/050-godot-scene-map-bundle.md). B5–B7 ещё впереди; реализованные границы закреплены в 047–050, остальные операции остаются проектом.
+**План:** 17 ноября 2026 года; уточнён 18 ноября. **Статус:** B0–B1 реализованы: [контракт 047](../../decisions/047-map-compilation.md), [проверки](../../verification/047-map-compilation.md). B2 добавил [опциональный scene authoring addon и извлечение 048](../../decisions/048-godot-map-authoring.md). B3 добавил [terrain brushes и Models/physical preview 049](../../decisions/049-godot-terrain-models-preview.md). B4 добавил [scene-map bundle и запуск 050](../../decisions/050-godot-scene-map-bundle.md). B5 добавил [начальные свойства 051](../../decisions/051-map-initial-properties.md). B6–B7 ещё впереди; реализованные границы закреплены в 047–051, остальные операции остаются проектом.
 
 [Общий план B/C/D](roadmap.md) · [Network/replay и переиспользование](network-reuse.md). Источники текущего поведения — OpenRTS `afb7aef5a46bb937b39c8b63269e935c2a5b91da`; рабочее дерево при чтении чистое. Ссылки на код приведены рядом с соответствующими ограничениями.
 
@@ -201,6 +201,8 @@ P0 — первый полезный сквозной результат; P1 —
 
 ### B5 — ограниченные редактируемые свойства
 
+**Выполнен.** Inspector задаёт поворот footprint, начальные HP и именованный map-local вариант MaxHealth. Вариант наследует тип и Model, а компилятор проверяет действующий каталог. Карты с новыми свойствами используют JSON v2. [Решение 051](../../decisions/051-map-initial-properties.md).
+
 Добавить quarter-turn и один map-local MaxHealth variant, отдельный initial HP и их UI/initializers. Проверить references, default inheritance, shared definition isolation, fingerprints и replay bootstrap identity новой карты. Выход: два одинаковых базовых юнита с разными начальными HP и один усиленный вариант дают ожидаемые состояния во всех хостах. При сложной variant-компиляции сначала закончить named map-local variant вместо произвольного override, сохранив тот же явный scope правки.
 
 ### B6 — playtest, Network и replay
@@ -224,4 +226,4 @@ P0 — первый полезный сквозной результат; P1 —
 | Lifecycle | Plugin disable, закрытие сцены, C# rebuild, stop/restart и export не оставляют owner/ресурсы |
 | Опциональность | Установленная карта играет без editor addon; .NET headless не грузит Godot/Network |
 
-Реализация всего B завершена после B7 для заявленного профиля. Независимые проверки идут через `tools/dev.sh test`, Godot authoring/editor — через `tools/dev.sh verify-authoring`; QA и измерения оформляются отдельно. Выполнение B0–B4 не означает завершения оставшихся срезов.
+Реализация всего B завершена после B7 для заявленного профиля. Независимые проверки идут через `tools/dev.sh test`, Godot authoring/editor — через `tools/dev.sh verify-authoring`; QA и измерения оформляются отдельно. Выполнение B0–B5 не означает завершения оставшихся срезов.

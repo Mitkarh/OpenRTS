@@ -53,7 +53,7 @@ public partial class OpenRtsMapGizmos : EditorNode3DGizmoPlugin
                 gizmo.AddLines(geometry, GetMaterial(name, gizmo)); gizmo.AddCollisionSegments(geometry);
             }
             Add(MapPreviewGeometry.Body(unit.Body), "body");
-            if (unit.Footprint is { } footprint)
+            if (unit.Footprint is not null && (uint)obj.QuarterTurns <= 3 && unit.WithRotation(obj.QuarterTurns).Footprint is { } footprint)
                 foreach (var cell in footprint.Cells)
                 {
                     var box = MapPreviewGeometry.Cell(footprint, cell);

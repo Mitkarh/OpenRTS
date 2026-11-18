@@ -77,7 +77,7 @@ public partial class Sandbox
             _configuredOptions = _matchSetup.Options;
             _mapMatch = PrepareMap(_configuredOptions);
             bool canPlanAi = aiOpponent || _networkMode != 0;
-            _opponentProfile = canPlanAi ? SkirmishAiCatalog.Load(ReadMapSource(_manifest.Settings.Match.AiConfig), _catalog!, _aiProfileId ?? _manifest.Settings.Match.AiProfile) : null;
+            _opponentProfile = canPlanAi ? SkirmishAiCatalog.Load(ReadMapSource(_manifest.Settings.Match.AiConfig), _mapMatch.Map.Catalog, _aiProfileId ?? _manifest.Settings.Match.AiProfile) : null;
             _opponentStarts = canPlanAi ? slots : null;
             _count = _mapMatch.UnitCount;
             _matchSetup!.SetLaunching(true, "Подготовка поля боя…");
@@ -131,7 +131,7 @@ public partial class Sandbox
                 _opponentStarts = _configuredOptions.Seats.Take(_mapMatch.Map.Slots.Count).Select(s => _mapMatch.Map.Slots[s.Start]).ToArray();
             }
             _startedFromSetup = true;
-            BuildBattleScene(_catalog!);
+            BuildBattleScene(_mapMatch?.Map.Catalog ?? _catalog!);
             AddNetworkStatus(); AddReplayControls();
             _focusStartingBase = true;
             _matchSetup!.Hide();

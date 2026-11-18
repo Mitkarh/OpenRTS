@@ -1,0 +1,35 @@
+# Что уже связано с Godot
+
+Основная трасса относится к OpenRTS `4887a49`. В конце учтено наблюдение о параллельной работе над B4. Исторические проверки отмечены отдельно. [Источники S001–S004](sources.md#s001).
+
+## Сборка и содержимое
+
+| Слой | Фактическая зависимость и назначение |
+| --- | --- |
+| Core / Gameplay | Обычные .NET-проекты. Core содержит базовые контракты, Frent и hosting. Gameplay ссылается на Core и реализует RTS-мир. Пространства имён `OpenRTS.Core.*` встречаются в обеих сборках. [Граница 023](../../decisions/023-core-and-gameplay.md), [Gameplay project](../../../src/OpenRTS.Gameplay/OpenRTS.Gameplay.csproj). |
+| Content / Network | Content собирает данные и карту, ссылается на Gameplay, AI и DeclarativeContent. Network зависит от Gameplay. Можно выбрать offline host без Network. [Content project](../../../src/OpenRTS.Content/OpenRTS.Content.csproj), [Network project](../../../src/OpenRTS.Network/OpenRTS.Network.csproj). |
+| Godot / sandbox | `src/OpenRTS.Godot` — каталог адаптера, который sandbox компилирует вместе со своими сценами, контролами, проверками и editor addon. Точка входа демо задана в `project.godot`. `Godot.NET.Sdk/4.7.2`, `net10.0`. [Сборка sandbox](../../../sandbox/OpenRTS.Sandbox.csproj), [проект Godot](../../../sandbox/project.godot). |
+| Headless | Обычный .NET executable с Content и общими сценариями. Отдельные Network tests проверяют сетевые сценарии без сцен Godot. [Headless project](../../../tools/OpenRTS.Headless/OpenRTS.Headless.csproj), [Network README](../../../src/OpenRTS.Network/README.md), [dev.sh](../../../tools/dev.sh). |
+| OpenRTS.CnC | Уже отдельный Godot .NET проект с тем же SDK, собственной точкой входа, `ProjectReference` на Content и source links к рендеру и части контролов. Путь задаёт `OpenRTSRoot`. Это подтверждает сборочную границу и показывает цену нынешнего способа поставки — внешний checkout и host-specific wiring. [Ревизия и файлы S004](sources.md#s004). |
+
+## Карта от редактора до запуска
+
+1. `MapSceneExtractor.Extract` читает авторские узлы и terrain в `MapSource`. Editor plugin снимает snapshot на потоке-владельце Godot, compiler проверяет уже независимые входные данные. [Экстрактор](../../../sandbox/addons/openrts_editor/MapSceneExtractor.cs), [решение 048](../../decisions/048-godot-map-authoring.md).
+2. `MapCompiler.Compile` разрешает данные с каталогом, создаёт compiled карту. `Read` читает и проверяет сохранённый результат с каталогом. `MapMatch.CreateWorld` создаёт новый игровой мир из подготовленных данных и настроек. [Компилятор](../../../src/OpenRTS.Content/Maps/MapCompiler.cs), [фабрика мира](../../../src/OpenRTS.Content/Maps/MapMatch.cs).
+3. B3 добавил terrain brushes, Models и диагностический preview. B4 добавляет открытие полноценной entry `PackedScene` вместе с её compiled проекцией при выборе карты, связку со сборкой и экспортом. См. ниже состояние рабочей реализации. Внешней игре нужен именно этот сквозной путь, а не перенос editor toolbar в runtime. [Решение 049](../../decisions/049-godot-terrain-models-preview.md), [проект B4](../godot-integration/stage-b-design.md#b4--весь-путь-поставки-и-игры).
+4. В sandbox уже есть чтение `res://` через Godot `FileAccess` и путь для файловой системы. Это место для доступа к ресурсам хоста. Факт наличия helper сам по себе ничего не говорит о полном экспорте будущего scene-map bundle. [Sandbox.Content](../../../sandbox/Sandbox.Content.cs).
+
+## Локальный матч от ввода до результата
+
+1. Ввод Godot превращается в `UnitAction`/`WorldCommand`. В sandbox `SandboxSession` выбирает offline, network или replay. Offline `Submit` кладёт намерение в очередь, session назначает тик при обработке команды. Replay отклоняет игровой ввод. [Контролы sandbox](../../../sandbox/Controls/Sandbox.RtsInput.cs), [SandboxSession](../../../sandbox/Controls/SandboxSession.cs).
+2. `SimulationSession.Run` на выделенном потоке создаёт мир на тике 0, собирает команды следующего тика, вызывает `world.Step`, сохраняет применённые команды, помещает события в отдельную очередь и публикует кадр. Диспетчеризация времени и коэффициент интерполяции используют `Stopwatch`. Очередь событий ограничена, превышение лимита останавливает сессию с ошибкой. [Core session](../../../src/OpenRTS.Core/Hosting/SimulationSession.cs).
+3. `Sandbox._Process` берёт подходящий viewer frame через `AcquireLatest`, считывает данные внутри `using`, обновляет рендер и отдельно вычитывает события. Слот с активным reader защищён. Если при очередной публикации все резервные слоты заняты, новый визуальный кадр может быть пропущен. Godot уже используется для пакетной отрисовки, в частности `SpriteBatch` заполняет буфер `MultiMesh`. [Main loop](../../../sandbox/Sandbox.cs), [FrameExchange](../../../src/OpenRTS.Gameplay/Hosting/FrameExchange.cs), [SpriteBatch](../../../src/OpenRTS.Godot/Rendering/SpriteBatch.cs).
+4. `Sandbox._ExitTree` освобождает session и сетевые служебные объекты. Offline, Star и replay имеют синхронное ожидание завершения owner thread до пяти секунд в `Dispose`. Если скопировать sandbox lifecycle в дочерний экран, выход потенциально блокирует UI. В этой же демосцене есть глобальный курсор, опрос клавиатуры и ветка Escape → `GetTree().Quit()`. Это конкретные места, которые придётся заменить на сигналы и делегирование хосту. [Sandbox](../../../sandbox/Sandbox.cs), [RTS input](../../../sandbox/Controls/Sandbox.RtsInput.cs), [StarSession](../../../src/OpenRTS.Network/StarSession.cs), [ReplaySession](../../../src/OpenRTS.Network/ReplaySession.cs).
+
+Ручной сценарий проверки вывода — хост прячет боевой HUD и перестаёт вызывать обработку его дерева. Поток offline session продолжает ждать и выполнять собственные тики, пока сам хост не остановит, не приостановит или не освободит сессию. При продолжающейся генерации событий и отсутствии читателя возможен упор в лимит. Поэтому локальная пауза режима и политика работы скрытой сцены входят в контракт встраивания.
+
+В опубликованной проверке B3 .NET headless и Godot sandbox на одной compiled карте совпали на тике 32 с десятью сущностями и одинаковым итоговым хешем. Это исходный ориентир для пилота с новой входной сценой. [Проверки 047](../../verification/047-map-compilation.md), [048](../../verification/048-godot-map-authoring.md), [049](../../verification/049-godot-terrain-models-preview.md).
+
+## Параллельная работа над B4
+
+К концу исследования в рабочем дереве появилась реализация загрузчика bundle. В прочитанной версии `SceneMapBundle.LoadMap` проверяет compiled данные и digest каталога, а `Sandbox.InstantiateMapScene` загружает `PackedScene`, проверяет root и инстанцирует оформление. Имеются сценарий проверки меню и preset для экспорта PCK. Это уже подходящая основа для внешнего пилота. Готовность B4, бинарный релиз и подключение в сторонней игре исследованием не проверялись. [Manifest и загрузка карты](../../../src/OpenRTS.Content/Maps/SceneMapBundle.cs), [входная сцена](../../../sandbox/Sandbox.SceneMaps.cs), [проверка меню](../../../sandbox/Verification/Sandbox.SceneMapVerification.cs), [export presets](../../../sandbox/export_presets.cfg).

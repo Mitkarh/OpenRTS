@@ -42,6 +42,22 @@ internal static class MapTerrainEditorChecks
         plugin.RefreshPreview();
         check(plugin.PreviewSprites >= 3 && plugin.Preview?.Node.Owner is null, "Models preview did not draw the three types, or became authored data.");
         check(MapSceneExtractor.Extract(root).Write() == original, "Preview introduced semantic markers/data.");
+        var rifleman = root.GetNode<OpenRtsMapObject>("Patrol/Rifleman");
+        rifleman.HealthVariant = new() { VariantId = "veteran", MaxHealth = 180 };
+        rifleman.InitialHealth = 35;
+        try
+        {
+            plugin.RefreshPreview();
+            var veteran = MapSceneExtractor.Extract(root).Objects.Single(o => o.Id == "patrol/rifle");
+            check(veteran.HealthVariant == new MapHealthVariant("veteran", 180) && veteran.InitialHealth == 35 && plugin.PreviewSprites >= 3,
+                "Preview failed to use authored initial health and the inherited variant Model.");
+        }
+        finally
+        {
+            rifleman.HealthVariant = null;
+            rifleman.InitialHealth = 0;
+            plugin.RefreshPreview();
+        }
         plugin.SelectById("patrol/tank");
         check(EditorInterface.Singleton.GetSelection().GetSelectedNodes().Single() == root.GetNode("Patrol/Tank"), "Semantic ID selection failed in a prefab.");
         var brush = new OpenRtsTerrainBrush { Terrain = ["road"], Visual = ["road"] };

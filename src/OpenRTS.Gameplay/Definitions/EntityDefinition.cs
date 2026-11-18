@@ -25,6 +25,14 @@ public sealed record EntityDefinition
     public SupplyDefinition? Supply { get; }
     public IReadOnlyList<UpgradeDefinition> Upgrades { get; }
 
+    public EntityDefinition WithMaxHealth(string id, int maxHealth)
+    {
+        var health = Health ?? throw new InvalidOperationException("A health variant requires a Health capability.");
+        return new(id, new(maxHealth, health.Armor, health.Destruction), Spatial, Presentation, Armament,
+            Production, Build, Economy, Capturable, Passenger, Transport, ConstructionRange, Supply, Upgrades,
+            TargetCategories, Flight, Airbase, VisionRadius, Sensors, WorkInterval);
+    }
+
     public EntityDefinition(string id, HealthDefinition? health = null, SpatialDefinition? spatial = null,
         PresentationDefinition? presentation = null, ArmamentDefinition? armament = null,
         ProducerDefinition? production = null, BuildDefinition? build = null, EconomyDefinition? economy = null, CapturableDefinition? capturable = null, PassengerDefinition? passenger = null, TransportDefinition? transport = null, int constructionRange = 0, SupplyDefinition? supply = null, IEnumerable<UpgradeDefinition>? upgrades = null, TargetCategories? targetCategories = null, FlightDefinition? flight = null, AirbaseDefinition? airbase = null, int visionRadius = 0, SensorDefinition? sensors = null, int workInterval = 1)

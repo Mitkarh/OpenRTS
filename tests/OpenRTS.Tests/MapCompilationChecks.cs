@@ -16,6 +16,57 @@ internal static class MapCompilationChecks
             new(s.Id, s.IsSkirmish, s.Width, s.Height, terrain ?? s.Terrain, visual ?? s.Visual,
                 slots ?? s.Slots, objects ?? s.Objects, s.CellSize);
 
+        test("Maps compiled: v2 initial HP, local health variants, and rotated footprints survive read and world initialization", () =>
+        {
+            var variant = new MapHealthVariant("veteran", 180);
+            MapObjectSource[] objects =
+            [
+                new("full", "rifleman", new(1024, 1024), "blue"),
+                new("wounded", "rifleman", new(3072, 1024), "blue", InitialHealth: 35),
+                new("veteran", "rifleman", new(5120, 1024), "blue", HealthVariant: variant),
+                new("second-veteran", "rifleman", new(7168, 1024), "red", InitialHealth: 90, HealthVariant: variant),
+                new("rotated", "power-plant", new(4096, 5632), "neutral", QuarterTurns: 1)
+            ];
+            var grass = new MapLayer(["grass"], new int[144]);
+            var input = new MapSource("initial-properties", false, 12, 12, grass, grass, source.Slots, objects);
+            var compiled = MapCompiler.Compile(MapSource.Read(new("v2 source", input.Write())), catalog);
+            var restored = MapCompiler.Read(new("v2 artifact", compiled.Write()), catalog);
+            using var world = compiled.Map.Prepare(players).CreateWorld(1);
+            using var otherWorld = restored.Map.Prepare(players).CreateWorld(4);
+            var poses = new EntityPose[objects.Length];
+            world.CopyPoses(poses);
+            NavigationChecks.Check(world.Report() == otherWorld.Report() && poses.Select(p => p.Health).Take(4).SequenceEqual(new[] { 100, 35, 180, 90 }),
+                "Initial HP changed on serialization or across workers.");
+            var effective = restored.Map.Catalog;
+            int veteran = poses[2].UnitType;
+            NavigationChecks.Check(poses[0].UnitType == poses[1].UnitType && veteran == poses[3].UnitType && veteran == catalog.Units.Count &&
+                effective.Units.Take(veteran).SequenceEqual(catalog.Units) && effective.Units[veteran].MaxHealth == 180 &&
+                effective.Presentations[veteran].Model == catalog.Presentations[poses[0].UnitType].Model &&
+                compiled.ContentFingerprint == catalog.Summary.Fingerprint && compiled.EffectiveContentFingerprint != compiled.ContentFingerprint,
+                "Variant did not preserve catalog indices, isolate base health or inherit presentation.");
+            var grid = world.NavigationGrid!;
+            NavigationChecks.Check(poses[4].QuarterTurns == 1 && poses[4].Presentation.BodyFacing == FacingDirection.FromQuarterTurns(1) &&
+                grid.IsBlocked(grid.Index(new(3, 4))) && grid.IsBlocked(grid.Index(new(4, 6))) && !grid.IsBlocked(grid.Index(new(5, 5))),
+                "Rotated footprint or facing was not initialized.");
+            MapSource Replace(int index, MapObjectSource value) =>
+                Copy(input, objects: objects.Select((ob, i) => i == index ? value : ob).ToArray());
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Replace(1, objects[1] with { InitialHealth = 101 }), catalog));
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Replace(1, objects[1] with { InitialHealth = 0 }), catalog));
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Replace(1, objects[1] with { QuarterTurns = 1 }), catalog));
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Replace(3, objects[3] with { HealthVariant = variant with { MaxHealth = 190 } }), catalog));
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Replace(3, objects[3] with { Type = "tank" }), catalog));
+            var invalid = MapCompiler.Compile(Replace(4, objects[4] with { QuarterTurns = 0 }), catalog);
+            NavigationChecks.Reject<ContentException>(() => invalid.Map.Prepare(players).CreateWorld());
+            var updatedHp = MapCompiler.Compile(Replace(1, objects[1] with { InitialHealth = 36 }), catalog);
+            using var altered = updatedHp.Map.Prepare(players).CreateWorld();
+            NavigationChecks.Check(updatedHp.GameplayFingerprint != compiled.GameplayFingerprint &&
+                updatedHp.EffectiveContentFingerprint == compiled.EffectiveContentFingerprint &&
+                altered.Report().StateHash != world.Report().StateHash, "Initial HP must participate in gameplay and tick-zero identity.");
+            var bad = JsonNode.Parse(compiled.Write())!;
+            bad["effectiveContentFingerprint"] = compiled.ContentFingerprint;
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Read(new("v2 bad effective fingerprint", bad.ToJsonString()), catalog));
+        });
+
         test("Maps compiled: independent input and artifact preserve exact world and every journal hash", () =>
         {
             var baseline = JsonNode.Parse(File.ReadAllText("docs/verification/047-map-compilation/baseline.json"))!;

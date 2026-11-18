@@ -11,6 +11,7 @@ public sealed class CompiledMap
     public MapSource Source { get; }
     public GameMap Map { get; }
     public string ContentFingerprint { get; }
+    public string EffectiveContentFingerprint => Map.Catalog.Summary.Fingerprint;
     public string GameplayFingerprint { get; }
     public string DataFingerprint { get; }
 
@@ -26,7 +27,7 @@ public sealed class CompiledMap
 
 public static class MapCompiler
 {
-    public const int Version = 1;
+    public const int Version = 2;
     public const string Geometry = "ground-plane-v1";
     public const int MaximumDocumentBytes = 64 * 1024 * 1024;
     public const int MaximumPaletteEntries = 65536;
@@ -103,7 +104,6 @@ public static class MapCompiler
             else if (slot.Position.HasValue || slot.Reverse) throw Error($"slots.{slot.Id}", "Fixture slots have no start position or reverse flag.");
         }
         if (source.IsSkirmish && slots.Count == 0) throw Error("starts", "Skirmish needs at least one start.");
-        var types = catalog.Units.Select(type => type.Id).ToHashSet(StringComparer.Ordinal);
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var obj in source.Objects)
         {
@@ -112,14 +112,14 @@ public static class MapCompiler
             string path = $"objects.{obj.Id}";
             Text(obj.Id, path); Text(obj.Type, path + ".type"); Text(obj.Owner, path + ".owner");
             if (!ids.Add(obj.Id)) throw Error(path, "Duplicate object ID.");
-            if (!types.Contains(obj.Type)) throw new ContentException(obj.Origin ?? source.Origin, path + ".type", $"Unknown unit '{obj.Type}'.");
             if (obj.Owner != "neutral" && (source.IsSkirmish || !slots.Contains(obj.Owner)))
                 throw Error(path + ".owner", $"Owner '{obj.Owner}' is not allowed on this map.");
             Position(obj.Position, path + ".position");
         }
         var normalized = new MapSource(source.Id, source.IsSkirmish, source.Width, source.Height, terrain, visual,
             source.Slots.OrderBy(s => s.Id, StringComparer.Ordinal).ToArray(), source.Objects, source.CellSize, source.Origin);
-        var result = new CompiledMap(normalized, new GameMap(normalized, catalog), catalog.Summary.Fingerprint, cancellationToken);
+        var effective = catalog.PrepareMapUnits(normalized, cancellationToken);
+        var result = new CompiledMap(normalized, new GameMap(normalized, effective), catalog.Summary.Fingerprint, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         return result;
     }
@@ -147,7 +147,8 @@ public static class MapCompiler
         if (data.Content != catalog.Summary.Fingerprint)
             throw new ContentException(new(input.Name, 1, 1), "contentFingerprint", "Compiled map requires different gameplay content.");
         var compiled = Compile(data.Source, catalog, cancellationToken);
-        if (compiled.GameplayFingerprint != data.Gameplay || compiled.DataFingerprint != data.Data)
+        if (compiled.GameplayFingerprint != data.Gameplay || compiled.DataFingerprint != data.Data ||
+            compiled.EffectiveContentFingerprint != data.EffectiveContent)
             throw new ContentException(new(input.Name, 1, 1), "fingerprint", "Compiled map data is damaged or its fingerprints do not match.");
         return compiled;
     }

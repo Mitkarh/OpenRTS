@@ -67,6 +67,40 @@ internal static class ReplayChecks
     }
     internal static void Run(Action<string, Action> test)
     {
+        test("Replay bootstrap rejects a mismatched authored map initializer", () =>
+        {
+            var catalog = Catalog.Value;
+            var original = MapSource.Read(Read("content/maps/compilation-fixture.mapsource.json"));
+            CompiledMap Compile(int hp)
+            {
+                var placements = original.Objects.ToArray();
+                placements[0] = placements[0] with { InitialHealth = hp, HealthVariant = new("veteran", 180) };
+                return MapCompiler.Compile(new(original.Id, original.IsSkirmish, original.Width, original.Height,
+                    original.Terrain, original.Visual, original.Slots, placements), catalog);
+            }
+            var compiled = Compile(35);
+            var loaded = MapCompiler.Read(new("test.ortmap.json", compiled.Write()), catalog);
+            var players = new Dictionary<string, PlayerDefinition> { ["blue"] = new(1, "Blue"), ["red"] = new(2, "Red") };
+            SimulationWorld Open(CompiledMap map) => map.Map.Prepare(players).CreateWorld(restrictPlayerCommands: true);
+            using var world = Open(compiled);
+            var descriptor = new MatchDescriptor("map-properties-test", compiled.EffectiveContentFingerprint, compiled.GameplayFingerprint, 1, EndTick: 1);
+            var state = new MatchState(Guid.NewGuid(), 1, 0, MatchPhase.Playing,
+                [new(1, SlotController.Human, true, true), new(2, SlotController.Human, true, true)], "start");
+            using var output = new MemoryStream();
+            using (var journal = new StarJournal(output, descriptor, world.Report().StateHash, StarProtocol.WriteState(state), "map-properties-test"))
+            {
+                world.Step();
+                journal.Write(StarProtocol.TurnFrame(1, 1));
+                journal.Write(Wire.Batch(state.Match, 1, 1, []));
+                journal.Write(Wire.Batch(state.Match, 2, 1, []));
+                journal.Write(StarProtocol.Check(StarProtocol.Hash, 1, world.Report().StateHash));
+                journal.Write(StarProtocol.Check(StarProtocol.Finish, 1, world.Report().StateHash));
+                journal.Complete();
+            }
+            byte[] bytes = output.ToArray();
+            Check(StarJournal.Replay(new MemoryStream(bytes), descriptor, () => Open(loaded)) == world.Report());
+            Reject(() => StarJournal.Replay(new MemoryStream(bytes), descriptor, () => Open(Compile(36))));
+        });
         test("NET4 default replay and recovery accept a match beyond 100000 ticks", () => {
             const int ticks = 100001;
             SimulationWorld Empty() => new([new UnitDefinition("unit", 100)], 4096, 4096, 42, tickRate: 40);

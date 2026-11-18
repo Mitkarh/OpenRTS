@@ -10,13 +10,15 @@ internal static class MapJson
     private const string SourceFormat = "openrts-map-source", CompiledFormat = "openrts-compiled-map";
 
     internal static string Write(MapSource source, bool gameplayOnly = false, CancellationToken stop = default) =>
-        Encode(writer => { Header(writer, SourceFormat); WriteMap(writer, source, gameplayOnly, stop); writer.WriteEndObject(); });
+        Encode(writer => { Header(writer, SourceFormat, source.FormatVersion); WriteMap(writer, source, gameplayOnly, stop); writer.WriteEndObject(); });
 
     internal static string Write(CompiledMap map, CancellationToken stop = default) => Encode(writer =>
     {
-        Header(writer, CompiledFormat);
-        writer.WriteNumber("compilerVersion", MapCompiler.Version);
+        int version = map.Source.FormatVersion;
+        Header(writer, CompiledFormat, version);
+        writer.WriteNumber("compilerVersion", version);
         writer.WriteString("contentFingerprint", map.ContentFingerprint);
+        if (version == 2) writer.WriteString("effectiveContentFingerprint", map.EffectiveContentFingerprint);
         writer.WriteString("gameplayFingerprint", map.GameplayFingerprint);
         writer.WriteString("dataFingerprint", map.DataFingerprint);
         WriteMap(writer, map.Source, false, stop); writer.WriteEndObject();
@@ -43,9 +45,9 @@ internal static class MapJson
         }
     }
 
-    private static void Header(Utf8JsonWriter writer, string format)
+    private static void Header(Utf8JsonWriter writer, string format, int version)
     {
-        writer.WriteStartObject(); writer.WriteString("format", format); writer.WriteNumber("version", 1);
+        writer.WriteStartObject(); writer.WriteString("format", format); writer.WriteNumber("version", version);
         writer.WriteString("geometry", MapCompiler.Geometry);
     }
 
@@ -88,15 +90,24 @@ internal static class MapJson
         {
             stop.ThrowIfCancellationRequested(); writer.WriteStartObject(); writer.WriteString("id", obj.Id); writer.WriteString("type", obj.Type);
             writer.WriteStartArray("position"); writer.WriteNumberValue(obj.Position.X); writer.WriteNumberValue(obj.Position.Y); writer.WriteEndArray();
-            writer.WriteString("owner", obj.Owner); writer.WriteEndObject(); writer.Flush();
+            writer.WriteString("owner", obj.Owner);
+            if (obj.QuarterTurns != 0) writer.WriteNumber("quarterTurns", obj.QuarterTurns);
+            if (obj.InitialHealth is { } hp) writer.WriteNumber("initialHealth", hp);
+            if (obj.HealthVariant is { } variant)
+            {
+                writer.WriteStartObject("healthVariant");
+                writer.WriteString("id", variant.Id); writer.WriteNumber("maxHealth", variant.MaxHealth);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndObject(); writer.Flush();
         }
         writer.WriteEndArray(); writer.WriteEndObject();
     }
 
     internal static MapSource ReadSource(ContentSource source) => Parse(source, false).Source;
-    internal static (MapSource Source, string Content, string Gameplay, string Data) ReadCompiled(ContentSource source) => Parse(source, true);
+    internal static (MapSource Source, string Content, string Gameplay, string Data, string EffectiveContent) ReadCompiled(ContentSource source) => Parse(source, true);
 
-    private static (MapSource Source, string Content, string Gameplay, string Data) Parse(ContentSource source, bool compiled)
+    private static (MapSource Source, string Content, string Gameplay, string Data, string EffectiveContent) Parse(ContentSource source, bool compiled)
     {
         ContentException Error(string path, string message) => new(new(source.Name, 1, 1), path, message);
         MapCompiler.ValidateDocument(source);
@@ -138,22 +149,27 @@ internal static class MapJson
                 return new(Number(array[0], path), Number(array[1], path));
             }
             var root = Fields(document.RootElement, "JSON", compiled
-                ? ["format", "version", "geometry", "compilerVersion", "contentFingerprint", "gameplayFingerprint", "dataFingerprint", "map"]
+                ? ["format", "version", "geometry", "compilerVersion", "contentFingerprint", "effectiveContentFingerprint", "gameplayFingerprint", "dataFingerprint", "map"]
                 : ["format", "version", "geometry", "map"]);
+            int version = Number(Required(root, "version"), "version");
             if (Text(Required(root, "format"), "format") != (compiled ? CompiledFormat : SourceFormat) ||
-                Number(Required(root, "version"), "version") != 1 || Text(Required(root, "geometry"), "geometry") != MapCompiler.Geometry)
+                version is not (1 or 2) || Text(Required(root, "geometry"), "geometry") != MapCompiler.Geometry)
                 throw Error("format", "Unsupported map format, version or geometry.");
-            string content = "", gameplay = "", data = "";
+            string content = "", gameplay = "", data = "", effectiveContent = "";
             if (compiled)
             {
-                if (Number(Required(root, "compilerVersion"), "compilerVersion") != MapCompiler.Version) throw Error("compilerVersion", "Unsupported compiler version.");
+                if (Number(Required(root, "compilerVersion"), "compilerVersion") != version) throw Error("compilerVersion", "Unsupported compiler version.");
                 string Fingerprint(string name)
                 {
                     string hash = Text(Required(root, name), name);
                     if (hash.Length != 64 || !hash.All(Uri.IsHexDigit)) throw Error(name, "Expected a SHA-256 digest.");
                     return hash.ToUpperInvariant();
                 }
-                content = Fingerprint("contentFingerprint"); gameplay = Fingerprint("gameplayFingerprint"); data = Fingerprint("dataFingerprint");
+                if (version == 1 && root.ContainsKey("effectiveContentFingerprint"))
+                    throw Error("effectiveContentFingerprint", "Effective content fingerprint requires version 2.");
+                content = Fingerprint("contentFingerprint");
+                effectiveContent = version == 2 ? Fingerprint("effectiveContentFingerprint") : content;
+                gameplay = Fingerprint("gameplayFingerprint"); data = Fingerprint("dataFingerprint");
             }
             var map = Fields(Required(root, "map"), "map", "id", "kind", "size", "cellSize", "terrain", "visual", "slots", "objects");
             var size = Pair(Required(map, "size"), "size");
@@ -182,12 +198,25 @@ internal static class MapJson
             }).ToArray();
             var objects = Array(Required(map, "objects"), "objects", MapCompiler.MaximumObjects).EnumerateArray().Select(node =>
             {
-                var obj = Fields(node, "objects", "id", "type", "position", "owner");
+                var obj = Fields(node, "objects", version == 2
+                    ? ["id", "type", "position", "owner", "quarterTurns", "initialHealth", "healthVariant"]
+                    : ["id", "type", "position", "owner"]);
+                MapHealthVariant? variant = null;
+                if (obj.TryGetValue("healthVariant", out var healthVariant))
+                {
+                    var fields = Fields(healthVariant, "objects.healthVariant", "id", "maxHealth");
+                    variant = new(Text(Required(fields, "id"), "healthVariant.id"), Number(Required(fields, "maxHealth"), "healthVariant.maxHealth"));
+                }
                 return new MapObjectSource(Text(Required(obj, "id"), "objects.id"), Text(Required(obj, "type"), "objects.type"),
-                    Pair(Required(obj, "position"), "objects.position"), Text(Required(obj, "owner"), "objects.owner"));
+                    Pair(Required(obj, "position"), "objects.position"), Text(Required(obj, "owner"), "objects.owner"),
+                    QuarterTurns: obj.TryGetValue("quarterTurns", out var rotation) ? Number(rotation, "objects.quarterTurns") : 0,
+                    InitialHealth: obj.TryGetValue("initialHealth", out var hp) ? Number(hp, "objects.initialHealth") : null,
+                    HealthVariant: variant);
             }).ToArray();
-            return (new(Text(Required(map, "id"), "id"), skirmish, size.X, size.Y, Layer("terrain"), Layer("visual"),
-                slots, objects, cellSize, new(source.Name, 1, 1)), content, gameplay, data);
+            var result = new MapSource(Text(Required(map, "id"), "id"), skirmish, size.X, size.Y, Layer("terrain"), Layer("visual"),
+                slots, objects, cellSize, new(source.Name, 1, 1));
+            if (result.FormatVersion != version) throw Error("version", "Map version must match its initializers.");
+            return (result, content, gameplay, data, effectiveContent);
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException or ArgumentException or OverflowException)
         { throw Error("JSON", error.Message); }

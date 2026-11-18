@@ -71,7 +71,9 @@ public static class MapSceneExtractor
                 case OpenRtsMapObject obj:
                     if (objects.Count >= MapCompiler.MaximumObjects) throw Error(node, "Objects", "Object budget exceeded.");
                     objects.Add((Order(node, obj.Order, context), new(Id(node, obj.ObjectId, context), obj.TypeId,
-                        Position(node, transform, topLevel), obj.OwnerSlot, Origin(node))));
+                        Position(node, transform, topLevel), obj.OwnerSlot, Origin(node), obj.QuarterTurns,
+                        obj.InitialHealth == 0 ? null : obj.InitialHealth,
+                        obj.HealthVariant is { } variant ? new(variant.VariantId, variant.MaxHealth) : null)));
                     break;
                 case OpenRtsMapStart start:
                     if (!root.IsSkirmish) throw Error(node, "Start", "Fixture maps use FixtureSlots, not start markers.");

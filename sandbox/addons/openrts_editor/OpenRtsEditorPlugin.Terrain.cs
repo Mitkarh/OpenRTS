@@ -273,7 +273,10 @@ public partial class OpenRtsEditorPlugin
         var unit = _previewCatalog.Units.FirstOrDefault(u => u.Id == obj.TypeId);
         if (unit is null) { _details.Text = "Unknown TypeId: " + obj.TypeId; return; }
         int index = _previewCatalog.Units.IndexOf(unit);
-        _details.Text = $"{unit.Id} · HP {unit.MaxHealth}\nModel: {_previewCatalog.Presentations[index].Model}\nBody: {unit.Body.Kind} {unit.Body.HalfWidth}×{unit.Body.HalfHeight}\nFootprint: {unit.Footprint?.Cells.Count ?? 0} cells";
+        int maximum = obj.HealthVariant?.MaxHealth ?? unit.MaxHealth;
+        string variant = obj.HealthVariant is { } health ? " · " + health.VariantId : "";
+        int initial = obj.InitialHealth == 0 ? maximum : obj.InitialHealth;
+        _details.Text = $"{unit.Id}{variant} · HP {initial}/{maximum}\nModel: {_previewCatalog.Presentations[index].Model}\nBody: {unit.Body.Kind} {unit.Body.HalfWidth}×{unit.Body.HalfHeight}\nFootprint: {unit.Footprint?.Cells.Count ?? 0} cells";
     }
 
     internal static void ValidateObjects(MapSource source, UnitCatalog catalog)

@@ -16,6 +16,9 @@ Match:
     - Path: content/scene-maps/terrain-authoring-sample.scenemap.json
       Title: Учебная карта Godot
       Description: Карта со сценой Godot, дорожными кистями и нейтральным заводом.
+    - Path: content/scene-maps/initial-properties-sample.scenemap.json
+      Title: Начальные свойства
+      Description: Раненый боец, ветеран и повёрнутая электростанция.
   StartingSets:
     - Path: content/start-sets/supply.yaml
       Title: Снабжение · центр, инженер и грузовик

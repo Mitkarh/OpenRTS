@@ -128,17 +128,21 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
     public EntityId AddInitialUnit(int unitType, WorldPosition position, uint owner = 0, uint states = 0)
         => AddInitialUnit(unitType, position, owner, states, false, false);
 
-    public EntityId AddInitialMapUnit(int unitType, WorldPosition position, uint owner, bool isStart)
-        => AddInitialUnit(unitType, position, owner, 0, true, isStart);
+    public EntityId AddInitialMapUnit(int unitType, WorldPosition position, uint owner, bool isStart,
+        int quarterTurns = 0, int? initialHealth = null)
+        => AddInitialUnit(unitType, position, owner, 0, true, isStart, quarterTurns, initialHealth);
 
-    private EntityId AddInitialUnit(int unitType, WorldPosition position, uint owner, uint states, bool strictMapPlacement, bool isStart)
+    private EntityId AddInitialUnit(int unitType, WorldPosition position, uint owner, uint states, bool strictMapPlacement, bool isStart,
+        int quarterTurns = 0, int? initialHealth = null)
     {
         ThrowIfDisposed();
         if (Tick != 0) throw new InvalidOperationException("After initialization, entities are created through commands.");
         ValidatePosition(position);
         ValidateType(unitType);
         ValidateVisionOwner(owner);
-        var type = _types[unitType];
+        var type = _types[unitType].WithRotation(quarterTurns);
+        if (initialHealth is { } hp && (hp < 1 || hp > type.MaxHealth))
+            throw new ArgumentOutOfRangeException(nameof(initialHealth), "Initial HP must fit the unit's maximum health.");
         if (type.Flight is not null && !FlightPlacementAllowed(type, position, owner))
             throw new ArgumentException("Initial aircraft placement is occupied or has no compatible landing surface.", nameof(position));
         if (type.Footprint is { } footprint)
@@ -159,7 +163,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
         if ((states & ~_types[unitType].AllowedStateMask) != 0) throw new ArgumentOutOfRangeException(nameof(states));
         try
         {
-            var id = Spawn(unitType, position, owner, states);
+            var id = Spawn(unitType, position, owner, states, initialHealth: initialHealth, quarterTurns: quarterTurns);
             if (footprintGrid is not null) CommitGrid(footprintGrid);
             return id;
         }

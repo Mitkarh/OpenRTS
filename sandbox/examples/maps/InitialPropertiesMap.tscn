@@ -1,0 +1,36 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="PackedScene" path="res://examples/maps/TerrainAuthoringMap.tscn" id="1"]
+[ext_resource type="Script" path="res://addons/openrts_editor/OpenRtsMapObject.cs" id="2"]
+[ext_resource type="Script" path="res://addons/openrts_editor/OpenRtsHealthVariant.cs" id="3"]
+
+[sub_resource type="Resource" id="Veteran"]
+script = ExtResource("3")
+VariantId = "veteran"
+MaxHealth = 180
+
+[node name="InitialPropertiesMap" instance=ExtResource("1")]
+MapId = "initial-properties-sample"
+CompiledPath = "res://content/scene-maps/initial-properties-sample.ortmap.json"
+
+[node name="Wounded" type="Node3D" parent="." index="6"]
+position = Vector3(12, 0, 16)
+script = ExtResource("2")
+ObjectId = "wounded"
+Order = 21
+InitialHealth = 35
+
+[node name="Veteran" type="Node3D" parent="." index="7"]
+position = Vector3(14, 0, 16)
+script = ExtResource("2")
+ObjectId = "veteran"
+Order = 22
+HealthVariant = SubResource("Veteran")
+
+[node name="RotatedPowerPlant" type="Node3D" parent="." index="8"]
+position = Vector3(8, 0, 16.5)
+script = ExtResource("2")
+ObjectId = "rotated-plant"
+TypeId = "power-plant"
+Order = 23
+QuarterTurns = 1

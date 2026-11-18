@@ -5,7 +5,8 @@ namespace OpenRTS.Content;
 
 public sealed class MapMatch
 {
-    internal sealed record Placement(string Label, int Type, WorldPosition Position, uint Owner, Source Source, bool IsStart = false);
+    internal sealed record Placement(string Label, int Type, WorldPosition Position, uint Owner, Source Source, bool IsStart = false,
+        int QuarterTurns = 0, int? InitialHealth = null);
     private readonly UnitCatalog _catalog;
     private readonly PlayerDefinition[] _players;
     private readonly Placement[] _placements;
@@ -39,7 +40,7 @@ public sealed class MapMatch
             {
                 try
                 {
-                    world.AddInitialMapUnit(placement.Type, placement.Position, placement.Owner, placement.IsStart);
+                    world.AddInitialMapUnit(placement.Type, placement.Position, placement.Owner, placement.IsStart, placement.QuarterTurns, placement.InitialHealth);
                 }
                 catch (ArgumentException error)
                 {
