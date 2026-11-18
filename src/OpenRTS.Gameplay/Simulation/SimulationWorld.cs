@@ -598,6 +598,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
     {
         ValidateVisionOwner(owner);
         if (_types[unitType].Flight is not null) ValidateFlightSurface();
+        else if (_navigation?.Grid.HasSlopedSurface == true) position = GroundPosition(position, position.Elevation);
         if (id.Value == 0) id = AllocateEntityId();
         Frent.Entity state;
         var type = _types[unitType].WithRotation(quarterTurns);

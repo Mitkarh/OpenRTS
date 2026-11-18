@@ -20,7 +20,7 @@ public sealed partial class SimulationWorld
         (_navigation is null ? _types[unitType].Locomotor.Rules[0].CanStop :
             TerrainGeometry.CanStop(_navigation.Grid, position, _types[unitType].Body, _types[unitType].Locomotor));
 
-    private WorldPosition GroundPosition(WorldPosition point, int fallback) => point with { Elevation = _navigation?.Grid.HasSurface == true ? _navigation.Grid.SurfaceAt(_navigation.Grid.CellAt(point)).Elevation : fallback };
+    private WorldPosition GroundPosition(WorldPosition point, int fallback) => point with { Elevation = _navigation?.Grid.HasSurface == true ? _navigation.Grid.SurfaceElevationAt(point) : fallback };
 
     private WorldPosition TerrainStep(WorldPosition position, ref MotionState motion, UnitDefinition type, WorldPosition target)
     {
@@ -30,7 +30,7 @@ public sealed partial class SimulationWorld
         int budget = SpeedPerTick * factor + motion.MovementRemainder;
         motion.MovementRemainder = budget % 1024;
         var result = budget < 1024 ? position : StepTowards(position, target, budget / 1024);
-        return grid.HasSurface ? result with { Elevation = grid.SurfaceAt(grid.CellAt(result)).Elevation } : result;
+        return grid.HasSurface ? result with { Elevation = grid.SurfaceElevationAt(result) } : result;
     }
 
     private void PrepareWeightedRoutes(CancellationToken token)

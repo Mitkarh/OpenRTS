@@ -1,0 +1,8 @@
+ground:
+  Terrain: { Default: true }
+relief:
+  Locomotor:
+    MaximumSlope: 256
+    MaximumStep: 0
+    Terrain:
+      ground: { Traverse: true }

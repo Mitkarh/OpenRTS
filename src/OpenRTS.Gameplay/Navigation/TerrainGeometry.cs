@@ -10,7 +10,11 @@ internal static class TerrainGeometry
         int width = grid.Width * grid.CellSize, height = grid.Height * grid.CellSize;
         if (Math.Min(from.X, to.X) < body.HalfWidth || Math.Min(from.Y, to.Y) < body.HalfHeight ||
             Math.Max(from.X, to.X) > width - body.HalfWidth || Math.Max(from.Y, to.Y) > height - body.HalfHeight) return false;
-        int size = grid.CellSize, reachX = (body.HalfWidth + size - 1) / size, reachY = (body.HalfHeight + size - 1) / size;
+        int size = grid.CellSize;
+        bool graded = grid.HasSlopedSurface && locomotor is not null;
+        // Include edges owned by the cell just beyond a tangent on a grid line.
+        int reachX = (body.HalfWidth + size - (graded ? 0 : 1)) / size;
+        int reachY = (body.HalfHeight + size - (graded ? 0 : 1)) / size;
         int x = Math.Min(from.X / size, grid.Width - 1), y = Math.Min(from.Y / size, grid.Height - 1);
         int endX = Math.Min(to.X / size, grid.Width - 1), endY = Math.Min(to.Y / size, grid.Height - 1);
         long dx = (long)to.X - from.X, dy = (long)to.Y - from.Y;
@@ -22,20 +26,37 @@ internal static class TerrainGeometry
         while (true)
         {
             int current = y * grid.Width + x;
-            if (locomotor is not null && Math.Abs((long)grid.SurfaceAt(current).Elevation - grid.SurfaceAt(previous).Elevation) > locomotor.MaximumStep) return false;
+            if (!graded && locomotor is not null && Math.Abs((long)grid.SurfaceAt(current).Elevation - grid.SurfaceAt(previous).Elevation) > locomotor.MaximumStep) return false;
             previous = current;
             for (int cy = Math.Max(0, y - reachY); cy <= Math.Min(grid.Height - 1, y + reachY); cy++)
                 for (int cx = Math.Max(0, x - reachX); cx <= Math.Min(grid.Width - 1, x + reachX); cx++)
                 {
                     int cell = cy * grid.Width + cx;
-                    if ((grid.IsBlocked(cell) || locomotor is not null && (!locomotor.At(grid, cell).Traverse || Math.Abs((long)grid.SurfaceAt(cell).Elevation - grid.SurfaceAt(current).Elevation) > locomotor.MaximumStep)) &&
+                    if ((grid.IsBlocked(cell) || locomotor is not null && (!locomotor.At(grid, cell).Traverse ||
+                        !graded && Math.Abs((long)grid.SurfaceAt(cell).Elevation - grid.SurfaceAt(current).Elevation) > locomotor.MaximumStep)) &&
                         BodyGeometry.SweptBox(from, to, new(cx * size, cy * size, (cx + 1) * size, (cy + 1) * size), body)) return false;
+                    if (graded && locomotor is not null &&
+                        TouchesCliff(grid, cx, cy, cell, locomotor.MaximumStep, from, to, body)) return false;
                     foreach (int obstacle in grid.ObstaclesAt(cell)) if (BodyGeometry.SweptBox(from, to, grid.Obstacle(obstacle), body)) return false;
                 }
             if (x == endX && y == endY) return true;
             if (x != endX && (y == endY || tx * ay <= ty * ax)) { x += sx; tx += size; }
             else { y += sy; ty += size; }
         }
+    }
+
+    private static bool TouchesCliff(NavigationGrid grid, int x, int y, int cell, int maximumStep,
+        WorldPosition from, WorldPosition to, BodyShape body)
+    {
+        int size = grid.CellSize, left = x * size, top = y * size, right = left + size, bottom = top + size;
+        // A flat edge can meet a ramp at the same height. Test the shared edge, keeping the full body clear of a cliff.
+        return x + 1 < grid.Width && Blocks(cell + 1, right, top, right, bottom) ||
+            y + 1 < grid.Height && Blocks(cell + grid.Width, left, bottom, right, bottom);
+
+        bool Blocks(int neighbor, int x0, int y0, int x1, int y1) =>
+            (Math.Abs(grid.SurfaceElevationAt(cell, x0, y0) - grid.SurfaceElevationAt(neighbor, x0, y0)) > maximumStep ||
+             Math.Abs(grid.SurfaceElevationAt(cell, x1, y1) - grid.SurfaceElevationAt(neighbor, x1, y1)) > maximumStep) &&
+            BodyGeometry.SweptBox(from, to, new(x0, y0, x1, y1), body);
     }
 
     internal static bool CanStop(NavigationGrid grid, WorldPosition point, BodyShape body, Locomotor profile)

@@ -7,7 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="../src/OpenRTS.Content/OpenRTS.Content.csproj" />
     <Compile Include="../src/OpenRTS.Godot/Controls/PlanarCamera.cs;../src/OpenRTS.Godot/Controls/SelectionState.cs" Link="Controls/%(Filename)%(Extension)" />
-    <Compile Include="../src/OpenRTS.Godot/Rendering/ContactDisplayStyle.cs;../src/OpenRTS.Godot/Rendering/ObstacleView.cs" Link="Rendering/%(Filename)%(Extension)" />
+    <Compile Include="../src/OpenRTS.Godot/Rendering/ContactDisplayStyle.cs" Link="Rendering/ContactDisplayStyle.cs" />
     <Compile Remove="Controls/Shared/RtsOverlay.cs" />
     <Compile Include="Controls/Shared/RtsOverlay.cs" />
   </ItemGroup>

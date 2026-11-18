@@ -1,6 +1,5 @@
 using Godot;
 using OpenRTS.Core;
-using OpenRTS.Core.Navigation;
 using OpenRTS.Core.Orders;
 using OpenRTS.Core.Presentation;
 using OpenRTS.Godot.Controls;
@@ -8,13 +7,13 @@ using OpenRTS.Godot.Controls;
 public partial class Sandbox3D
 {
     private enum CheckStage { Input, Queue, Detour, Group, Stop, Hold }
-    private static readonly WorldPosition FirstGoal = new(19 * CellSize + 384, 8 * CellSize + 512);
-    private static readonly WorldPosition FinalGoal = new(20 * CellSize + 768, 10 * CellSize + 128);
+    private static readonly WorldPosition FirstGoal = new(19 * CellSize + 384, 8 * CellSize + 512, TerrainScenario.PlateauElevation);
+    private static readonly WorldPosition FinalGoal = new(10 * CellSize + 768, 11 * CellSize + 128, 960);
     private CheckStage _checkStage;
     private long _checkTick;
     private EntityId _scout, _secondScout;
     private WorldPosition _secondStart;
-    private bool _sawDetour, _reachedFirstGoal;
+    private bool _climbed, _descended, _reachedFirstGoal;
 
     private void VerifyControls(FrameExchange.FrameLease frame)
     {
@@ -22,13 +21,13 @@ public partial class Sandbox3D
         var session = _session!;
         if (_checkStage == CheckStage.Input)
         {
-            Check(frame.Poses.Length == Starts.Length, "Initial frame does not contain the test squad.");
-            Check(frame.Grid is { } grid && grid.IsBlocked(grid.Index(new GridCell(WallX, WallStart))),
-                "The published navigation grid is missing the test wall.");
+            Check(frame.Poses.Length == TerrainScenario.UnitCount && frame.Grid is { HasSlopedSurface: true },
+                "Initial frame is missing the test squad or the raised terrain.");
             _scout = frame.Poses[0].Id;
             _secondScout = frame.Poses[1].Id;
             _secondStart = frame.Poses[1].Current;
             VerifySelectionAndCamera();
+            VerifyReliefPicking();
             Press(Key.M);
             Click(MouseButton.Left, Pixel(FirstGoal));
             Click(MouseButton.Right, Pixel(FinalGoal), shift: true);
@@ -50,16 +49,19 @@ public partial class Sandbox3D
                 break;
             case CheckStage.Detour:
                 Check(second.Current == _secondStart, "An unselected scout moved during the detour.");
-                if (scout.Current.X >= WallX * CellSize && scout.Current.X < (WallX + 1) * CellSize)
-                {
-                    Check(scout.Current.Y < WallStart * CellSize || scout.Current.Y >= WallEnd * CellSize,
-                        "The scout entered a blocked cell.");
-                    _sawDetour = true;
-                }
+                Check(scout.Current.Elevation == frame.Grid!.SurfaceElevationAt(scout.Current), "The scout lost contact with the terrain.");
+                int heightChange = scout.Current.Elevation - scout.Previous.Elevation;
+                Check(Math.Abs(heightChange) <= TerrainScenario.RampRise / 8, "The scout jumped across a height discontinuity.");
+                _climbed |= heightChange > 0;
+                _descended |= _reachedFirstGoal && heightChange < 0;
+                if (!_reachedFirstGoal && scout.Previous.X < TerrainScenario.PlateauStartX * CellSize &&
+                    scout.Current.X >= TerrainScenario.PlateauStartX * CellSize)
+                    Check(scout.Current.Y >= TerrainScenario.RampStartY * CellSize && scout.Current.Y < TerrainScenario.ReliefEndY * CellSize,
+                        "The scout entered the plateau through the cliff instead of the ramp.");
                 _reachedFirstGoal |= scout.Current == FirstGoal;
                 if (scout.Current == FinalGoal)
                 {
-                    Check(_sawDetour && _reachedFirstGoal, "The route did not visit the first waypoint and detour around the wall.");
+                    Check(_climbed && _reachedFirstGoal && _descended, "The route did not climb to the exact plateau point and descend to the ramp point.");
                     Press(Key.Key1);
                     Click(MouseButton.Right, Pixel(new WorldPosition(7 * CellSize, 7 * CellSize)));
                     Advance(frame.Tick, CheckStage.Group);
@@ -85,7 +87,8 @@ public partial class Sandbox3D
             case CheckStage.Hold:
                 Check(scout.Order.Phase == OrderPhase.Holding && second.Order.Phase == OrderPhase.Holding,
                     "Hold position did not reach both selected units.");
-                GD.Print($"Sandbox3D verified: camera, marquee, groups, exact and queued orders, wall detour, stop and hold at tick {frame.Tick}.");
+                VerifyReplay(frame);
+                GD.Print($"Sandbox3D verified: camera and RTS controls, exact relief picking, ramp ascent and descent, cliff detour and replay parity at tick {frame.Tick}.");
                 SetProcess(false);
                 GetTree().Quit();
                 break;
@@ -120,7 +123,7 @@ public partial class Sandbox3D
         Press(Key.Key1);
         Check(_selection.Ids.SequenceEqual([_scout, _secondScout]), "Control group recall failed.");
         Press(Key.A, control: true);
-        Check(_selection.Count == Starts.Length, "Select all missed a unit.");
+        Check(_selection.Count == TerrainScenario.UnitCount, "Select all missed a unit.");
         Click(MouseButton.Left, first);
         Press(Key.Space);
         var centerPixel = ViewRect.GetCenter();
@@ -134,6 +137,35 @@ public partial class Sandbox3D
         Mouse(MouseButton.WheelUp, cursor, true);
         Check(_camera.Size < size && PlanarCamera.GroundPoint(_camera, cursor)!.Value.DistanceTo(anchor) < 0.004f,
             "Zoom moved the point under the cursor.");
+    }
+
+    private void VerifyReliefPicking()
+    {
+        var cliff = new WorldPosition(19 * CellSize + 384, TerrainScenario.ReliefEndY * CellSize, CellSize);
+        Check(_terrain.Pick(_camera, Pixel(cliff)) is null, "The ray picked terrain behind a visible cliff face.");
+        Click(MouseButton.Right, Pixel(cliff));
+        var cursor = Pixel(FirstGoal);
+        Check(_terrain.Pick(_camera, cursor) == FirstGoal, "The ray missed the exact raised target before zoom.");
+        Mouse(MouseButton.WheelUp, cursor, true);
+        Check(_terrain.Pick(_camera, cursor) == FirstGoal, "Zoom lost the raised point beneath the cursor.");
+        Check(_terrain.Pick(_camera, Pixel(FinalGoal)) == FinalGoal, "The ramp ray did not recover the sub-cell target and its height.");
+    }
+
+    private void VerifyReplay(FrameExchange.FrameLease frame)
+    {
+        using var world = _scenario.CreateWorld();
+        var commands = _session!.GetCommandLog();
+        int start = 0;
+        for (long tick = 1; tick <= frame.Tick; tick++)
+        {
+            int end = start;
+            while (end < commands.Length && commands[end].Tick == tick) end++;
+            world.Step(commands.AsSpan(start, end - start));
+            start = end;
+        }
+        var poses = new EntityPose[world.Count];
+        world.CopyPoses(poses);
+        Check(start == commands.Length && frame.Poses.SequenceEqual(poses), "The same journal produced different poses in the independent simulation.");
     }
 
     private void Advance(long tick, CheckStage stage)

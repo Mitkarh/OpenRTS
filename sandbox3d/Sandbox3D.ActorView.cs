@@ -66,12 +66,13 @@ public partial class Sandbox3D
             return Math.Max(12, Math.Max(width, halfHeight));
         }
 
-        public void Apply(EntityPose pose, float alpha)
+        public void Apply(EntityPose pose, float alpha, Vector3 normal)
         {
             Node.Position = Display(pose.Previous).Lerp(Display(pose.Current), alpha);
             var before = pose.Presentation.PreviousBodyFacing;
             var after = pose.Presentation.BodyFacing;
             Node.Rotation = new(0, Mathf.LerpAngle(Mathf.Atan2(before.X, before.Y), Mathf.Atan2(after.X, after.Y), alpha), 0);
+            _ring.Quaternion = new Quaternion(Vector3.Up, Node.Basis.Inverse() * normal);
 
             bool moving = pose.Previous != pose.Current;
             if (_moving == moving) return;

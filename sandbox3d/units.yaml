@@ -1,12 +1,16 @@
 scout:
   Health: { HP: 100 }
+  Movement: { Locomotor: relief }
   Body: { Radius: 300 }
 tank:
   Health: { HP: 200 }
+  Movement: { Locomotor: relief }
   Body: { Radius: 850 }
 apc:
   Health: { HP: 150 }
+  Movement: { Locomotor: relief }
   Body: { Radius: 800 }
 engineer:
   Health: { HP: 150 }
+  Movement: { Locomotor: relief }
   Body: { Radius: 850 }

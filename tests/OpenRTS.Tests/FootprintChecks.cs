@@ -132,6 +132,51 @@ internal static class FootprintChecks
             using var raised = new SimulationWorld([Mover()], 12288, 8192, navigationGrid: ramp); raised.AddInitialUnit(0, new(2048, 4096, 128)); Move(raised, 1, new(10240, 4096)); Finish(raised);
             NavigationChecks.Check(raised.MovingCount == 0 && Pose(raised, 1).Current.Elevation == 640, "Ground elevation broke waypoint completion");
         });
+        test("N2: ramp planes keep a large body grounded and a shared cliff edge blocks it", () =>
+        {
+            const int size = WorldPosition.UnitsPerCell, width = 12, depth = 6, rise = 128;
+            var samples = Enumerable.Range(0, width * depth).Select(cell =>
+            {
+                int x = cell % width;
+                return x < 4 ? new SurfaceSample(x * rise + rise / 2, Slope: rise) :
+                    new SurfaceSample(x < 8 ? 4 * rise : size);
+            }).ToArray();
+            var slopes = Enumerable.Range(0, samples.Length).Select(cell => cell % width < 4 ? new SurfaceRise(rise) : default);
+            var grid = new NavigationGrid(width, depth, surface: samples, rises: slopes);
+            var profile = new Locomotor("ramp", [TerrainRule.Ground], maximumSlope: rise, maximumStep: 0);
+            using var world = new SimulationWorld([Mover(radius: 384, profile: profile)], width * size, depth * size, navigationGrid: grid);
+            var start = new WorldPosition(size + 377, 3 * size + 128, -500);
+            world.AddInitialUnit(0, start);
+            NavigationChecks.Check(Pose(world, 1).Current.Elevation == start.X / 8, "Spawn did not project onto the ramp");
+            var goal = new WorldPosition(6 * size + 311, start.Y, 4 * rise);
+            Move(world, 1, goal);
+            int previous = start.X / 8;
+            while (world.MovingCount > 0 && world.Tick < 100)
+            {
+                var current = Pose(world, 1).Current;
+                NavigationChecks.Check(current.Elevation == grid.SurfaceElevationAt(current) &&
+                    current.Elevation - previous is >= 0 and <= 16, "Ramp movement lost its continuous support");
+                previous = current.Elevation;
+                world.Step();
+            }
+            NavigationChecks.Check(Pose(world, 1).Current == goal, "A zero-step profile failed to follow connected ramp cells");
+            Move(world, 1, new(9 * size + 128, start.Y, size));
+            Finish(world);
+            NavigationChecks.Check(Pose(world, 1).Current is { X: < 8 * size - 384, Elevation: 4 * rise }, "Body crossed or touched the cliff");
+            var wide = new DestinationResolver(grid, new Locomotor("wide", [TerrainRule.Ground], BodyShape.Box(size, 384), maximumStep: 0));
+            NavigationChecks.Check(!wide.CanStop(new(9 * size, start.Y)) && wide.CanStop(new(9 * size + 1, start.Y)),
+                "A body tangent to the cliff from the high side was not kept clear");
+
+            using var state = new MemoryStream();
+            using var writer = new BinaryWriter(state, System.Text.Encoding.UTF8, leaveOpen: true);
+            int editedCell = grid.Index(new(0, 0));
+            grid.WithBlocked(editedCell, true).WriteRuntimeState(writer);
+            state.Position = 0;
+            using var reader = new BinaryReader(state);
+            var restored = grid.ReadRuntimeState(reader);
+            NavigationChecks.Check(restored.IsBlocked(editedCell) && restored.SurfaceElevationAt(start) == grid.SurfaceElevationAt(start),
+                "Runtime grid restore lost the immutable ramp geometry");
+        });
         test("N2: weapon range reaches the nearest building cell rather than its center", () =>
         {
             var gun = new UnitDefinition("gun", 100, ["idle", "move", "fire"], weapon: new(5120, 5120, 20, 100, 0), body: BodyShape.Circle(512));

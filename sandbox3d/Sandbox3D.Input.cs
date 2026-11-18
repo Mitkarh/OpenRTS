@@ -18,7 +18,8 @@ public partial class Sandbox3D
             {
                 case InputEventMouseMotion motion:
                     if ((motion.ButtonMask & MouseButtonMask.Middle) != 0)
-                        PlanarCamera.Drag(_camera, motion.Position, motion.Relative, ViewRect.GetCenter(), MapSize);
+                        PlanarCamera.Drag(_camera, motion.Position, motion.Relative, ViewRect.GetCenter(), MapSize,
+                            PickElevation(motion.Position - motion.Relative));
                     else
                         UpdateDrag(motion.Position);
                     break;
@@ -37,7 +38,7 @@ public partial class Sandbox3D
         if (button.Pressed && button.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
         {
             float factor = button.ButtonIndex == MouseButton.WheelUp ? 0.8f : 1.25f;
-            PlanarCamera.ZoomAt(_camera, pixel, factor, _baseCameraSize, ViewRect.GetCenter(), MapSize);
+            PlanarCamera.ZoomAt(_camera, pixel, factor, _baseCameraSize, ViewRect.GetCenter(), MapSize, PickElevation(pixel));
             return true;
         }
         if (button.ButtonIndex == MouseButton.Right && button.Pressed)
@@ -186,26 +187,29 @@ public partial class Sandbox3D
     private bool IssueMove(Vector2 pixel, bool queued)
     {
         if (_selection.Count == 0 || !ViewRect.HasPoint(pixel) ||
-            PlanarCamera.GroundPoint(_camera, pixel) is not { } point ||
-            point.X < 0 || point.Z < 0 || point.X >= MapWidth || point.Z >= MapDepth)
+            _terrain.Pick(_camera, pixel) is not { } destination)
             return false;
 
-        var destination = new WorldPosition((int)MathF.Round(point.X * CellSize), (int)MathF.Round(point.Z * CellSize));
         _session!.Issue(new UnitAction(UnitActionKind.Move, new EntitySet(_selection.Snapshot()), destination, Queued: queued));
         _goal.Position = Display(destination) + Vector3.Up * 0.05f;
+        _goal.Quaternion = new Quaternion(Vector3.Up, _terrain.NormalAt(destination));
         _goal.Scale = new(0.35f, 0.4f, 0.35f);
         _goal.Visible = true;
         _goalTime = 1.5f;
         return true;
     }
 
+    private float PickElevation(Vector2 pixel) => (_terrain.Pick(_camera, pixel)?.Elevation ?? 0) / (float)CellSize;
+
     private void CenterOnSelection()
     {
         var ids = _selection.Ids;
-        if (ids.IsEmpty || PlanarCamera.GroundPoint(_camera, ViewRect.GetCenter()) is not { } center) return;
+        if (ids.IsEmpty) return;
         Vector3 sum = Vector3.Zero;
         foreach (var id in ids) sum += _actors[id].Node.Position;
-        PlanarCamera.Pan(_camera, sum / ids.Length - center, ViewRect.GetCenter(), MapSize);
+        var focus = sum / ids.Length;
+        if (PlanarCamera.GroundPoint(_camera, ViewRect.GetCenter(), focus.Y) is { } center)
+            PlanarCamera.Pan(_camera, focus - center, ViewRect.GetCenter(), MapSize);
     }
 
     private void PanCamera(double delta)
@@ -225,7 +229,8 @@ public partial class Sandbox3D
                     mouse.Y < view.Position.Y + edge ? -1 : mouse.Y >= view.End.Y - edge ? 1 : 0);
         }
         if (direction == Vector2.Zero) return;
-        var offset = new Vector3(direction.X, 0, direction.Y).Normalized() * _camera.Size * (float)delta * 0.7f;
+        var heading = new Basis(Vector3.Up, _camera.Rotation.Y);
+        var offset = heading * new Vector3(direction.X, 0, direction.Y).Normalized() * _camera.Size * (float)delta * 0.7f;
         PlanarCamera.Pan(_camera, offset, ViewRect.GetCenter(), MapSize);
     }
 }
