@@ -103,6 +103,7 @@ internal static class MapSceneExtractor2D
         }
 
         var slots = new List<MapSlotSource>();
+        var startIds = new HashSet<string>(StringComparer.Ordinal);
         var objects = new SortedDictionary<int, MapObjectSource>();
         // shortcut: flat markers for the pilot, add prefab groups when a second 2D map needs them.
         foreach (var marker in root.FindChildren("*", "Marker2D", recursive: true, owned: false))
@@ -111,6 +112,8 @@ internal static class MapSceneExtractor2D
             {
                 case OpenRtsMapStart2D start:
                     if (!root.IsSkirmish) throw Error(start, "Start", "Fixture maps use FixtureSlots instead of start markers.");
+                    if (string.IsNullOrWhiteSpace(start.StartId) || start.StartId == "neutral" || !startIds.Add(start.StartId))
+                        throw Error(start, "StartId", "Expected a unique start ID other than 'neutral'. Use Repair IDs and order.");
                     slots.Add(new(start.StartId, Position(start), start.Reverse));
                     break;
                 case OpenRtsMapObject2D obj:

@@ -11,11 +11,21 @@ public static class MapAuthoringIdentity
         OpenRtsMapObject => nameof(OpenRtsMapObject.ObjectId),
         OpenRtsMapStart => nameof(OpenRtsMapStart.StartId),
         OpenRtsMapGroup => nameof(OpenRtsMapGroup.InstanceId),
+        OpenRtsMapObject2D => nameof(OpenRtsMapObject2D.ObjectId),
+        OpenRtsMapStart2D => nameof(OpenRtsMapStart2D.StartId),
         _ => throw new ArgumentException("Select an object, start or group marker.")
     };
 
+    public static bool HasOrder(Node node) => node is OpenRtsMapObject or OpenRtsMapGroup or OpenRtsMapObject2D;
+
     public static IEnumerable<Node> ContextChildren(Node context)
     {
+        if (context is OpenRtsMap2D)
+        {
+            foreach (Node child in context.GetChildren())
+                if (child is OpenRtsMapStart2D or OpenRtsMapObject2D) yield return child;
+            yield break;
+        }
         foreach (Node child in context.GetChildren())
         {
             if (child is OpenRtsMapGroup or OpenRtsMapObject or OpenRtsMapStart) yield return child;
@@ -23,21 +33,24 @@ public static class MapAuthoringIdentity
         }
     }
 
-    public static int NextOrder(Node context)
+    public static int NextOrder(Node context) => AvailableOrders(context).First();
+
+    public static IEnumerable<int> AvailableOrders(Node context)
     {
-        var orders = ContextChildren(context).Where(n => n is OpenRtsMapGroup or OpenRtsMapObject)
-            .Select(n => n.Get("Order").AsInt32()).ToHashSet();
-        int maximum = orders.Count == 0 ? -1 : orders.Max();
-        if (maximum < int.MaxValue) return Math.Max(0, maximum + 1);
-        int value = 0;
-        while (orders.Contains(value)) value++;
-        return value;
+        var used = ContextChildren(context).Where(HasOrder).Select(n => n.Get("Order").AsInt32()).ToHashSet();
+        int maximum = used.Count == 0 ? -1 : used.Max();
+        int next = maximum == int.MaxValue ? 0 : Math.Max(0, maximum + 1);
+        while (true)
+        {
+            if (used.Add(next)) yield return next;
+            next = next == int.MaxValue ? 0 : next + 1;
+        }
     }
 
     public static Node Context(Node node)
     {
         for (Node? parent = node.GetParent(); parent is not null; parent = parent.GetParent())
-            if (parent is OpenRtsMap or OpenRtsMapGroup) return parent;
+            if (parent is OpenRtsMap or OpenRtsMapGroup or OpenRtsMap2D) return parent;
         throw new ArgumentException("Marker must belong to a map/group.");
     }
 
@@ -45,17 +58,20 @@ public static class MapAuthoringIdentity
     {
         var children = ContextChildren(context).ToArray();
         var ids = new HashSet<string>(StringComparer.Ordinal);
+        var starts2D = new HashSet<string>(StringComparer.Ordinal);
         var orders = new HashSet<int>();
-        var reserved = children.Where(n => n is OpenRtsMapGroup or OpenRtsMapObject).Select(n => n.Get("Order").AsInt32()).ToHashSet();
+        var reserved = children.Where(HasOrder).Select(n => n.Get("Order").AsInt32()).ToHashSet();
         int next = reserved.Count == 0 || reserved.Max() == int.MaxValue ? 0 : Math.Max(0, reserved.Max() + 1);
         foreach (var node in children)
         {
             string field = IdField(node), id = node.Get(field).AsString();
-            if (string.IsNullOrWhiteSpace(id) || id.Contains('/') || id is "." or ".." || !ids.Add(id))
+            var scope = node is OpenRtsMapStart2D ? starts2D : ids;
+            bool invalidLocalId = context is not OpenRtsMap2D && (id.Contains('/') || id is "." or "..");
+            if (string.IsNullOrWhiteSpace(id) || invalidLocalId || node is OpenRtsMapStart2D && id == "neutral" || !scope.Add(id))
             {
-                id = NewId(); ids.Add(id); set(node, field, id);
+                id = NewId(); scope.Add(id); set(node, field, id);
             }
-            if (node is OpenRtsMapGroup or OpenRtsMapObject)
+            if (HasOrder(node))
             {
                 int order = node.Get("Order").AsInt32();
                 if (order < 0 || !orders.Add(order))

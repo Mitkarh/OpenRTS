@@ -41,17 +41,17 @@ public static class MapCompiler
     {
         ArgumentNullException.ThrowIfNull(source); ArgumentNullException.ThrowIfNull(catalog);
         cancellationToken.ThrowIfCancellationRequested();
-        ContentException Error(string path, string message) => new(source.Origin, path, message);
-        void Text(string? text, string path)
+        ContentException Error(string path, string message, Source? origin = null) => new(origin ?? source.Origin, path, message);
+        void Text(string? text, string path, Source? origin = null)
         {
             if (string.IsNullOrWhiteSpace(text) || Encoding.UTF8.GetByteCount(text) > MaximumTextBytes)
-                throw Error(path, "Expected nonempty text of at most 1024 UTF-8 bytes.");
+                throw Error(path, "Expected nonempty text of at most 1024 UTF-8 bytes.", origin);
         }
-        void Position(WorldPosition point, string path)
+        void Position(WorldPosition point, string path, Source? origin = null)
         {
             if (point.Elevation != 0 || point.X < 0 || point.Y < 0 ||
                 point.X >= (long)source.Width * source.CellSize || point.Y >= (long)source.Height * source.CellSize)
-                throw Error(path, "Expected an exact XY anchor inside the map. Elevation is derived from the surface.");
+                throw Error(path, "Expected an exact XY anchor inside the map. Elevation is derived from the surface.", origin);
         }
         Text(source.Id, "id");
         ValidateDimensions(source.Width, source.Height, source.CellSize, source.Origin);
@@ -123,11 +123,13 @@ public static class MapCompiler
             cancellationToken.ThrowIfCancellationRequested();
             if (obj is null) throw Error("objects", "Null object.");
             string path = $"objects.{obj.Id}";
-            Text(obj.Id, path); Text(obj.Type, path + ".type"); Text(obj.Owner, path + ".owner");
-            if (!ids.Add(obj.Id)) throw Error(path, "Duplicate object ID.");
+            Text(obj.Id, path, obj.Origin);
+            Text(obj.Type, path + ".type", obj.Origin);
+            Text(obj.Owner, path + ".owner", obj.Origin);
+            if (!ids.Add(obj.Id)) throw Error(path, "Duplicate object ID.", obj.Origin);
             if (obj.Owner != "neutral" && (source.IsSkirmish || !slots.Contains(obj.Owner)))
-                throw Error(path + ".owner", $"Owner '{obj.Owner}' is not allowed on this map.");
-            Position(obj.Position, path + ".position");
+                throw Error(path + ".owner", $"Owner '{obj.Owner}' is not allowed on this map.", obj.Origin);
+            Position(obj.Position, path + ".position", obj.Origin);
         }
         var normalized = new MapSource(source.Id, source.IsSkirmish, source.Width, source.Height, terrain, visual,
             source.Slots.OrderBy(s => s.Id, StringComparer.Ordinal).ToArray(), source.Objects, source.CellSize, source.Origin, source.Surface);

@@ -1,0 +1,92 @@
+#if TOOLS
+using Godot;
+
+namespace OpenRTS.Godot.Authoring;
+
+public partial class OpenRtsEditorPlugin
+{
+    internal static OpenRtsMap2D NewMap2D(bool isometric)
+    {
+        string name = isometric ? "InitialPropertiesMapIsometric" : "InitialPropertiesMap2D";
+        var template = ResourceLoader.Load<PackedScene>($"res://examples/maps/{name}.tscn", cacheMode: ResourceLoader.CacheMode.IgnoreDeep)
+            ?? throw new IOException($"Could not load the {name} TileSet.");
+        var sample = template.Instantiate<OpenRtsMap2D>();
+        try
+        {
+            var terrain = sample.Terrain!;
+            var layer = new TileMapLayer { Name = "Terrain", TileSet = terrain.TileSet };
+            int source = terrain.GetCellSourceId(Vector2I.Zero);
+            var atlas = terrain.GetCellAtlasCoords(Vector2I.Zero);
+            int alternative = terrain.GetCellAlternativeTile(Vector2I.Zero);
+            string id = "map-" + MapAuthoringIdentity.NewId();
+            var root = new OpenRtsMap2D { Name = "Map", MapId = id, CompiledPath = $"res://artifacts/maps/{id}.ortmap.json" };
+            root.AddChild(layer);
+            layer.Owner = root;
+            root.Terrain = layer;
+            for (int y = 0; y < root.Size.Y; y++)
+                for (int x = 0; x < root.Size.X; x++) layer.SetCell(new(x, y), source, atlas, alternative);
+            return root;
+        }
+        finally { sample.Free(); }
+    }
+
+    private void CreateMap2D(bool isometric)
+    {
+        if (EditorInterface.Singleton.GetEditedSceneRoot() is not null)
+            throw new ArgumentException("Open an empty scene first (Scene → New Scene).");
+        EditorInterface.Singleton.AddRootNode(NewMap2D(isometric));
+    }
+
+    private void RefreshOwners()
+    {
+        string[] slots = EditorInterface.Singleton.GetEditedSceneRoot() switch
+        {
+            OpenRtsMap { IsSkirmish: false } map => map.FixtureSlots,
+            OpenRtsMap2D { IsSkirmish: false } map => map.FixtureSlots,
+            _ => []
+        };
+        var owners = slots.Where(id => !string.IsNullOrWhiteSpace(id)).Prepend("neutral").Distinct(StringComparer.Ordinal).ToArray();
+        if (_owners.ItemCount == owners.Length && owners.Select((owner, index) => owner == _owners.GetItemText(index)).All(same => same)) return;
+        string selected = _owners.Selected < 0 ? "neutral" : _owners.GetItemText(_owners.Selected);
+        _owners.Clear();
+        foreach (string owner in owners) _owners.AddItem(owner);
+        _owners.Select(Math.Max(0, Array.IndexOf(owners, selected)));
+    }
+
+    internal void AddObject()
+    {
+        var root = EditedMap();
+        if (_types.ItemCount == 0) LoadTypes();
+        if (_types.Selected < 0) throw new ArgumentException("The map catalog has no selected object type.");
+        RefreshOwners();
+        string type = _types.GetItemText(_types.Selected), owner = _owners.GetItemText(_owners.Selected);
+        if (root is OpenRtsMap2D map) AddMarker2D(map, new OpenRtsMapObject2D { TypeId = type, OwnerSlot = owner });
+        else AddMarker(new OpenRtsMapObject { TypeId = type, OwnerSlot = owner });
+    }
+
+    internal void AddStart()
+    {
+        var root = EditedMap();
+        if (root is OpenRtsMap2D map)
+        {
+            if (!map.IsSkirmish) throw new ArgumentException("Fixture maps use FixtureSlots instead of start markers.");
+            AddMarker2D(map, new OpenRtsMapStart2D());
+        }
+        else AddMarker(new OpenRtsMapStart());
+    }
+
+    private void AddMarker2D(OpenRtsMap2D root, Marker2D marker)
+    {
+        if (root.Terrain is not { } layer)
+        {
+            marker.Free();
+            throw new ArgumentException("Assign the map's Terrain TileMapLayer first.");
+        }
+        marker.Set(MapAuthoringIdentity.IdField(marker), MapAuthoringIdentity.NewId());
+        if (marker is OpenRtsMapObject2D obj) obj.Order = MapAuthoringIdentity.NextOrder(root);
+        marker.Name = marker is OpenRtsMapObject2D unit ? unit.TypeId : "Start";
+        marker.Position = layer.MapToLocal(root.Size / 2);
+        AttachUndo(root, root, [marker], "Add OpenRTS marker");
+    }
+}
+#endif

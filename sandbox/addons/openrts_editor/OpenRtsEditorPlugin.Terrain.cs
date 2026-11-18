@@ -14,6 +14,7 @@ public partial class OpenRtsEditorPlugin
     private EditorResourcePicker _brushPicker = null!;
     private LineEdit _semanticId = null!;
     private Label _details = null!;
+    private VBoxContainer _terrainTools = null!;
     private OpenRtsMap? _previewRoot;
     private MapEditorPreview? _preview;
     private UnitCatalog? _previewCatalog;
@@ -34,30 +35,32 @@ public partial class OpenRtsEditorPlugin
 
     private void SetupTerrainTools()
     {
+        _terrainTools = new();
+        _dock.AddChild(_terrainTools);
         _previewEnabled = new() { Text = "Models + terrain preview", ButtonPressed = true };
         _previewEnabled.Toggled += _ => { _refresh = true; if (!_previewEnabled.ButtonPressed) ClearPreview(); };
-        _dock.AddChild(_previewEnabled);
-        Button("Reload Models and textures", () => { LoadTypes(); RefreshPreview(); });
+        _terrainTools.AddChild(_previewEnabled);
+        Button("Reload Models and textures", () => { LoadTypes(); RefreshPreview(); }, _terrainTools);
         _paint = new() { Text = "Paint terrain (left drag)" };
-        _paint.Toggled += _ => CancelStroke(); _dock.AddChild(_paint);
+        _paint.Toggled += _ => CancelStroke(); _terrainTools.AddChild(_paint);
         _paintLayer = new(); foreach (string layer in new[] { "Terrain + visual", "Terrain only", "Visual only" }) _paintLayer.AddItem(layer);
-        _dock.AddChild(_paintLayer);
+        _terrainTools.AddChild(_paintLayer);
         _terrainIds = new(); _visualIds = new();
-        _dock.AddChild(new Label { Text = "Terrain / visual ID" }); _dock.AddChild(_terrainIds); _dock.AddChild(_visualIds);
+        _terrainTools.AddChild(new Label { Text = "Terrain / visual ID" }); _terrainTools.AddChild(_terrainIds); _terrainTools.AddChild(_visualIds);
         _brushSize = new() { MinValue = 1, MaxValue = 16, Value = 1, Step = 1, Prefix = "Square size " };
         _turns = new() { MinValue = 0, MaxValue = 3, Step = 1, Prefix = "Quarter-turns " };
-        _dock.AddChild(_brushSize); _dock.AddChild(_turns);
-        _dock.AddChild(new Label { Text = "Optional shaped brush (.tres)" });
+        _terrainTools.AddChild(_brushSize); _terrainTools.AddChild(_turns);
+        _terrainTools.AddChild(new Label { Text = "Optional shaped brush (.tres)" });
         _brushPicker = new() { BaseType = nameof(OpenRtsTerrainBrush) };
         _brushPicker.ResourceSelected += (resource, _) => EditorInterface.Singleton.EditResource(resource);
-        _dock.AddChild(_brushPicker);
-        Button("Cancel brush stroke (Esc)", CancelStroke);
+        _terrainTools.AddChild(_brushPicker);
+        Button("Cancel brush stroke (Esc)", CancelStroke, _terrainTools);
+        _details = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        _terrainTools.AddChild(_details);
+        _terrainTools.AddChild(new Label { Text = "Cyan: body · Blue: blocked\nAmber: no stop · Green: other cells\nPink diagonal: not targetable", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         _semanticId = new() { PlaceholderText = "Semantic ID, e.g. patrol/tank" }; _dock.AddChild(_semanticId);
         Button("Select by ID", () => SelectById(_semanticId.Text));
         Button("Select error source", SelectErrorSource);
-        _details = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        _dock.AddChild(_details);
-        _dock.AddChild(new Label { Text = "Cyan: body · Blue: blocked\nAmber: no stop · Green: other cells\nPink diagonal: not targetable", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         SetInputEventForwardingAlwaysEnabled();
     }
 
@@ -240,16 +243,22 @@ public partial class OpenRtsEditorPlugin
 
     internal void SelectById(string id)
     {
-        var root = Root(); var found = new List<Node>();
-        void Find(Node node, string prefix)
+        var found = SemanticMarkers(EditedMap()).Where(marker => marker.Id == id).Select(marker => marker.Node).ToArray();
+        if (found.Length != 1) throw new ArgumentException($"Semantic ID '{id}' resolves to {found.Length} markers.");
+        SelectNode(found[0]);
+    }
+
+    private static IEnumerable<(Node Node, string Id)> SemanticMarkers(Node root)
+    {
+        IEnumerable<(Node Node, string Id)> Find(Node node, string prefix)
         {
             if (node is OpenRtsMapGroup group) prefix += group.InstanceId + "/";
-            if (node is OpenRtsMapObject obj && prefix + obj.ObjectId == id || node is OpenRtsMapStart start && prefix + start.StartId == id) found.Add(node);
-            foreach (Node child in node.GetChildren()) Find(child, prefix);
+            if (node is OpenRtsMapObject or OpenRtsMapStart or OpenRtsMapObject2D or OpenRtsMapStart2D)
+                yield return (node, prefix + node.Get(MapAuthoringIdentity.IdField(node)).AsString());
+            foreach (Node child in node.GetChildren())
+                foreach (var marker in Find(child, prefix)) yield return marker;
         }
-        Find(root, "");
-        if (found.Count != 1) throw new ArgumentException($"Semantic ID '{id}' resolves to {found.Count} markers.");
-        SelectNode(found[0]);
+        return Find(root, "");
     }
     private static void SelectNode(Node node)
     {
@@ -260,7 +269,19 @@ public partial class OpenRtsEditorPlugin
         if (_lastError is null || EditorInterface.Singleton.GetEditedSceneRoot() is not { } root) return;
         string message = _lastError.Message;
         int start = message.IndexOf("::", StringComparison.Ordinal), end = message.IndexOf(":1:1", Math.Max(0, start), StringComparison.Ordinal);
-        if (start >= 0 && end > start && root.GetNodeOrNull<Node>(message[(start + 2)..end]) is { } node) { SelectNode(node); return; }
+        if (start >= 0 && end > start && root.GetNodeOrNull<Node>(message[(start + 2)..end]) is { } node && node != root)
+        { SelectNode(node); return; }
+        string? mapId = root is OpenRtsMap map3D ? map3D.MapId : (root as OpenRtsMap2D)?.MapId;
+        if (mapId is not null)
+        {
+            foreach (var marker in SemanticMarkers(root).OrderByDescending(marker => marker.Id.Length))
+            {
+                bool isStart = marker.Node is OpenRtsMapStart or OpenRtsMapStart2D;
+                if (isStart && (message.Contains($"[{mapId}.{marker.Id}/", StringComparison.Ordinal) ||
+                    message.Contains($"[starts.{marker.Id}.position]", StringComparison.Ordinal)))
+                { SelectNode(marker.Node); return; }
+            }
+        }
         if (root is OpenRtsMap map)
             foreach (var stroke in map.TerrainStrokes)
                 if (!string.IsNullOrEmpty(stroke.StrokeId) && message.Contains("TerrainStrokes." + stroke.StrokeId, StringComparison.Ordinal))

@@ -10,6 +10,8 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
     private VBoxContainer _dock = null!;
     private EditorDock _editorDock = null!;
     private OptionButton _types = null!;
+    private OptionButton _owners = null!;
+    private Button _addGroup = null!, _buildBundle = null!;
     private Label _status = null!;
     private OpenRtsMapGizmos _gizmos = null!;
     private CancellationTokenSource? _build;
@@ -23,18 +25,23 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         _dock = new() { Name = "OpenRTS", CustomMinimumSize = new(240, 0) };
         _dock.AddChild(new Label { Text = "OpenRTS map authoring" });
         Button("New map (empty scene)", CreateMap);
+        Button("New top-down map", () => CreateMap2D(isometric: false));
+        Button("New isometric map", () => CreateMap2D(isometric: true));
         Button("Load type catalog", LoadTypes);
         _types = new OptionButton(); _dock.AddChild(_types);
-        Button("Add object", () => AddMarker(new OpenRtsMapObject { TypeId = _types.GetItemCount() == 0 ? "rifleman" : _types.GetItemText(_types.Selected) }));
-        Button("Add start", () => AddMarker(new OpenRtsMapStart()));
-        Button("Add reusable group", () => AddMarker(new OpenRtsMapGroup()));
+        _owners = new OptionButton { TooltipText = "Owner of the next object" }; _dock.AddChild(_owners);
+        _owners.Pressed += RefreshOwners;
+        RefreshOwners();
+        Button("Add object", AddObject);
+        Button("Add start", AddStart);
+        _addGroup = Button("Add reusable group", () => AddMarker(new OpenRtsMapGroup()));
         Button("Duplicate selected", DuplicateSelected);
         Button("Repair IDs and order", RepairIdentities);
         SetupTerrainTools();
         Button("Extract source", () => _ = BuildAsync(sourceOnly: true));
         Button("Compile map", () => _ = BuildAsync());
-        Button("Build scene-map bundle", () => _ = BuildAsync(bundle: true));
-        Button("Build and play map", () => _ = BuildAsync(play: true));
+        _buildBundle = Button("Build scene-map bundle", () => _ = BuildAsync(bundle: true));
+        Button("Build and play map", ChoosePlaytest);
         Button("Cancel compilation", () => Invalidate("Cancelled; previous file retained."));
         _status = new Label { Text = "Open a map scene, or create an empty scene.", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _dock.AddChild(_status);
@@ -42,6 +49,8 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
         _dock.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         scroll.AddChild(_dock); _editorDock.AddChild(scroll); AddDock(_editorDock);
+        SetupPlaytest();
+        UpdateMapTools(EditorInterface.Singleton.GetEditedSceneRoot());
         AddToolMenuItem("OpenRTS map authoring", Callable.From(ShowDock));
         _gizmos = new(); AddNode3DGizmoPlugin(_gizmos);
         SceneChanged += OnSceneChanged;
@@ -52,11 +61,12 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
             Callable.From(() => { _ = MapEditorChecks.Run(this); }).CallDeferred();
     }
 
-    private void Button(string text, Action action)
+    private Button Button(string text, Action action, VBoxContainer? parent = null)
     {
         var button = new Button { Text = text };
         button.Pressed += () => { try { action(); } catch (Exception error) { Fail(error); } };
-        _dock.AddChild(button);
+        (parent ?? _dock).AddChild(button);
+        return button;
     }
 
     public override void _ExitTree()
@@ -73,6 +83,16 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
     private OpenRtsMap Root() => EditorInterface.Singleton.GetEditedSceneRoot() as OpenRtsMap
         ?? throw new ArgumentException("The edited scene root must be OpenRtsMap. Open examples/maps/AuthoringMap.tscn or create a new empty scene.");
 
+    private static Node EditedMap() => EditorInterface.Singleton.GetEditedSceneRoot() switch
+    {
+        Node root when root is OpenRtsMap or OpenRtsMap2D => root,
+        _ => throw new ArgumentException("Open an OpenRtsMap or OpenRtsMap2D scene.")
+    };
+
+    private static string ContentPath(Node root) => root is OpenRtsMap map ? map.ContentManifest : ((OpenRtsMap2D)root).ContentManifest;
+
+    private static MapSource Extract(Node root) => root is OpenRtsMap map ? MapSceneExtractor.Extract(map) : MapSceneExtractor2D.Extract((OpenRtsMap2D)root);
+
     private void CreateMap()
     {
         if (EditorInterface.Singleton.GetEditedSceneRoot() is not null) throw new ArgumentException("Open an empty scene first (Scene → New Scene).");
@@ -82,10 +102,12 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
     private void LoadTypes()
     {
         CancelStroke();
-        var catalog = LoadCatalog(Root());
+        var root = EditedMap();
+        var catalog = GameManifest.Load(ProjectFile(ContentPath(root), ".yaml")).LoadUnits();
         _types.Clear();
         foreach (var unit in catalog.Units) _types.AddItem(unit.Id);
-        LoadPreviewCatalog(Root(), catalog);
+        if (root is OpenRtsMap map) LoadPreviewCatalog(map, catalog);
+        RefreshOwners();
         _status.Text = $"{catalog.Units.Count} types. Select a marker to edit its properties in Inspector.";
     }
 
@@ -116,39 +138,49 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
 
     internal void DuplicateSelected()
     {
-        var root = Root();
+        var root = EditedMap();
         var selection = EditorInterface.Singleton.GetSelection().GetSelectedNodes().ToArray();
-        var nodes = selection.Where(n => n is OpenRtsMapObject or OpenRtsMapStart or OpenRtsMapGroup)
+        var nodes = selection.Where(n => root is OpenRtsMap2D
+                ? n.GetParent() == root && n is OpenRtsMapObject2D or OpenRtsMapStart2D
+                : root.IsAncestorOf(n) && n is OpenRtsMapObject or OpenRtsMapStart or OpenRtsMapGroup)
             .Where(n => !selection.Any(other => other != n && other.IsAncestorOf(n))).ToArray();
         if (nodes.Length == 0) throw new ArgumentException("Select one or more object/start/group markers.");
-        var nextOrders = new Dictionary<Node, int>();
+        var nextOrders = new Dictionary<Node, IEnumerator<int>>();
         var copies = new List<(Node Parent, Node Copy)>();
         try
         {
             foreach (var node in nodes)
             {
-                if (!root.IsAncestorOf(node)) throw new ArgumentException("Select markers in the current map scene.");
                 var copy = node.Duplicate(); copies.Add((node.GetParent(), copy));
                 copy.Set(MapAuthoringIdentity.IdField(copy), MapAuthoringIdentity.NewId());
-                if (copy is not OpenRtsMapStart)
+                if (MapAuthoringIdentity.HasOrder(copy))
                 {
                     Node context = MapAuthoringIdentity.Context(node);
-                    int order = nextOrders.TryGetValue(context, out int next) ? next : MapAuthoringIdentity.NextOrder(context);
-                    copy.Set("Order", order); nextOrders[context] = checked(order + 1);
+                    if (!nextOrders.TryGetValue(context, out var orders))
+                        nextOrders.Add(context, orders = MapAuthoringIdentity.AvailableOrders(context).GetEnumerator());
+                    orders.MoveNext();
+                    copy.Set("Order", orders.Current);
                 }
             }
         }
         catch { foreach (var pair in copies) pair.Copy.Free(); throw; }
+        finally { foreach (var orders in nextOrders.Values) orders.Dispose(); }
         var undo = GetUndoRedo(); undo.CreateAction("Duplicate OpenRTS markers", customContext: root);
         foreach (var pair in copies) AddAttachment(undo, root, pair.Parent, pair.Copy);
         undo.CommitAction();
+        if (root is OpenRtsMap2D) SelectMarkers(copies.Select(pair => pair.Copy).ToArray());
     }
 
-    private void AttachUndo(OpenRtsMap root, Node parent, Node[] nodes, string action)
+    private void AttachUndo(Node root, Node parent, Node[] nodes, string action)
     {
         var undo = GetUndoRedo(); undo.CreateAction(action, customContext: root);
         foreach (var node in nodes) AddAttachment(undo, root, parent, node);
         undo.CommitAction();
+        SelectMarkers(nodes);
+    }
+
+    private static void SelectMarkers(Node[] nodes)
+    {
         var selection = EditorInterface.Singleton.GetSelection(); selection.Clear();
         foreach (var node in nodes) selection.AddNode(node);
         EditorInterface.Singleton.EditNode(nodes[0]);
@@ -171,7 +203,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
 
     internal void RepairIdentities()
     {
-        var root = Root(); var undo = GetUndoRedo();
+        var root = EditedMap(); var undo = GetUndoRedo();
         var edits = new List<(Node Node, string Field, Variant Before, Variant After)>();
         MapAuthoringIdentity.Repair(root, (node, field, value) => edits.Add((node, field, node.Get(field), value)));
         if (edits.Count == 0) { _status.Text = "IDs and order need no repair."; return; }
@@ -184,47 +216,51 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         undo.CommitAction();
     }
 
-    internal async Task BuildAsync(bool sourceOnly = false, bool bundle = false, bool play = false, bool saveScene = true)
+    internal async Task<LocalMapPlaytest?> BuildAsync(bool sourceOnly = false, bool bundle = false, bool play = false, bool saveScene = true,
+        bool validatePlaytest = false, string[]? selectedStarts = null, string? selectedStartSet = null)
     {
-        try { CommitStroke(); } catch (Exception error) { Fail(error); return; }
+        try { CommitStroke(); } catch (Exception error) { Fail(error); return null; }
+        _lastError = null;
         Invalidate("Extracting…");
         var stop = _build = new(); int generation = _generation;
         try
         {
-            var edited = EditorInterface.Singleton.GetEditedSceneRoot();
+            var edited = EditedMap();
             var root = edited as OpenRtsMap;
             var map2D = edited as OpenRtsMap2D;
-            if (root is null && map2D is null)
-                throw new ArgumentException("Open an OpenRtsMap or OpenRtsMap2D scene to compile it.");
             if (bundle && root is null)
                 throw new ArgumentException("Use Build and play map to launch a 2D scene's compiled map.");
             bundle |= play && root is not null;
 
             string OutputPath() => root?.CompiledPath ?? map2D!.CompiledPath;
-            string ContentPath() => root?.ContentManifest ?? map2D!.ContentManifest;
-            MapSource Extract() => root is null ? MapSceneExtractor2D.Extract(map2D!) : MapSceneExtractor.Extract(root);
-            UnitCatalog Catalog() => GameManifest.Load(ProjectFile(ContentPath(), ".yaml")).LoadUnits();
+            GameManifest Manifest() => GameManifest.Load(ProjectFile(ContentPath(edited), ".yaml"));
 
-            string outputPath = OutputPath(), contentPath = ContentPath();
+            string outputPath = OutputPath(), contentPath = ContentPath(edited);
             if (bundle && (!SceneMapBundle.ResourcePath(root!.SceneFilePath, ".tscn") || saveScene && EditorInterface.Singleton.SaveScene() != Error.Ok))
                 throw new IOException("Save the map as a project .tscn before building its bundle.");
             var dependencies = bundle ? SceneDependencies(root!.SceneFilePath) : null;
             string output = ProjectFile(outputPath, ".ortmap.json");
-            var catalog = Catalog();
-            var source = Extract();
+            var manifest = Manifest();
+            var catalog = manifest.LoadUnits();
+            var source = Extract(edited);
             string snapshot = source.Write();
             _status.Text = "Compiling…";
-            var compiled = await Task.Run(() =>
+            var (compiled, receipt) = await Task.Run(() =>
             {
                 var result = MapCompiler.Compile(source, catalog, stop.Token);
-                if (!sourceOnly) ValidateObjects(result, catalog, stop.Token);
-                stop.Token.ThrowIfCancellationRequested(); return result;
+                LocalMapPlaytest? receipt = null;
+                if (play || validatePlaytest) receipt = LocalMapPlaytest.Validate(result, manifest, selectedStarts, selectedStartSet);
+                else if (!sourceOnly) ValidateObjects(result, catalog, stop.Token);
+                stop.Token.ThrowIfCancellationRequested(); return (result, receipt);
             }, stop.Token);
             stop.Token.ThrowIfCancellationRequested();
             if (generation != _generation || !GodotObject.IsInstanceValid(edited) || EditorInterface.Singleton.GetEditedSceneRoot() != edited ||
-                OutputPath() != outputPath || ContentPath() != contentPath || Extract().Write() != snapshot ||
-                Catalog().Summary.Fingerprint != catalog.Summary.Fingerprint)
+                OutputPath() != outputPath || ContentPath(edited) != contentPath || Extract(edited).Write() != snapshot)
+                throw new OperationCanceledException("Scene changed during compilation.");
+            var currentManifest = Manifest();
+            if (currentManifest.LoadUnits().Summary.Fingerprint != catalog.Summary.Fingerprint)
                 throw new OperationCanceledException("Scene/content changed during compilation.");
+            receipt?.ReadStartingSet(currentManifest);
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
             if (sourceOnly)
             {
@@ -236,13 +272,17 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
                 output = PublishBundle(root!, output, compiled, dependencies, stop.Token);
             }
             else MapCompiler.Save(compiled, output, stop.Token);
-            if (play) PlayMap(ProjectSettings.LocalizePath(output), contentPath);
-            _status.Text = $"{(sourceOnly ? "Extracted" : "Compiled")} {compiled.Map.Id}\n{compiled.Source.Objects.Count} objects, {compiled.Source.Slots.Count} slots\n{ProjectSettings.LocalizePath(output)}\n{(sourceOnly ? "Structural validation only." : "Placed objects validated; starting armies are checked at match creation.")}";
+            if (play) PlayMap(ProjectSettings.LocalizePath(output), contentPath, receipt!);
+            string validation = receipt is not null ? "Selected local match validated." :
+                sourceOnly ? "Structural validation only." : "Placed objects validated; starting armies are checked at match creation.";
+            _status.Text = $"{(sourceOnly ? "Extracted" : "Compiled")} {compiled.Map.Id}\n{compiled.Source.Objects.Count} objects, {compiled.Source.Slots.Count} slots\n{ProjectSettings.LocalizePath(output)}\n{validation}";
             if (saveScene) EditorInterface.Singleton.GetResourceFilesystem().Scan();
+            return receipt;
         }
         catch (OperationCanceledException) { if (generation == _generation) _status.Text = "Cancelled/stale; previous file retained."; }
         catch (Exception error) { if (generation == _generation) Fail(error); }
         finally { if (_build == stop) _build = null; stop.Dispose(); }
+        return null;
     }
 
     private static void SaveTextAtomically(string text, string path, CancellationToken stop)
@@ -256,8 +296,19 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
-    private void OnEdited() { _refresh = true; Invalidate("Changed; compile again."); }
-    private void OnSceneChanged(Node node) { CancelStroke(); ClearPreview(); _selectedTransforms.Clear(); _types.Clear(); _refresh = true; Invalidate("Scene changed; load its type catalog."); }
+    private void OnEdited() { RefreshOwners(); _refresh = true; Invalidate("Changed; compile again."); }
+    private void OnSceneChanged(Node node)
+    {
+        CancelStroke(); ClearPreview(); _selectedTransforms.Clear(); _types.Clear(); _playtestDialog.Hide();
+        _lastError = null;
+        UpdateMapTools(node); RefreshOwners(); _refresh = true;
+        Invalidate("Scene changed; load its type catalog.");
+    }
+
+    private void UpdateMapTools(Node? node)
+    {
+        _terrainTools.Visible = _addGroup.Visible = _buildBundle.Visible = node is OpenRtsMap;
+    }
     internal void Invalidate(string message) { _generation++; _build?.Cancel(); _status.Text = message; }
     private void Fail(Exception error) { _lastError = error; _status.Text = "Failed: " + error.Message; GD.PushError("OpenRTS authoring: " + error.Message); }
 }

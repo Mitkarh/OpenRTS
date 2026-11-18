@@ -7,14 +7,16 @@ public partial class Sandbox
     private string _activeManifestPath = "";
     private readonly Dictionary<string, SceneMapBundle> _sceneMaps = new(StringComparer.Ordinal);
 
-    private GameMap LoadSceneMap(string path, UnitCatalog catalog)
+    private GameMap LoadSceneMap(string path, UnitCatalog catalog, LocalMapPlaytest? playtest = null)
     {
         var bundle = SceneMapBundle.Read(ReadMapSource(path));
         if (_activeManifestPath != bundle.Mod &&
             Path.GetFullPath(ProjectSettings.GlobalizePath(_activeManifestPath)) != Path.GetFullPath(ProjectSettings.GlobalizePath(bundle.Mod)))
             throw new InvalidDataException($"Scene-map requires mod {bundle.Mod}: {path}.");
         CheckSceneMapDependencies(bundle);
-        var map = bundle.LoadMap(path, ReadMapSource, catalog).Map;
+        var compiled = bundle.LoadMap(path, ReadMapSource, catalog);
+        playtest?.CheckMap(compiled);
+        var map = compiled.Map;
         _sceneMaps.Add(map.Id, bundle);
         return map;
     }

@@ -62,6 +62,7 @@ public partial class Sandbox : Node3D
         try
         {
             string? mapPath = null, startSetPath = null, modPath = null;
+            LocalMapPlaytest? localPlaytest = null;
             foreach (string arg in OS.GetCmdlineUserArgs())
             {
                 if (arg == "--jamming") { _jammingScenario = _fogScenario = _buildings = _showcase = true; continue; }
@@ -96,6 +97,11 @@ public partial class Sandbox : Node3D
                 if (arg == "--verify-actions") { _verifyActions = _buildings = _showcase = _paused = true; continue; }
                 if (arg == "--verify-production") { _productionScenario = _buildings = _showcase = _verifySimulation = true; _ticks = 160; continue; }
                 if (arg.StartsWith("--map=", StringComparison.Ordinal) && arg.Length > 6) { mapPath = arg[6..]; continue; }
+                if (arg.StartsWith("--local-playtest=", StringComparison.Ordinal))
+                {
+                    localPlaytest = LocalMapPlaytest.Read(arg["--local-playtest=".Length..]);
+                    continue;
+                }
                 if (arg.StartsWith("--start-set=", StringComparison.Ordinal) && arg.Length > 12) { startSetPath = arg[12..]; continue; }
                 if (arg == "--skirmish") { _skirmish = _buildings = _showcase = true; continue; }
                 if (arg == "--check-scene-maps") { checkBundles = true; continue; }
@@ -123,6 +129,8 @@ public partial class Sandbox : Node3D
                 throw new ArgumentException("Параметры: --ramps, --verify-ramps, --mod=path, --sensors, --fog, --fog-hold=0..250, --skirmish, --verify-match-setup, --verify-ai-match, --ai-profile=id, --map=path, --start-set=path, --buildings, --verify-buildings, --verify-actions, --verify-production, --showcase, --verify-presentation, --capture=path, --verify, --verify-simulation, --verify-controls, --realtime, --navigation, --workers=1..64, --reverse-jobs, --count=1..1000000 (лимит диагностического стенда), --ticks=1..1000000, --fps=1..240.");
             }
             if (_verifyRamps && mapPath is null) _ramps = _showcase = true;
+            if (localPlaytest is not null && (mapPath is null || startSetPath is not null || _skirmish || mapPath == AviationScenario.Map))
+                throw new ArgumentException("Local playtest requires its compiled map and uses its validated starting set.");
             if (mapPath is not null && (_showcase || _navigation || _verifyControls || verify))
                 throw new ArgumentException("--map выбирает отдельный сценарий.");
             if (_ramps && (_buildings || _skirmish || _navigation || _fogScenario || _verifySimulation || _verifyControls || verify))
@@ -178,7 +186,19 @@ public partial class Sandbox : Node3D
             if (_skirmish || mapPath is not null)
             {
                 string selectedPath = mapPath ?? _manifest.Settings.Match.DefaultMap;
-                _mapMatch = SceneMapBundle.IsPath(selectedPath)
+                if (localPlaytest is not null)
+                {
+                    GameMap playable;
+                    if (SceneMapBundle.IsPath(selectedPath)) playable = LoadSceneMap(selectedPath, _catalog, localPlaytest);
+                    else
+                    {
+                        var compiled = MapCompiler.Read(ReadMapSource(selectedPath), _catalog);
+                        localPlaytest.CheckMap(compiled);
+                        playable = compiled.Map;
+                    }
+                    _mapMatch = localPlaytest.Prepare(playable, _manifest);
+                }
+                else _mapMatch = SceneMapBundle.IsPath(selectedPath)
                     ? MapScenario.PrepareDefault(LoadSceneMap(selectedPath, _catalog), ReadMapSource, startSetPath, _manifest.Settings.Match.DefaultStartSet)
                     : mapPath == AviationScenario.Map ? AviationScenario.Load(_catalog, ReadMapSource) : MapScenario.Load(_catalog, ReadMapSource, mapPath ?? _manifest.Settings.Match.DefaultMap, startSetPath, _manifest.Settings.Match.DefaultStartSet);
                 if (_sensorScenario) _matchFogMode = OpenRTS.Core.Visibility.FogMode.Hidden;

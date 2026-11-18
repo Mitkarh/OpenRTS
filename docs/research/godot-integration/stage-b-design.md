@@ -1,8 +1,8 @@
 # Этап B — редактор карт Godot и независимая компиляция
 
-**План:** 17 ноября 2026 года; уточнён 18 ноября. **Статус:** B0–B1 реализованы: [контракт 047](../../decisions/047-map-compilation.md), [проверки](../../verification/047-map-compilation.md). B2 добавил [опциональный scene authoring addon и извлечение 048](../../decisions/048-godot-map-authoring.md). B3 добавил [terrain brushes и Models/physical preview 049](../../decisions/049-godot-terrain-models-preview.md). B4 добавил [scene-map bundle и запуск 050](../../decisions/050-godot-scene-map-bundle.md). B5 добавил [начальные свойства 051](../../decisions/051-map-initial-properties.md). B6–B7 ещё впереди; реализованные границы закреплены в 047–051, остальные операции остаются проектом.
+**План:** 17 ноября 2026 года; уточнён 18 ноября. **Статус:** B0–B1 реализованы: [контракт 047](../../decisions/047-map-compilation.md), [проверки](../../verification/047-map-compilation.md). B2 добавил [опциональный scene authoring addon и извлечение 048](../../decisions/048-godot-map-authoring.md). B3 добавил [terrain brushes и Models/physical preview 049](../../decisions/049-godot-terrain-models-preview.md). B4 добавил [scene-map bundle и запуск 050](../../decisions/050-godot-scene-map-bundle.md). B5 добавил [начальные свойства 051](../../decisions/051-map-initial-properties.md). После B5 добавлены нативный 2D authoring и одна поверхность v3. Текущие задачи редактора определены [аудитом](authoring-audit.md).
 
-[Общий план B/C/D](roadmap.md) · [Network/replay и переиспользование](network-reuse.md). Источники текущего поведения — OpenRTS `afb7aef5a46bb937b39c8b63269e935c2a5b91da`; рабочее дерево при чтении чистое. Ссылки на код приведены рядом с соответствующими ограничениями.
+[Общий план B/C/D](roadmap.md) · [Network/replay и переиспользование](network-reuse.md). Основа исходного проектирования — OpenRTS `afb7aef5a46bb937b39c8b63269e935c2a5b91da`; рабочее дерево при чтении чистое. Ссылки на код приведены рядом с соответствующими ограничениями.
 
 ## Пользовательский результат
 
@@ -12,7 +12,7 @@
 
 «Проверить», «Скомпилировать» и «Играть» используют один pipeline. При ошибке редактор выбирает объект и поле; при успехе карта регистрируется в игре. Готовые игровые данные читаются обычным .NET headless без Godot и без editor plugin. Godot runtime дополнительно загружает совместимое оформление. После playtest исходная расстановка сохраняется; изменившиеся в матче HP/позиции автоматически в неё не записываются.
 
-Первый playtest и просмотр replay открываются в отдельном runtime-процессе с существующей игровой панелью pause/step/seek. Static preview остаётся в редакторе. Встраивание живого мира и расширенной панели диагностики в editor не блокирует B и относится к следующему потребителю C.
+Локальный playtest использует отдельный runtime-процесс и обычную игровую панель паузы, шага и перезапуска. Из редактора используется статический preview. Встраивание живого мира относится к C, а открытие точного повтора карты — к B6.
 
 ### Объём первой версии
 
@@ -28,7 +28,7 @@
 | Независимая подготовка карты | DTO документа, нормализация, каталоги, проверка, compiler/reader, gameplay identity, diagnostics | `OpenRTS.Content` → Gameplay → Core; без Godot/Network |
 | Инициализация Gameplay | Обычный lifecycle и строгая проверка размещений, начальные параметры, receipt соответствия IDs | Существующие Gameplay/Core |
 | Минимальный Godot runtime карты | Загрузка manifest, полноценной entry сцены карты, terrain bindings и нынешних Models; команды/кадры | Godot + Content/Gameplay, без включённого editor plugin |
-| Host playtest/replay | Пауза, шаг, stop/restart, запись/просмотр поддержанного журнала | SimulationSession; Network только при использовании его replay API |
+| Локальный playtest | Пауза, шаг, stop/restart | SimulationSession. Работа с журналом относится к B6 |
 
 Начать C# addon в стандартном `addons/openrts_editor` существующего Godot-проекта. Source inclusion нынешнего `OpenRTS.Godot` можно сохранить на первом срезе; второй проверяемый game project определит минимальную общую поставку. Не нужны обязательные NuGet-пакеты, общий DI-контейнер и новые пустые сборки. Editor API и его compile/export configuration должны быть отделены от runtime использования: исключение markers из сцены ещё не доказывает отсутствие editor-зависимостей в экспортированной сборке.
 
@@ -144,13 +144,13 @@ Runtime loader при выборе новой карты открывает её
 
 Один preparation path вызывается editor button, Play/F6, build CLI и export. Для внешней сборки предоставляются два понятных шага: Godot .NET extraction и обычная .NET compile/validation; из уже сохранённого независимого документа второй шаг не требует Godot. EditorExportPlugin помогает упаковке/проверке, но его callback сам по себе не покрывает F6 и обычный запуск. [Export plugin](https://docs.godotengine.org/en/stable/classes/class_editorexportplugin.html).
 
-Plugin можно отключить/не устанавливать в runtime проекте: compiled карта продолжает играть и участвовать в replay. Без плагина редактирование исходной authoring сцены и её новая сборка не обещаются. Внешний headless не должен загружать Godot assemblies; runtime export проверяется без editor APIs и с чистым `.godot` cache.
+Compiled карта доступна локальной игре в runtime проекте с выключенным addon. Без плагина редактирование исходной authoring сцены и её новая сборка не обещаются. Внешний headless не должен загружать Godot assemblies; runtime export проверяется без editor APIs и с чистым `.godot` cache.
 
 Undo выполняется над авторскими данными: placement, ID allocation, order, brush stroke и Inspector override меняются одной транзакцией. Во время игры source и runtime существуют отдельно. Перемотка replay не является undo сцены; snapshot не восстанавливает авторские комментарии и prefab связи. [Undo manager](https://docs.godotengine.org/en/stable/classes/class_editorundoredomanager.html).
 
-## Приоритизированный список фич
+## Исходные приоритеты B0–B5
 
-P0 — первый полезный сквозной результат; P1 — завершение этапа B для выбранных свойств и существующих хостов; P2 — расширения по реальному запросу.
+Здесь сохранены требования исходной реализации. Действующий приоритизированный список по итогам B5, 2D и v3 приведён в [аудите редактора](authoring-audit.md).
 
 | Приоритет | Фича | Критерий готовности |
 | --- | --- | --- |
@@ -163,11 +163,10 @@ P0 — первый полезный сквозной результат; P1 —
 | P0 | Регистрация и локальный playtest | Карта запускается из редактора и как установленная карта |
 | P1 | Quarter-turns, MaxHealth variant, initial HP | Эффективные definitions/initializer входят в identity и одинаковы в обоих хостах |
 | P1 | Godot окружение и чистый runtime/export | Свет/погода/брифинг сохраняются без editor markers и игрового влияния |
-| P1 | Network/bootstrap identity и replay из editor | Точный артефакт, пауза/шаг/seek/POV, нет второго формата повторов |
-| P1 | Масштаб, clean build и второй game project | Проверены 100/1000/10000 placements и различные размеры terrain, ограничения зафиксированы |
+| P2 / B7 | Масштаб, clean build и второй game project | Проверены размеры и число placements в пределах выбранного профиля |
 | P2 | Сложные authoring prefabs, дополнительные source adapters, расширенная панель типов | Отдельный потребитель и общая подготовка без нового runtime |
 
-## Этапы реализации B0–B7
+## Выполненные срезы и оставшиеся работы
 
 ### B0 — зафиксировать первый контракт и fixtures
 
@@ -203,11 +202,13 @@ P0 — первый полезный сквозной результат; P1 —
 
 **Выполнен.** Inspector задаёт поворот footprint, начальные HP и именованный map-local вариант MaxHealth. Вариант наследует тип и Model, а компилятор проверяет действующий каталог. Карты с новыми свойствами используют JSON v2. [Решение 051](../../decisions/051-map-initial-properties.md).
 
-Добавить quarter-turn и один map-local MaxHealth variant, отдельный initial HP и их UI/initializers. Проверить references, default inheritance, shared definition isolation, fingerprints и replay bootstrap identity новой карты. Выход: два одинаковых базовых юнита с разными начальными HP и один усиленный вариант дают ожидаемые состояния во всех хостах. При сложной variant-компиляции сначала закончить named map-local variant вместо произвольного override, сохранив тот же явный scope правки.
+Добавить quarter-turn и один map-local MaxHealth variant, отдельный initial HP и их UI/initializers. Проверить references, default inheritance, shared definition isolation, fingerprints новой карты. Выход: два одинаковых базовых юнита с разными начальными HP и один усиленный вариант дают ожидаемые состояния во всех хостах. При сложной variant-компиляции сначала закончить named map-local variant вместо произвольного override, сохранив тот же явный scope правки.
 
-### B6 — playtest, Network и replay
+### Доводка локального редактора и запуска
 
-Переиспользовать owner/frames/events, pause/step и ReplaySession. Обновить game-owned recipe/resolver/ScenarioHash для точного map digest и content settings, не переписывая старые журналы. Запись поддержанных offline playtests получает узкий доступ к существующей семантике журналов; неподдержанные debug commands отвергаются до записи. Выход: записанный playtest загружается из editor, seek сбрасывает VFX/selection, карта работает в прямом матче; sockets не нужны для локального preview. Snapshot checkpoint/branching не входит в обязательный B. [Подробности](network-reuse.md).
+После B5 реализованы нативные квадратные и изометрические 2D сцены и одна поверхность v3. 2D `Build and play map` запускает скомпилированную проекцию. Ближайшие задачи — паритет 2D операций, проверка стартов выбранного матча и проверка разных способов поставки. [Действующие приоритеты и ограничения](authoring-audit.md).
+
+**B6 — отдельный этап.** Точная идентичность артефактов, интеграция playtest с журналом и сетевой запуск описаны в [плане Network и replay](network-reuse.md).
 
 ### B7 — масштаб и внешний потребитель
 
@@ -222,8 +223,7 @@ P0 — первый полезный сквозной результат; P1 —
 | Размещение | Circle/box и разреженный footprint, граница, конфликт brushes, разные start sets/owners |
 | Отказы | Cancel, malformed/trailing input, duplicate ID, unsupported height/transform/version, missing exact content |
 | Актуальность | Linked scene/catalog/brush/компилятор изменены, поздний ответ старой job, новый edit во время playtest |
-| Recovery | Точный артефакт и recipe, неверная версия отклонена, seek/POV не сохраняют старый VFX/state |
 | Lifecycle | Plugin disable, закрытие сцены, C# rebuild, stop/restart и export не оставляют owner/ресурсы |
 | Опциональность | Установленная карта играет без editor addon; .NET headless не грузит Godot/Network |
 
-Реализация всего B завершена после B7 для заявленного профиля. Независимые проверки идут через `tools/dev.sh test`, Godot authoring/editor — через `tools/dev.sh verify-authoring`; QA и измерения оформляются отдельно. Выполнение B0–B5 не означает завершения оставшихся срезов.
+Критерии локального B и дальнейших проверок определены в [обновлённом плане](roadmap.md). B7 имеет отдельный сценарий приёмки. Независимые проверки идут через `tools/dev.sh test`, Godot authoring/editor — через `tools/dev.sh verify-authoring`.

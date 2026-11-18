@@ -1,0 +1,64 @@
+#if TOOLS
+using Godot;
+using OpenRTS.Content;
+
+namespace OpenRTS.Godot.Authoring;
+
+public partial class OpenRtsEditorPlugin
+{
+    private ConfirmationDialog _playtestDialog = null!;
+    private ItemList _playtestStarts = null!;
+    private OptionButton _playtestSets = null!;
+
+    private void SetupPlaytest()
+    {
+        _playtestDialog = new() { Title = "Local skirmish playtest", OkButtonText = "Validate and play" };
+        _editorDock.AddChild(_playtestDialog);
+        var layout = new VBoxContainer { CustomMinimumSize = new(360, 0) };
+        _playtestDialog.AddChild(layout);
+        layout.AddChild(new Label { Text = $"Select 1–{MapScenario.MaximumPlayers} starts in player order:" });
+        _playtestStarts = new() { SelectMode = ItemList.SelectModeEnum.Multi, CustomMinimumSize = new(0, 140) };
+        layout.AddChild(_playtestStarts);
+        layout.AddChild(new Label { Text = "Starting set" });
+        _playtestSets = new();
+        layout.AddChild(_playtestSets);
+        _playtestDialog.Confirmed += () =>
+        {
+            string[] slots = _playtestStarts.GetSelectedItems().Order().Select(index => _playtestStarts.GetItemText(index)).ToArray();
+            string path = _playtestSets.GetItemMetadata(_playtestSets.Selected).AsString();
+            _ = BuildAsync(play: true, selectedStarts: slots, selectedStartSet: path);
+        };
+    }
+
+    private void ChoosePlaytest()
+    {
+        CommitStroke();
+        var root = EditedMap();
+        var source = Extract(root);
+        if (!source.IsSkirmish)
+        {
+            _ = BuildAsync(play: true);
+            return;
+        }
+        var match = GameManifest.Load(ProjectFile(ContentPath(root), ".yaml")).Settings.Match;
+        _playtestStarts.Clear();
+        foreach (var slot in source.Slots.OrderBy(slot => slot.Id, StringComparer.Ordinal))
+        {
+            int index = _playtestStarts.AddItem(slot.Id);
+            if (index < MapScenario.MaximumPlayers) _playtestStarts.Select(index, single: false);
+        }
+        _playtestSets.Clear();
+        var choices = match.StartingSets.Length == 0
+            ? [new MatchChoice { Path = match.DefaultStartSet, Title = match.DefaultStartSet }]
+            : match.StartingSets;
+        foreach (var choice in choices)
+        {
+            _playtestSets.AddItem(choice.Title);
+            int index = _playtestSets.ItemCount - 1;
+            _playtestSets.SetItemMetadata(index, choice.Path);
+            if (choice.Path == match.DefaultStartSet) _playtestSets.Select(index);
+        }
+        _playtestDialog.PopupCentered();
+    }
+}
+#endif

@@ -211,8 +211,125 @@ internal static class MapEditorChecks
         }
         finally { reopened.Free(); }
 
+        await Check2DOperations(plugin, map, expectedShape, check);
+        if (isometric) await CheckLocalPlaytest(plugin, map, check);
+
         GD.Print($"OPENRTS_MAP_2D:{sceneName}, {expected.Source.Width}x{expected.Source.Height}, {expected.Source.Slots.Count} starts, " +
             $"{expected.Source.Objects.Count} objects, gameplay={expected.GameplayFingerprint}, data={expected.DataFingerprint}");
+    }
+
+    private static async Task Check2DOperations(OpenRtsEditorPlugin plugin, OpenRtsMap2D map,
+        TileSet.TileShapeEnum shape, Action<bool, string> check)
+    {
+        var fresh = OpenRtsEditorPlugin.NewMap2D(shape == TileSet.TileShapeEnum.Isometric);
+        try
+        {
+            var source = MapSceneExtractor2D.Extract(fresh);
+            check(fresh.Terrain!.Owner == fresh && fresh.Terrain.TileSet.TileShape == shape &&
+                source.Terrain.Palette.SequenceEqual(["grass"]) && source.Slots.Count == 0 && source.Objects.Count == 0,
+                "New 2D map did not have a complete, correctly projected starter terrain.");
+            using var packed = new PackedScene();
+            check(packed.Pack(fresh) == Error.Ok, "The 2D map template could not be packed.");
+            var copy = packed.Instantiate<OpenRtsMap2D>();
+            try { check(MapSceneExtractor2D.Extract(copy).Write() == source.Write(), "The template TileSet or layer was lost on save."); }
+            finally { copy.Free(); }
+        }
+        finally { fresh.Free(); }
+
+        string before = MapSceneExtractor2D.Extract(map).Write();
+        var selection = EditorInterface.Singleton.GetSelection();
+        var manager = plugin.GetUndoRedo();
+        var undo = manager.GetHistoryUndoRedo(manager.GetObjectHistoryId(map));
+        plugin.AddObject();
+        var obj = (OpenRtsMapObject2D)selection.GetSelectedNodes().Single();
+        string id = obj.ObjectId;
+        check(id.Length > 0 && obj.Order > 0 && obj.OwnerSlot == "neutral" && obj.Owner == map,
+            "Adding a 2D object did not assign its ID, order or ownership.");
+        plugin.AddStart();
+        var added = (OpenRtsMapStart2D)selection.GetSelectedNodes().Single();
+        selection.AddNode(obj);
+        plugin.DuplicateSelected();
+        var duplicated = MapSceneExtractor2D.Extract(map);
+        check(duplicated.Objects.Count == 9 && duplicated.Slots.Count == 4 &&
+            duplicated.Objects.Select(item => item.Id).Distinct().Count() == 9 && duplicated.Slots.Select(slot => slot.Id).Distinct().Count() == 4,
+            "Duplicating 2D markers lost their identity or order.");
+        undo.Undo(); undo.Undo(); undo.Undo();
+        check(MapSceneExtractor2D.Extract(map).Write() == before, "Undo did not restore the original 2D map.");
+        undo.Redo(); undo.Redo();
+        check(obj.ObjectId == id && obj.Owner == map && added.Owner == map, "2D marker redo changed its identity or owner.");
+        int originalOrder = obj.Order;
+        obj.ObjectId = ""; obj.Order = 0;
+        string startId = added.StartId;
+        added.StartId = "neutral";
+        plugin.RepairIdentities();
+        check(obj.ObjectId.Length != 0 && obj.Order != 0 && added.StartId != "neutral",
+            "Repair did not fix invalid 2D marker IDs and order.");
+        undo.Undo();
+        check(obj.ObjectId == "" && obj.Order == 0 && added.StartId == "neutral", "Undo did not restore the 2D repair inputs.");
+        obj.ObjectId = id; obj.Order = originalOrder; added.StartId = startId;
+        undo.Undo(); undo.Undo();
+
+        plugin.SelectById("patrol/tank");
+        check(selection.GetSelectedNodes().Single() == map.GetNode("Tank"), "2D selection by ID failed.");
+        var terrain = map.Terrain!;
+        var cell = Vector2I.Zero;
+        int sourceId = terrain.GetCellSourceId(cell), alternative = terrain.GetCellAlternativeTile(cell);
+        var atlas = terrain.GetCellAtlasCoords(cell);
+        terrain.EraseCell(cell);
+        try
+        {
+            await plugin.BuildAsync();
+            plugin.SelectErrorSource();
+            check(plugin.Status.Contains("cell (0, 0)", StringComparison.Ordinal) && selection.GetSelectedNodes().Single() == terrain,
+                "The 2D tile error did not identify its layer and cell.");
+        }
+        finally { terrain.SetCell(cell, sourceId, atlas, alternative); }
+    }
+
+    private static async Task CheckLocalPlaytest(OpenRtsEditorPlugin plugin, OpenRtsMap2D map, Action<bool, string> check)
+    {
+        var manifest = GameManifest.Load(ProjectSettings.GlobalizePath(map.ContentManifest));
+        string path = ProjectSettings.GlobalizePath(map.CompiledPath);
+        string previous = File.ReadAllText(path);
+        var original = MapCompiler.Read(new(path, previous), manifest.LoadUnits());
+        var west = map.GetNode<OpenRtsMapStart2D>("West");
+        var candidates = Enumerable.Range(1, 5).Select(i => new OpenRtsMapStart2D
+            { Name = $"Candidate{i}", StartId = $"candidate-{i}", Position = west.Position }).ToArray();
+        foreach (var start in candidates) map.AddChild(start);
+        const string set = MapScenario.InfantryStartSet;
+        try
+        {
+            var validated = await plugin.BuildAsync(validatePlaytest: true, selectedStarts: ["west"], selectedStartSet: set);
+            check(validated is not null && validated.Slots.SequenceEqual(["west"]) && validated.StartSetPath == set,
+                "Selecting one of more than four starts did not validate: " + plugin.Status);
+            string good = File.ReadAllText(path);
+            var published = MapCompiler.Read(new(path, good), manifest.LoadUnits());
+            check(published.Source.Slots.Count == 7, "A playtest removed unused candidates from the artifact.");
+            var receipt = LocalMapPlaytest.Read(validated!.Write());
+            receipt.CheckMap(published);
+            check(receipt.Prepare(published.Map, manifest).UnitCount == published.Source.Objects.Count + 3,
+                "The launch receipt did not reproduce the selected starting set or active slots.");
+            bool staleRejected = false;
+            try { receipt.CheckMap(original); }
+            catch (InvalidDataException) { staleRejected = true; }
+            check(staleRejected, "A replaced artifact passed the local launch check.");
+            bool changedSetRejected = false;
+            try { (receipt with { StartSetPath = MapScenario.DefaultStartSet }).ReadStartingSet(manifest); }
+            catch (InvalidDataException) { changedSetRejected = true; }
+            check(changedSetRejected, "A replaced starting set passed the local launch check.");
+
+            var refused = await plugin.BuildAsync(validatePlaytest: true, selectedStarts: ["candidate-1", "west"], selectedStartSet: set);
+            plugin.SelectErrorSource();
+            check(refused is null && plugin.Status.Contains("west/infantry", StringComparison.Ordinal) && File.ReadAllText(path) == good &&
+                EditorInterface.Singleton.GetSelection().GetSelectedNodes().Single() == west,
+                "An occupied start was accepted, replaced the last valid artifact or did not select its marker: " + plugin.Status);
+            refused = await plugin.BuildAsync(validatePlaytest: true, selectedStarts: [], selectedStartSet: set);
+            check(refused is null && plugin.Status.StartsWith("Failed", StringComparison.Ordinal) && File.ReadAllText(path) == good,
+                "An empty choice replaced the last valid artifact.");
+        }
+        finally { foreach (var start in candidates) { map.RemoveChild(start); start.Free(); } }
+        var repeat = await plugin.BuildAsync(validatePlaytest: true, selectedStarts: ["west"], selectedStartSet: set);
+        check(repeat is not null && File.ReadAllText(path) == previous, "Repeating a valid match failed after the refusal.");
     }
 
     private static async Task CheckReliefMap(OpenRtsEditorPlugin plugin, SceneTree tree, Action<bool, string> check)
@@ -267,10 +384,12 @@ internal static class MapEditorChecks
             MapCompiler.Compile(MapSource.Read(new(sourcePath, File.ReadAllText(sourcePath))), catalog).Write() == compiled.Write(),
             "Relief MapSource did not round-trip: " + plugin.Status);
 
-        await plugin.BuildAsync();
+        var playtest = await plugin.BuildAsync(validatePlaytest: true);
         check(plugin.Status.StartsWith("Compiled", StringComparison.Ordinal) && File.Exists(path) &&
             MapCompiler.Read(new(path, File.ReadAllText(path)), catalog).Write() == compiled.Write(),
             "The editor did not publish a compatible relief map: " + plugin.Status);
+        check(playtest is not null && playtest.Slots.SequenceEqual(["blue"]) && playtest.StartSetPath is null,
+            "Rocky Pass did not validate as a fixture with its fixed placements.");
         GD.Print($"OPENRTS_RELIEF_MAP:{grid.Width}x{grid.Height}, {original.Objects.Count} objects, game={compiled.GameplayFingerprint}");
     }
 
