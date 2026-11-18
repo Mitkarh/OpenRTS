@@ -35,6 +35,9 @@ internal static class MapSceneExtractor2D
         var visual = new Dictionary<string, int>(StringComparer.Ordinal);
         var groundCells = new int[size.X * size.Y];
         var visualCells = new int[groundCells.Length];
+        int directionalLayer = tiles.GetCustomDataLayerByName("DirectionalVisual");
+        if (directionalLayer >= 0 && tiles.GetCustomDataLayerType(directionalLayer) != Variant.Type.Bool)
+            throw Error(layer, "TileSet", "DirectionalVisual custom data must be boolean.");
         int elevationLayer = tiles.GetCustomDataLayerByName("Elevation");
         int riseLayer = tiles.GetCustomDataLayerByName("Rise");
         MapSurfaceCell[]? surface = null;
@@ -58,18 +61,25 @@ internal static class MapSceneExtractor2D
             }
             return index;
         }
+        bool HasTransform(TileData tile, Vector2I cell)
+        {
+            const long mask = TileSetAtlasSource.TransformFlipH | TileSetAtlasSource.TransformFlipV | TileSetAtlasSource.TransformTranspose;
+            return (layer.GetCellAlternativeTile(cell) & mask) != 0 || tile.FlipH || tile.FlipV || tile.Transpose;
+        }
+
         for (int i = 0; i < groundCells.Length; i++)
         {
             var cell = new Vector2I(i % size.X, i / size.X);
             var tile = layer.GetCellTileData(cell) ?? throw Error(layer, $"cell {cell}", "Every map cell needs an atlas tile.");
             groundCells[i] = ReadId(tile, cell, "TerrainId", terrain);
             visualCells[i] = ReadId(tile, cell, "VisualId", visual);
+            if (directionalLayer >= 0 && tile.GetCustomDataByLayerId(directionalLayer).AsBool() && HasTransform(tile, cell))
+                throw Error(layer, $"cell {cell}.VisualId", "Use the atlas tile for the required direction instead of flipping or transposing it.");
             if (surface is not null)
             {
                 long elevation = tile.GetCustomData("Elevation").AsInt64();
                 var rise = tile.GetCustomData("Rise").AsVector2I();
-                const long transform = TileSetAtlasSource.TransformFlipH | TileSetAtlasSource.TransformFlipV | TileSetAtlasSource.TransformTranspose;
-                if (rise != default && ((layer.GetCellAlternativeTile(cell) & transform) != 0 || tile.FlipH || tile.FlipV || tile.Transpose))
+                if (rise != default && HasTransform(tile, cell))
                     throw Error(layer, $"cell {cell}.Rise", "Use an explicit ramp tile for each direction instead of flipping or transposing it.");
                 if (elevation is < int.MinValue or > int.MaxValue)
                     throw Error(layer, $"cell {cell}.Elevation", "Expected an Int32 height.");

@@ -235,6 +235,7 @@ internal static class MapEditorChecks
             var copy = packed.Instantiate<OpenRtsMap2D>();
             try { check(MapSceneExtractor2D.Extract(copy).Write() == source.Write(), "The template TileSet or layer was lost on save."); }
             finally { copy.Free(); }
+            CheckTerrainTransitions(fresh, check);
         }
         finally { fresh.Free(); }
 
@@ -286,6 +287,50 @@ internal static class MapEditorChecks
                 "The 2D tile error did not identify its layer and cell.");
         }
         finally { terrain.SetCell(cell, sourceId, atlas, alternative); }
+    }
+
+    private static void CheckTerrainTransitions(OpenRtsMap2D map, Action<bool, string> check)
+    {
+        map.IsSkirmish = false;
+        var layer = map.Terrain!;
+        var catalog = GameManifest.Load(ProjectSettings.GlobalizePath(map.ContentManifest)).LoadUnits();
+        layer.SetCell(new(2, 2), 0, new(4, 2)); // Keep the gameplay road beside the visual brush.
+        var original = MapCompiler.Compile(MapSceneExtractor2D.Extract(map), catalog);
+        var dirt = new Godot.Collections.Array<Vector2I>();
+        for (int y = 3; y <= 6; y++)
+            for (int x = 0; x <= y; x++) dirt.Add(new(x, y));
+        layer.SetCellsTerrainConnect(dirt, 0, 1);
+        var painted = MapCompiler.Compile(MapSceneExtractor2D.Extract(map), catalog);
+        check(painted.Source.Visual.Palette.Any(id => id.StartsWith("grass-mud-", StringComparison.Ordinal)) &&
+            painted.Source.Visual.Palette.Contains("mud") && painted.GameplayFingerprint == original.GameplayFingerprint &&
+            painted.DataFingerprint != original.DataFingerprint, "Terrain Connect did not produce visual-only transitions.");
+
+        for (int x = 0; x < 4; x++)
+        {
+            layer.SetCell(new(8 + x, 3), 0, new(x, 2));
+            var data = layer.GetCellTileData(new(8 + x, 3));
+            check(data.GetCustomData("TerrainId").AsString() == "grass" && data.GetCustomData("VisualId").AsString() == $"grass-mud-{32 + x}",
+                "The explicit diagonal tile did not keep the expected gameplay and visual IDs.");
+        }
+
+        using var packed = new PackedScene();
+        check(packed.Pack(map) == Error.Ok, "Terrain transition scene could not be packed.");
+        var reopened = packed.Instantiate<OpenRtsMap2D>();
+        try
+        {
+            var art = MapCompiler.Compile(MapSceneExtractor2D.Extract(reopened), catalog);
+            check(art.GameplayFingerprint == original.GameplayFingerprint &&
+                Enumerable.Range(0, 4).All(x => art.Map.VisualAt(8 + x, 3) == $"grass-mud-{32 + x}") &&
+                art.Map.VisualIds.All(id => GD.Load<Texture2D>($"res://resources/terrain/{id}.tres") is not null),
+                "Transition orientations or sandbox textures were lost during compilation.");
+        }
+        finally { reopened.Free(); }
+
+        layer.SetCell(new(8, 3), 0, new(0, 2), (int)TileSetAtlasSource.TransformFlipH);
+        bool rejected = false;
+        try { _ = MapSceneExtractor2D.Extract(map); }
+        catch (DeclarativeContent.ContentException error) when (error.Message.Contains("required direction", StringComparison.Ordinal)) { rejected = true; }
+        check(rejected, "A flipped directional visual compiled with the unflipped VisualId.");
     }
 
     private static async Task CheckLocalPlaytest(OpenRtsEditorPlugin plugin, OpenRtsMap2D map, Action<bool, string> check)

@@ -7,27 +7,18 @@ public partial class OpenRtsEditorPlugin
 {
     internal static OpenRtsMap2D NewMap2D(bool isometric)
     {
-        string name = isometric ? "InitialPropertiesMapIsometric" : "InitialPropertiesMap2D";
-        var template = ResourceLoader.Load<PackedScene>($"res://examples/maps/{name}.tscn", cacheMode: ResourceLoader.CacheMode.IgnoreDeep)
+        string name = isometric ? "GrassMudIsometric" : "GrassMudTopDown";
+        var tiles = GD.Load<TileSet>($"res://resources/terrain/{name}.tres")
             ?? throw new IOException($"Could not load the {name} TileSet.");
-        var sample = template.Instantiate<OpenRtsMap2D>();
-        try
-        {
-            var terrain = sample.Terrain!;
-            var layer = new TileMapLayer { Name = "Terrain", TileSet = terrain.TileSet };
-            int source = terrain.GetCellSourceId(Vector2I.Zero);
-            var atlas = terrain.GetCellAtlasCoords(Vector2I.Zero);
-            int alternative = terrain.GetCellAlternativeTile(Vector2I.Zero);
-            string id = "map-" + MapAuthoringIdentity.NewId();
-            var root = new OpenRtsMap2D { Name = "Map", MapId = id, CompiledPath = $"res://artifacts/maps/{id}.ortmap.json" };
-            root.AddChild(layer);
-            layer.Owner = root;
-            root.Terrain = layer;
-            for (int y = 0; y < root.Size.Y; y++)
-                for (int x = 0; x < root.Size.X; x++) layer.SetCell(new(x, y), source, atlas, alternative);
-            return root;
-        }
-        finally { sample.Free(); }
+        var layer = new TileMapLayer { Name = "Terrain", TileSet = tiles };
+        string id = "map-" + MapAuthoringIdentity.NewId();
+        var root = new OpenRtsMap2D { Name = "Map", MapId = id, CompiledPath = $"res://artifacts/maps/{id}.ortmap.json" };
+        root.AddChild(layer);
+        layer.Owner = root;
+        root.Terrain = layer;
+        for (int y = 0; y < root.Size.Y; y++)
+            for (int x = 0; x < root.Size.X; x++) layer.SetCell(new(x, y), 0, Vector2I.Zero);
+        return root;
     }
 
     private void CreateMap2D(bool isometric)
