@@ -97,8 +97,8 @@ public sealed class SpriteWorldView
             if (root.Parent >= 0) continue;
             for (int y = 0; y <= 1; y++) for (int x = 0; x <= 1; x++)
             {
-                var corner = Rotate(new((float)((x - root.PivotX) * root.Width + root.OffsetX),
-                    (float)((y - root.PivotY) * root.Height + root.OffsetY)), angle);
+                var corner = Rotate(new((float)((x - root.PivotX) * root.Width), (float)((y - root.PivotY) * root.Height)),
+                    angle + Mathf.DegToRad((float)root.SpriteRotation)) + Rotate(new((float)root.OffsetX, (float)root.OffsetY), angle);
                 squared = Math.Max(squared, center.DistanceSquaredTo(camera.UnprojectPosition(position + new Vector3(corner.X, 0, corner.Y))));
             }
         }
@@ -361,7 +361,7 @@ public sealed class SpriteWorldView
                 Vector2 mount = part.Parent < 0 ? origin : pivots[part.Parent];
                 mount += Rotate(new((float)part.OffsetX * scale, (float)part.OffsetY * scale), part.Parent < 0 ? body : angles[part.Parent]);
                 angles[p] = angle;
-                float drawAngle = part.Facings == 0 ? angle : 0;
+                float drawAngle = (part.Facings == 0 ? angle : 0) + Mathf.DegToRad((float)part.SpriteRotation);
                 float progress = playback.DurationTicks > 0 ? (float)Math.Clamp((time - playback.StartTick) / playback.DurationTicks, 0, 1) : 0;
                 float pulse = playback.DurationTicks > 0 ? MathF.Sin(MathF.PI * Math.Clamp(progress * 3, 0, 1)) : 0;
                 float bob = (float)effect.Bob * MathF.Sin((float)(time - playback.StartTick) * MathF.Tau * 3 / tickRate);

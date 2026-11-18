@@ -1,0 +1,54 @@
+civilian-house:
+  Vision: { Radius: 7168 }
+  Sensors:
+    Signatures: [visual, radar.ground]
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
+  Transport: { Accepts: [infantry], Slots: 6, FireFromInside: true }
+  Health: { HP: 1000, Armor: Building }
+  Movement: { Enabled: false }
+  Footprint:
+    Rows: ["###", "###", "###"]
+    Types: { "#": { Traverse: false, CanStop: false } }
+  Presentation:
+    Model: civilian-house
+    Name: Гражданский дом
+    Animations: [idle]
+    States: [damaged, garrisoned, nearly-destroyed, destroyed]
+
+civilian-apartments:
+  Inherits: civilian-house
+  Presentation: { Model: civilian-apartments, Name: Жилой комплекс }
+
+civilian-clinic:
+  Inherits: civilian-house
+  Footprint: { Rows: ["##", "##"] }
+  Presentation: { Model: civilian-clinic, Name: Клиника }
+
+civilian-market:
+  Inherits: civilian-house
+  Footprint: { Rows: ["####", "####"] }
+  Presentation: { Model: civilian-market, Name: Магазин }
+
+civilian-library:
+  Inherits: civilian-house
+  Footprint: { Rows: ["###", "###", "###"] }
+  Presentation: { Model: civilian-library, Name: Библиотека }
+
+civilian-station:
+  Inherits: civilian-house
+  Footprint: { Rows: ["#####", "#####"] }
+  Presentation: { Model: civilian-station, Name: Станция }
+
+civilian-community:
+  Inherits: civilian-house
+  Footprint: { Rows: ["####", "####", "####", "####"] }
+  Presentation: { Model: civilian-community, Name: Общественный центр }

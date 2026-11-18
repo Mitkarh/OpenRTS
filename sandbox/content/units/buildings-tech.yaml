@@ -1,0 +1,30 @@
+mine:
+  Inherits: ^building
+  -Buildable:
+  -Capturable:
+  Supply: { Role: Mine, Capacity: 300000 }
+  Upgrades:
+    Variants:
+      owned:
+        {
+          Cost: 1200,
+          Ticks: 350,
+          Support: true,
+          Default: true,
+          ClaimNeutral: true,
+        }
+  Health: { Destruction: Neutralize }
+  Economy: { Energy: 0 }
+  Footprint: { Rows: ["###", "###", "#+#", "#+#"] }
+  Presentation:
+    Model: mine
+    Name: Шахта
+    States: [damaged, working, destroyed, lowpower, constructing, owned]
+
+oil-derrick:
+  Inherits: ^building
+  -Buildable:
+  Health: { Destruction: Neutralize }
+  Economy: { Energy: 0, Income: 50, Interval: 100 }
+  Footprint: { Rows: ["###", "###", "###"] }
+  Presentation: { Model: oil-derrick, Name: Нефтяная вышка }

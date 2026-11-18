@@ -100,3 +100,7 @@ YAML позволяет задать карту непосредственно �
 ## Проверка авиации над рельефом
 
 `./tools/dev.sh verify-authoring` компилирует `RockyPass`, `DiagonalRamps` и `DiagonalCliffs` и проверяет полёт конвертоплана с набором высоты и снижением на обратном пути. Для отдельного типа авиации задайте `TerrainLookaheadRadius` в блоке `Aircraft`. [Расчёт высоты и пример настройки](research/aviation/terrain-following.md).
+
+## Полигон непрямого огня
+
+Откройте [IndirectFire.tscn](../sandbox/examples/maps/IndirectFire.tscn) и нажмите **Build and play map**. Колёсная гаубица, установка залпового огня и две установки одиночных ракет стреляют по мишеням за обрывом. На пусковых видны заряженная ракета, её подъём и пустая направляющая во время перезарядки. [Режимы полёта, параметры оружия и команды запуска](research/weapons-and-projectiles/flight-profiles.md).

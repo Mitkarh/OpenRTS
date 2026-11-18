@@ -5,12 +5,13 @@ using OpenRTS.Core;
 namespace OpenRTS.Godot.Rendering;
 
 /// <summary>Projectile snapshots and independent event effects, batched without per-shot nodes.</summary>
-public sealed class CombatEffectsView
+public sealed partial class CombatEffectsView
 {
     private readonly UnitCatalog _units;
     private readonly EffectCatalog _effects;
     private readonly List<WorldEvent> _events = [];
     private readonly Dictionary<EntityId, EntityPose> _workSources = [];
+    private readonly Dictionary<string, (ColoredMeshBatch Batch, float Aspect)> _projectileSprites = new(StringComparer.Ordinal);
     private readonly ColoredMeshBatch _rounds = new(new SphereMesh { Radius = 0.5f, Height = 1, RadialSegments = 8, Rings = 4 }, "Projectiles");
     private readonly ColoredMeshBatch _beams = new(new BoxMesh { Size = Vector3.One }, "Tracers");
     private readonly ColoredMeshBatch _impacts = new(new SphereMesh { Radius = 0.5f, Height = 1, RadialSegments = 12, Rings = 4 }, "Impacts");
@@ -21,20 +22,47 @@ public sealed class CombatEffectsView
     {
         _units = units; _effects = effects;
         foreach (var type in units.Units) foreach (var mount in type.Weapons)
-            if (!effects.Weapons.ContainsKey(mount.Weapon.Id)) throw new ArgumentException("Missing effect: " + mount.Weapon.Id);
-        Node.AddChild(_rounds.Node); Node.AddChild(_beams.Node); Node.AddChild(_impacts.Node);
+        {
+            if (!effects.Weapons.TryGetValue(mount.Weapon.Id, out var style)) throw new ArgumentException("Missing effect: " + mount.Weapon.Id);
+            if (style.ProjectileTexture is not { } path || _projectileSprites.ContainsKey(path)) continue;
+            var texture = GD.Load<Texture2D>(path) ?? throw new ArgumentException("Missing projectile texture: " + path);
+            var material = new StandardMaterial3D
+            {
+                AlbedoTexture = texture, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha, CullMode = BaseMaterial3D.CullModeEnum.Disabled
+            };
+            var batch = new ColoredMeshBatch(new PlaneMesh { Size = Vector2.One }, "ProjectileSprites", material);
+            _projectileSprites.Add(path, (batch, (float)texture.GetWidth() / texture.GetHeight()));
+            Node.AddChild(batch.Node);
+        }
+        _hasMountedRockets = effects.Weapons.Values.Any(style => style.MountedRocket is not null);
+        Node.AddChild(_rounds.Node); Node.AddChild(_beams.Node); Node.AddChild(_impacts.Node); Node.AddChild(_smoke.Node);
     }
     public void Accept(WorldEvent value)
     { if (value.UnitType >= 0 && value.Kind is (WorldEventKind.WeaponFired or WorldEventKind.ProjectileImpact)) _events.Add(value); }
-    public void Clear() => _events.Clear();
-    public void Apply(ReadOnlySpan<ProjectilePose> shots, float alpha, long tick, float flightSurface = 0,
-        FrameExchange.FrameLease? observation = null, bool reliefProjection = false)
+    public void Clear()
     {
+        _events.Clear();
+        _puffs.Clear();
+        _lastSmokeTick = -1;
+    }
+    public void Apply(ReadOnlySpan<ProjectilePose> shots, float alpha, long tick, float flightSurface = 0,
+        FrameExchange.FrameLease? observation = null, bool reliefProjection = false,
+        ReadOnlySpan<EntityPose> actors = default, ReadOnlySpan<WeaponPose> weapons = default, Vector3? cameraBack = null)
+    {
+        alpha = Math.Clamp(alpha, 0, 1);
         _rounds.Clear(); _beams.Clear(); _impacts.Clear(); ProjectileCount = shots.Length;
-        double time = tick + Math.Clamp(alpha, 0, 1);
+        foreach (var sprite in _projectileSprites.Values) sprite.Batch.Clear();
+        if (tick < _lastSmokeTick) _puffs.Clear();
+        bool emitSmoke = tick != _lastSmokeTick;
+        _lastSmokeTick = tick;
+        double time = tick + alpha;
+        var eye = cameraBack ?? Vector3.Up;
+        if (_hasMountedRockets) ApplyMountedRockets(actors, weapons, tick, alpha, eye);
         foreach (var shot in shots)
         {
-            var style = Style(shot.UnitType, shot.Mount);
+            var weapon = _units.Units[shot.UnitType].Weapons[shot.Mount].Weapon;
+            var style = _effects.Weapons[weapon.Id];
             var current = Position(shot.Current);
             var previous = Position(shot.Previous);
             float heading = MathF.Atan2(shot.Facing.X, shot.Facing.Y);
@@ -54,10 +82,35 @@ public sealed class CombatEffectsView
                 float PathLift(Vector3 point, float distance) => Mathf.Lerp(sourceLift, targetLift,
                     distance > 0 ? distance / (distance + point.DistanceTo(destination)) : 0);
             }
-            var point = previous.Lerp(current, alpha); float size = (float)style.Size;
-            _rounds.Add(point, new(size, size, size * 1.7f), heading, Color(style.Color));
-            Beam(previous, point, (float)style.BeamWidth, Color(style.Color, 0.5f));
+            var forward = previous.DirectionTo(current);
+            if (forward == Vector3.Zero) forward = new(MathF.Sin(heading), 0, MathF.Cos(heading));
+            if (style.MountedRocket is { } mount && shot.Departure.Tick > 0 && tick - shot.Departure.Tick <= 4)
+            {
+                var launch = shot.Departure;
+                var (direction, center) = MountedRocket(mount, Position(launch.Origin),
+                    SpriteWorldView.Angle(launch.BodyFacing, launch.BodyFacing, 1),
+                    SpriteWorldView.Angle(launch.MountFacing, launch.MountFacing, 1), 1, (float)style.Size);
+                float age = tick - launch.Tick;
+                float speed = weapon.ProjectileSpeed / 1024f;
+                previous = JoinFlight(previous, Math.Max(0, age - 1));
+                current = JoinFlight(current, age);
+                forward = age == 0 ? direction : previous.DirectionTo(current);
+                if (age == 1) forward = direction.Lerp(forward, alpha).Normalized();
+
+                Vector3 JoinFlight(Vector3 sample, float elapsed) =>
+                    (center + direction * (speed * elapsed)).Lerp(sample, Mathf.SmoothStep(0, 3, elapsed));
+            }
+            var point = previous.Lerp(current, alpha);
+            float size = (float)style.Size;
+            if (style.ProjectileTexture is { } path) ProjectileSprite(path, point, forward, size, eye);
+            else _rounds.Add(point, new(size, size, size * 1.7f), PitchBasis(forward, eye), Color(style.Color));
+            if (weapon.Projectile == ProjectileKind.Missile)
+            {
+                if (emitSmoke) EmitSmoke(point - forward * size, style, time);
+            }
+            else Beam(previous, point, (float)style.BeamWidth, Color(style.Color, 0.5f));
         }
+        PublishSmoke(time);
         _workSources.Clear();
         bool sourcesLoaded = false;
         int write = 0;
@@ -107,6 +160,7 @@ public sealed class CombatEffectsView
         }
         if (write < _events.Count) _events.RemoveRange(write, _events.Count - write);
         _rounds.Publish(); _beams.Publish(); _impacts.Publish();
+        foreach (var sprite in _projectileSprites.Values) sprite.Batch.Publish();
     }
     internal WorldPosition WorkSource(in EntityPose actor, WorldPosition target, float alpha)
     {

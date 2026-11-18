@@ -18,16 +18,17 @@ public sealed partial class SimulationWorld
         RequireCompletedBoundary(); CheckSnapshotMechanics();
         string hash = Report().StateHash;
         _snapshotOrigin ??= hash;
+        int version = _projectiles.Any(shot => shot.Departure != default) ? 2 : 1;
         using var payload = new SnapshotBuffer(MaximumSnapshotBytes);
         using (var writer = new BinaryWriter(payload, Encoding.UTF8, true))
         {
             writer.Write(_snapshotOrigin); writer.Write(hash);
             WriteRuntimeCore(writer);
-            SnapshotState(new(null, writer, cancellationToken));
+            SnapshotState(new(null, writer, cancellationToken), version);
         }
         if (payload.Length > MaximumSnapshotBytes) throw new InvalidDataException("Runtime snapshot exceeds 64 MiB.");
         using var output = new MemoryStream(); using var envelope = new BinaryWriter(output);
-        envelope.Write("ORTS-RUNTIME"); envelope.Write(1); envelope.Write((int)payload.Length);
+        envelope.Write("ORTS-RUNTIME"); envelope.Write(version); envelope.Write((int)payload.Length);
         envelope.Write(SHA256.HashData(payload.GetBuffer().AsSpan(0, (int)payload.Length)));
         payload.WriteTo(output); return output.ToArray();
     }
@@ -40,8 +41,10 @@ public sealed partial class SimulationWorld
         if (snapshot.Length > MaximumSnapshotBytes + 128) throw new InvalidDataException("Runtime snapshot byte budget exceeded.");
         using var stream = new MemoryStream(snapshot.ToArray(), false); using var reader = new BinaryReader(stream);
         // Fixed-size header avoids trusting a length-prefixed string from the network.
-        if (!reader.ReadBytes(13).AsSpan().SequenceEqual(new byte[] { 12, (byte)'O', (byte)'R', (byte)'T', (byte)'S', (byte)'-', (byte)'R', (byte)'U', (byte)'N', (byte)'T', (byte)'I', (byte)'M', (byte)'E' }) || reader.ReadInt32() != 1)
+        if (!reader.ReadBytes(13).AsSpan().SequenceEqual(new byte[] { 12, (byte)'O', (byte)'R', (byte)'T', (byte)'S', (byte)'-', (byte)'R', (byte)'U', (byte)'N', (byte)'T', (byte)'I', (byte)'M', (byte)'E' }))
             throw new InvalidDataException("Unknown runtime snapshot format.");
+        int version = reader.ReadInt32();
+        if (version is not (1 or 2)) throw new InvalidDataException("Unknown runtime snapshot format.");
         int length = reader.ReadInt32(); byte[] digest = reader.ReadBytes(32);
         if (length < 130 || length > MaximumSnapshotBytes || length != stream.Length - stream.Position ||
             !CryptographicOperations.FixedTimeEquals(digest, SHA256.HashData(snapshot[^length..])))
@@ -55,7 +58,7 @@ public sealed partial class SimulationWorld
             world = createWorld(); world.RequireCompletedBoundary(); world.CheckSnapshotMechanics();
             if (world.Tick != 0 || world.Report().StateHash != origin) throw new InvalidDataException("Snapshot scenario, content or rules mismatch.");
             world.RestoreRuntimeCore(reader); world._snapshotOrigin = origin;
-            world.SnapshotState(new(reader, null, cancellationToken));
+            world.SnapshotState(new(reader, null, cancellationToken), version);
             if (stream.Position != stream.Length) throw new InvalidDataException("Trailing runtime snapshot bytes.");
             cancellationToken.ThrowIfCancellationRequested();
             if (world.Report().StateHash != hash) throw new InvalidDataException("Restored runtime state hash mismatch.");
@@ -72,7 +75,7 @@ public sealed partial class SimulationWorld
             throw new NotSupportedException("Custom stateful mechanics need their own runtime snapshot schema; replay recovery remains available.");
     }
 
-    private void SnapshotState(RuntimeArchive a)
+    private void SnapshotState(RuntimeArchive a, int version)
     {
         RegisterSnapshotLayouts(a);
         if (_baseGrid is not null)
@@ -125,10 +128,13 @@ public sealed partial class SimulationWorld
         for (int i = 0; i < shots; i++)
         {
             var shot = a.Value(a.Reading ? default : _projectiles[i]);
+            if (version >= 2) shot.Departure = a.Value(shot.Departure);
             if (a.Reading)
             {
                 ValidateType(shot.UnitType);
                 shot.Weapon = _types[shot.UnitType].Weapons[shot.Mount].Weapon;
+                if (shot.Departure != default && (shot.Departure.Tick != shot.BornTick || shot.Departure.Source != shot.Source))
+                    throw new InvalidDataException("Projectile departure does not match the active shot.");
                 _projectiles.Add(shot);
             }
         }
@@ -161,7 +167,8 @@ public sealed partial class SimulationWorld
         a.Layout<FlightState>("Phase", "Heading", "Speed", "Ammo", "ReloadWork", "Base", "Slot", "ReturnRequested", "LandRequested", "MovementRequested", "RunwayReserved", "TaxiToParking", "BoardingRevision", "WorkTarget", "WorkStart", "WorkAnchor", "WorkingTick", "LandingPoint", "ExitPoint", "RequestTick", "RetryTick");
         a.Layout<TruckState>("Automatic", "Returning", "Mine", "Depot", "Station", "Cargo", "Arrival"); a.Layout<MineState>("Remaining");
         a.Layout<UpgradeState>("Completed", "Project", "Work", "Support", "Payer");
-        a.LayoutOmitting<ProjectileState>(["Weapon"], "Id", "BornTick", "Source", "Target", "Owner", "UnitType", "Mount", "Remaining", "InitialDistance", "Previous", "Position", "Destination", "Hover", "LaunchElevation");
+        a.Layout<ProjectileDeparture>("Tick", "Source", "Origin", "BodyFacing", "MountFacing");
+        a.LayoutOmitting<ProjectileState>(["Weapon", "Departure"], "Id", "BornTick", "Source", "Target", "Owner", "UnitType", "Mount", "Remaining", "InitialDistance", "Previous", "Position", "Destination", "Hover", "LaunchElevation");
         a.Layout<TransformationClip>("Animation", "Ticks", "Facing"); a.Layout<TransformationRecipe>("Target", "Before", "After", "AllowRotation");
         a.Layout<PendingTransformation>("Recipe", "Position", "Turns", "MoveAfter", "Phase", "UntilTick", "LastProgress", "NextClearance", "LastPosition");
     }

@@ -6,7 +6,7 @@ internal sealed class MotionIndex(int maximumStep)
     internal readonly record struct BodyToken(int Index, int Generation);
     internal const int BodyRadius = 256;
     private const int BinSize = 1024;
-    private struct Body { internal EntityId Id; internal WorldPosition Start, End; internal BodyShape Shape; }
+    private struct Body { internal EntityId Id; internal WorldPosition Start, End; internal BodyShape Shape; internal WorldBox Bins; }
     private readonly record struct Entry(int Body, int Next);
     private Body[] _bodies = [];
     private Entry[] _entries = [];
@@ -51,9 +51,10 @@ internal sealed class MotionIndex(int maximumStep)
         _byId.Add(id, index); _bodyCount++;
         var body = shape ?? BodyShape.Default;
         if (broadX < 0) broadX = body.HalfWidth; if (broadY < 0) broadY = body.HalfHeight;
-        _bodies[index] = new() { Id = id, Start = position, End = position, Shape = body };
-        for (int y = Floor(position.Y - broadY); y <= Floor(position.Y + broadY); y++)
-            for (int x = Floor(position.X - broadX); x <= Floor(position.X + broadX); x++)
+        var bins = new WorldBox(Floor(position.X - broadX), Floor(position.Y - broadY), Floor(position.X + broadX), Floor(position.Y + broadY));
+        _bodies[index] = new() { Id = id, Start = position, End = position, Shape = body, Bins = bins };
+        for (int y = bins.MinY; y <= bins.MaxY; y++)
+            for (int x = bins.MinX; x <= bins.MaxX; x++)
             {
                 if (_entries.Length == _entryCount) Array.Resize(ref _entries, Math.Max(64, _entries.Length * 2));
                 long key = Key(x, y); int next = _heads.TryGetValue(key, out int head) ? head : -1;
@@ -89,9 +90,23 @@ internal sealed class MotionIndex(int maximumStep)
     private void QuerySlots(WorldPosition from, WorldPosition to, int radius, List<int> result, int limit = int.MaxValue)
     {
         result.Clear(); int padding = radius + maximumStep;
+        int minX = Floor(Math.Min(from.X, to.X) - padding), maxX = Floor(Math.Max(from.X, to.X) + padding);
+        int minY = Floor(Math.Min(from.Y, to.Y) - padding), maxY = Floor(Math.Max(from.Y, to.Y) + padding);
+        long area = (long)(maxX - minX + 1) * (maxY - minY + 1);
+        // Large sparse queries can test each indexed extent once instead of visiting empty bins.
+        if (limit == int.MaxValue && area > Math.Max(4096, 4L * _bodyCount))
+        {
+            for (int i = 0; i < _bodyCount; i++)
+            {
+                var bins = _bodies[i].Bins;
+                if (bins.MinX <= maxX && bins.MaxX >= minX && bins.MinY <= maxY && bins.MaxY >= minY)
+                    result.Add(i);
+            }
+            return;
+        }
         if (_stamp == int.MaxValue) { Array.Clear(_seen); _stamp = 0; } _stamp++;
-        for (int y = Floor(Math.Min(from.Y, to.Y) - padding); y <= Floor(Math.Max(from.Y, to.Y) + padding); y++)
-            for (int x = Floor(Math.Min(from.X, to.X) - padding); x <= Floor(Math.Max(from.X, to.X) + padding); x++)
+        for (int y = minY; y <= maxY; y++)
+            for (int x = minX; x <= maxX; x++)
             {
                 if (!_heads.TryGetValue(Key(x, y), out int next)) continue;
                 for (; next >= 0; next = _entries[next].Next)

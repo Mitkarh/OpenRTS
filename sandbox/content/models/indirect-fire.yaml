@@ -1,0 +1,65 @@
+howitzer-carrier:
+  Inherits: tank
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/units/indirect-fire/artillery-hull.tres
+        Size: [2.55, 2.55]
+      turret:
+        Resource: res://resources/units/indirect-fire/artillery-turret.tres
+        Size: [1.65, 1.65]
+        Pivot: [0.5, 0.71]
+        Offset: [0, 0.18]
+
+salvo-carrier:
+  Inherits: tank
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/units/indirect-fire/salvo-hull.tres
+        Size: [2.45, 2.45]
+      turret:
+        Resource: res://resources/units/indirect-fire/salvo-turret.tres
+        SpriteRotation: 180
+        Size: [1.35, 1.35]
+        Pivot: [0.5, 0.5]
+        Offset: [0, 0.28]
+    Animations:
+      fire: { Recoil: 0.035, Flash: 0.42 }
+
+cruise-carrier:
+  Inherits: tank
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/units/indirect-fire/cruise-hull.tres
+        Size: [2.65, 2.65]
+      turret:
+        Resource: res://resources/units/indirect-fire/cruise-turret.tres
+        Size: [1.6, 1.6]
+        Pivot: [0.5, 0.70]
+        Offset: [0, 0.3]
+    Animations:
+      fire: { Recoil: 0, Flash: 0.28 }
+
+ballistic-carrier:
+  Inherits: ^sprite
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/units/indirect-fire/ballistic-hull.tres
+        Size: [2.85, 2.85]
+    Animations:
+      idle: { Sequence: stand, Parts: [body] }
+      move: { Sequence: travel, Parts: [body] }
+      fire: { Sequence: stand, Parts: [body] }
+
+range-target:
+  Inherits: ^sprite
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/units/tank-hull.tres
+        Size: [1.9, 1.9]
+    Animations:
+      idle: { Sequence: stand, Parts: [body] }

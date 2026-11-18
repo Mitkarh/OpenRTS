@@ -1,0 +1,101 @@
+bunker:
+  Vision: { Radius: 7168 }
+  Sensors:
+    Signatures: [visual, radar.ground]
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
+  Inherits: ^building
+  Buildable: { Ticks: 100, Cost: 400 }
+  Economy: { Energy: 0 }
+  Transport: { Accepts: [infantry], Slots: 4, FireFromInside: true }
+  Armaments:
+    Mounts:
+      cannon: { Weapon: cannon }
+      machinegun: { Weapon: rifle }
+      missiles: { Weapon: missile }
+  Upgrades:
+    Variants:
+      expanded:
+        { Cost: 250, Ticks: 100, Support: true, Default: true, Seats: 8 }
+      cannon: { Cost: 350, Ticks: 125, Support: true, Mounts: [cannon] }
+      mixed:
+        { Cost: 400, Ticks: 140, Support: true, Mounts: [machinegun, missiles] }
+  Footprint: { Rows: ["##", "##"] }
+  Presentation:
+    Model: bunker-upgradable
+    Name: Бункер
+    Animations: [idle, construct, produce, fire]
+    States:
+      [
+        damaged,
+        working,
+        destroyed,
+        lowpower,
+        constructing,
+        expanded,
+        cannon,
+        mixed,
+        garrisoned,
+      ]
+
+bunker-cannon:
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
+  Inherits: tank
+  Buildable: { Ticks: 100, Cost: 550, Kind: PlaceBuilding }
+  -Passenger:
+  Capturable: {}
+  Economy: { Energy: -15 }
+  Footprint:
+    Rows: ["##", "##"]
+    Types: { "#": { Traverse: false, CanStop: false } }
+  Movement: { Enabled: false }
+  Health: { HP: 700, Armor: Building }
+  Presentation:
+    Model: bunker-cannon
+    Name: ДОТ · пушка
+    States: [damaged, working, destroyed, lowpower, constructing]
+
+bunker-mixed:
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
+  Inherits: tank-mixed
+  Buildable: { Ticks: 100, Cost: 750, Kind: PlaceBuilding }
+  -Passenger:
+  Capturable: {}
+  Economy: { Energy: -25 }
+  Footprint:
+    Rows: ["##", "##"]
+    Types: { "#": { Traverse: false, CanStop: false } }
+  Movement: { Enabled: false }
+  Health: { HP: 700, Armor: Building }
+  Presentation:
+    Model: bunker-mixed
+    Name: ДОТ · пушка и ракеты
+    States: [damaged, working, destroyed, lowpower, constructing]

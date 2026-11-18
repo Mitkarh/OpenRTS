@@ -21,6 +21,10 @@ internal static class WeaponChecks
                 Load("").Trajectory == ProjectileTrajectory.Planar, "Trajectory did not normalize to the existing weapon modes.");
             NavigationChecks.Reject<ContentException>(() => Load("Trajectory: Direct, SpatialTrajectory: false"));
             NavigationChecks.Reject<ContentException>(() => Load("Trajectory: Arc"));
+            var ballistic = Load("Projectile: Missile, Trajectory: Ballistic, TrajectoryHeight: 3072, Homing: false");
+            NavigationChecks.Check(ballistic.TrajectoryHeight == 3072 && !ballistic.Homing && ballistic.SpatialTrajectory,
+                "Curved trajectory settings did not survive YAML.");
+            NavigationChecks.Reject<ContentException>(() => Load("Projectile: Cannon, Trajectory: Cruise, Homing: true"));
 
             static byte[] State(WeaponDefinition weapon)
             {
@@ -28,6 +32,140 @@ internal static class WeaponChecks
                 using var writer = new BinaryWriter(bytes);
                 weapon.WriteState(writer);
                 return bytes.ToArray();
+            }
+        });
+        test("Weapons: long-range artillery acquires and hits at the configured range", () =>
+        {
+            const int range = 80 * WorldPosition.UnitsPerCell;
+            WeaponDefinition Load(int distance, string limits = "") => WeaponCatalog.Load([new("long range", $$"""
+                howitzer:
+                  Weapon: {Projectile: Cannon, Trajectory: Arc, Range: {{distance}}, Speed: 2048, Damage: 25, ReloadTicks: 300, WindupTicks: 0{{limits}} }
+                """)]).Weapons["howitzer"];
+            var weapon = Load(range);
+            NavigationChecks.Check(weapon.AcquireRange == range && weapon.TravelLimit == 2 * range &&
+                Load(4096).TravelLimit == 16384 && Load(4096).AcquireRange == 8192,
+                "Long-range defaults should expand while existing default values stay compatible.");
+            NavigationChecks.Reject<ContentException>(() => Load(WeaponDefinition.MaximumRange + 1));
+            NavigationChecks.Reject<ContentException>(() => Load(range, $", AcquireRange: {range - 1}"));
+            NavigationChecks.Reject<ContentException>(() => Load(range, $", TravelLimit: {range - 1}"));
+            NavigationChecks.Check(Load(WeaponDefinition.MaximumRange).TravelLimit == WeaponDefinition.MaximumTravelLimit,
+                "The world-scale range limit must have a valid default travel budget.");
+
+            using var world = new SimulationWorld([Armed("howitzer", weapon, movable: false), new("target", 100)], 128 * 1024, 8192);
+            const int originX = 2048;
+            world.AddInitialUnit(0, new(originX, 4096), 1);
+            int targetX = originX + range + 2 * BodyShape.Default.HalfWidth;
+            world.AddInitialUnit(1, new(targetX + 1, 4096), 2);
+            for (int tick = 0; tick < 8; tick++) world.Step();
+            NavigationChecks.Check(world.ProjectileCount == 0, "A target beyond the configured range should not be acquired.");
+            world.Step([new(world.Tick + 1, 0, 2, CommandKind.Move, new(2), new(targetX, 4096))]);
+            bool hit = false;
+            for (int tick = 0; tick < 90; tick++)
+            {
+                world.Step();
+                hit |= world.Events.ToArray().Any(e => e.Kind == WorldEventKind.ProjectileImpact && e.TargetEntity == new EntityId(2));
+            }
+            NavigationChecks.Check(hit && Pose(world, 2).Health == 75, "Artillery should acquire a target at its configured range and have enough travel for the arc.");
+        });
+        test("Weapons: flight profiles have different apexes, hit targets and survive snapshot restore", () =>
+        {
+            long arcApex = Sample(ProjectileTrajectory.Arc).ApexTick;
+            var ballistic = Sample(ProjectileTrajectory.Ballistic);
+            var cruise = Sample(ProjectileTrajectory.Cruise);
+            NavigationChecks.Check(ballistic.ApexTick < arcApex && cruise.ShelfTicks >= 5,
+                $"Unexpected profiles: arc apex {arcApex}, ballistic apex {ballistic}, cruise shelf {cruise}.");
+
+            static (long ApexTick, int ShelfTicks) Sample(ProjectileTrajectory trajectory)
+            {
+                const int height = 2048;
+                var weapon = new WeaponDefinition(8192, 8192, 25, 1000, 0, projectile: ProjectileKind.Missile,
+                    projectileSpeed: 256, trajectory: trajectory, trajectoryHeight: height, homing: false);
+                SimulationWorld Create()
+                {
+                    var world = new SimulationWorld([Armed("shooter", weapon, movable: false), new("target", 100)], 16384, 16384);
+                    world.AddInitialUnit(0, new(2048, 4096), 1);
+                    world.AddInitialUnit(1, new(8192, 4096), 2);
+                    return world;
+                }
+                using var world = Create();
+                world.Step([Attack(world)]);
+                var poses = new ProjectilePose[1];
+                SimulationWorld? restored = null;
+                int peak = 0, shelf = 0;
+                long apex = 0;
+                try
+                {
+                    while (world.ProjectileCount > 0 && world.Tick < 80)
+                    {
+                        world.CopyProjectilePoses(poses);
+                        int z = poses[0].Current.Elevation;
+                        if (z > peak) { peak = z; apex = world.Tick; }
+                        if (z == height + 128) shelf++;
+                        if (world.Tick == 6) restored = SimulationWorld.RestoreSnapshot(world.CaptureSnapshot(), Create);
+                        world.Step();
+                        if (restored is not null)
+                        {
+                            restored.Step();
+                            NavigationChecks.Check(restored.Report() == world.Report(), "Curved flight diverged after snapshot restore.");
+                        }
+                    }
+                }
+                finally { restored?.Dispose(); }
+                NavigationChecks.Check(peak >= 2000 && Pose(world, 2).Health == 75 && world.ProjectileCount == 0,
+                    $"{trajectory} did not climb and hit its target.");
+                return (apex, shelf);
+            }
+        });
+        test("Weapons: a curved shot can clear terrain or impact the wall during the same flight profile", () =>
+        {
+            CheckHeight(4096, hitsTarget: true);
+            CheckHeight(512, hitsTarget: false);
+            CheckHeight(1700, hitsTarget: true, slope: true, y: 4224);
+            CheckHeight(1700, hitsTarget: false, slope: true, y: 4992);
+
+            static void CheckHeight(int height, bool hitsTarget, bool slope = false, int y = 4096)
+            {
+                var grid = new NavigationGrid(16, 8,
+                    surface: Enumerable.Range(0, 128).Select(i => new SurfaceSample(i % 16 == 5 ? slope ? 2048 : 3072 : 0)),
+                    rises: slope ? Enumerable.Range(0, 128).Select(i => i % 16 == 5 ? new SurfaceRise(0, 3072) : default) : null);
+                var weapon = new WeaponDefinition(8192, 8192, 25, 1000, 0, projectile: ProjectileKind.Cannon,
+                    projectileSpeed: 256, trajectory: ProjectileTrajectory.Arc, trajectoryHeight: height);
+                using var world = new SimulationWorld([Armed("howitzer", weapon, movable: false), new("target", 100)], 16384, 8192,
+                    navigationGrid: grid);
+                world.AddInitialUnit(0, new(2048, y), 1);
+                world.AddInitialUnit(1, new(8192, y), 2);
+                world.Step([Attack(world)]);
+                WorldEvent? impact = null;
+                while (world.ProjectileCount > 0 && world.Tick < 90)
+                {
+                    world.Step();
+                    foreach (var e in world.Events) if (e.Kind == WorldEventKind.ProjectileImpact) impact = e;
+                }
+                NavigationChecks.Check(impact.HasValue && (hitsTarget
+                    ? impact.Value.TargetEntity == new EntityId(2) && Pose(world, 2).Health == 75
+                    : impact.Value.TargetEntity == default && Math.Abs(impact.Value.Position.X - 5120) <= 1 && Pose(world, 2).Health == 100),
+                    $"Unexpected curved projectile impact at height {height}, slope={slope}, y={y}: {impact}.");
+            }
+        });
+        test("Weapons: guided ballistic and cruise missiles follow a moving target, unguided rounds keep their point", () =>
+        {
+            foreach (var trajectory in new[] { ProjectileTrajectory.Ballistic, ProjectileTrajectory.Cruise })
+            {
+                NavigationChecks.Check(Fire(trajectory, true) == 75 && Fire(trajectory, false) == 100,
+                    $"{trajectory} did not distinguish guided from fixed aim.");
+            }
+
+            static int Fire(ProjectileTrajectory trajectory, bool homing)
+            {
+                var weapon = new WeaponDefinition(8192, 8192, 25, 1000, 0, projectile: ProjectileKind.Missile,
+                    projectileSpeed: 256, travelLimit: 24000, trajectory: trajectory, homing: homing);
+                using var world = new SimulationWorld([Armed("launcher", weapon, movable: false), new("target", 100)], 16384, 16384);
+                world.AddInitialUnit(0, new(2048, 4096), 1);
+                world.AddInitialUnit(1, new(8192, 4096), 2);
+                world.Step([Attack(world)]);
+                world.Step([new(2, 0, 2, CommandKind.Move, new(2), new(8192, 7168))]);
+                while (world.ProjectileCount > 0 && world.Tick < 110) world.Step();
+                return Pose(world, 2).Health;
             }
         });
         test("Weapons: slow spatial projectiles advance within their budget and hit diagonal targets", () =>

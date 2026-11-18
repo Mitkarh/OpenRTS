@@ -1,0 +1,77 @@
+{
+  "generator": "OpenAI ImageGen (built-in)",
+  "normalization": "Atlas regions cropped around the visible alpha bounds and downsampled using Godot Lanczos. Vehicle parts centered on transparent 160x160 canvases. Projectile sprites retain their original aspect ratio.",
+  "sheets": [
+    {
+      "id": "artillery",
+      "prompt": "Use case: illustration-story. Asset type: game-ready sprite atlas. Original tracked self-propelled gun for an RTS, low sage green geometric tracked chassis, separate compact slate-green traversing gun turret with one prominent long gun tube and muzzle brake. Strict orthographic overhead view, north-facing, clean crisp pixel-art with restrained late-90s RTS palette, subtle highlights and readable silhouettes at 64px. Sheet contains exactly two pieces separated by a generous empty vertical gutter: bare vehicle hull in the left half and the detached turret or weapon assembly in the right half, both centered vertically and north-facing. Never put any weapon assembly on the left hull. Transparent alpha background, no cast shadows, no props, labels, logos, exhaust effects or terrain. Fictional design. Set generous transparent padding around everything.",
+      "sourceSha256": "d20d11a3acd0503bbb46e42684aabee15218490950147058093dc33407a1d962",
+      "assets": {
+        "sandbox/assets/units/indirect-fire/artillery-hull.png": "0ffc81324cd3b312514891625af2e80b2b58112aa69a9b63a5c86272ce46ef0a",
+        "sandbox/assets/units/indirect-fire/artillery-turret.png": "d026c853afe7fead37a8e56848546c1b94d8024c5e73854b99e151df5fc3d4c7"
+      }
+    },
+    {
+      "id": "salvo",
+      "prompt": "Use case: illustration-story. Asset type: game-ready sprite atlas. Original 6-wheel salvo rocket carrier for an RTS, dusty tan cab and flat bed with dark heavy-duty wheels, separate olive rectangular pod with clearly visible bank of circular tubes. Strict orthographic overhead view, north-facing, clean crisp pixel-art with restrained late-90s RTS palette, subtle highlights and readable silhouettes at 64px. Sheet contains exactly two pieces separated by a generous empty vertical gutter: bare vehicle hull in the left half and the detached turret or weapon assembly in the right half, both centered vertically and north-facing. Never put any weapon assembly on the left hull. Transparent alpha background, no cast shadows, no props, labels, logos, exhaust effects or terrain. Fictional design. Set generous transparent padding around everything.",
+      "sourceSha256": "d3b8fddf61a52b199b583e66a59d739b855aa96b49786dc25936552076923a2f",
+      "assets": {
+        "sandbox/assets/units/indirect-fire/salvo-hull.png": "e52ed23b13973bc8723612ef756a73bf77b6462cf9ceae1a0773895636d71362",
+        "sandbox/assets/units/indirect-fire/salvo-turret.png": "a63f8c94835cbf5be49f695d0edeee552826d71637fdd2b64b8c095a544fdb05"
+      }
+    },
+    {
+      "id": "cruise",
+      "prompt": "Use case: illustration-story. Asset type: game-ready sprite atlas. Original 8-wheel cruise missile launcher for an RTS, petrol-green cab and long armored command truck chassis, separate elevating twin rail assembly holding one long cream-and-teal fictional missile with tiny fins. Strict orthographic overhead view, north-facing, clean crisp pixel-art with restrained late-90s RTS palette, subtle highlights and readable silhouettes at 64px. Sheet contains exactly two pieces separated by a generous empty vertical gutter: bare vehicle hull in the left half and the detached turret or weapon assembly in the right half, both centered vertically and north-facing. Never put any weapon assembly on the left hull. Transparent alpha background, no cast shadows, no props, labels, logos, exhaust effects or terrain. Fictional design. Set generous transparent padding around everything.",
+      "sourceSha256": "0b0c1fcb8ee535f240fcfc9a4cbe42cbfb71531629e1c70eb721536559e4be06",
+      "assets": {
+        "sandbox/assets/units/indirect-fire/cruise-hull.png": "fd4f2f1dc5c3df93fe916f3369a368bed52f7b0baa3b16eb8efbd7cba5be493d",
+        "sandbox/assets/units/indirect-fire/cruise-turret.png": "3e1a7624bc390bcad0674b0d86f098846906821545fa54bc2fcd3a8cf3634b21"
+      }
+    },
+    {
+      "id": "projectiles",
+      "prompt": "Use case: illustration-story. Asset type: game-ready sprite atlas. Original top-down pixel-art weapon projectile spritesheet, five isolated silhouettes evenly spaced in a single horizontal strip with empty gutters: brass short cannon shell, dark steel elongated howitzer shell, small white missile with two red identification stripes and four tail fins, tan slender salvo rocket with orange band, large cream-and-petrol cruise missile with swept fins. All point straight upward. Strict orthographic overhead view, north-facing, clean crisp pixel-art with restrained late-90s RTS palette, subtle highlights and readable silhouettes at 64px. Five separated sprites in one row, each in its own fifth of image. Transparent alpha background, no cast shadows, no props, labels, logos, exhaust effects or terrain. Fictional design. Set generous transparent padding around everything.",
+      "sourceSha256": "9b96baf392d17dc97c90f1f3c22e802e7e48d748950a674388b3d78f3f05114e",
+      "assets": {
+        "sandbox/assets/effects/indirect-fire/cannon-shell.png": "66a4ef6a0192c41d3e290ce4913849a1fb39d19bcb0ca33d5ec2122d565527df",
+        "sandbox/assets/effects/indirect-fire/cruise-missile.png": "fbccc0179558ae17a8192fdb3eb265ee80e413fa620818ab16d73f8eef9abf47",
+        "sandbox/assets/effects/indirect-fire/howitzer-shell.png": "230fda7fe4675e30f305a9bacbbdcb89bc4045eeb7f668176de35ad0b8ad5e3a",
+        "sandbox/assets/effects/indirect-fire/salvo-rocket.png": "365f37491447b44fb7ef2eeef270b5b49c0af693f5ca07df361073a7c8538ac9",
+        "sandbox/assets/effects/indirect-fire/standard-missile.png": "c6dfecbfff4c35e3c14c02cd58cef55be06ac9c7747422611733bf0ee24fdfce"
+      }
+    },
+    {
+      "id": "wheeled-artillery-hull",
+      "prompt": "Original game sprite for OpenRTS, one isolated vehicle chassis only, transparent RGBA background. Strict direct overhead orthographic 90 degree view, nose points straight up, longitudinal axis vertical. Fictional green self-propelled artillery vehicle inspired by the silhouette of a G6 Rhino, deliberately long wheelbase with exactly three broad black rubber tires on each side, tapered armored front driving cab, and a plain broad mounting plate on the rear half. No barrel, no turret, no cannon; these will be overlaid in the game. Hand-painted classic 2D RTS asset, deep olive drab, desaturated sand-toned highlights, strong silhouettes at 96 pixels, crisp readable edge, no cast shadow, no ground, no text, no outlines outside the object. Center the whole vehicle and leave transparent margins.",
+      "sourceSha256": "903fe8e34d90384436b084c4f71462c4afdea729c40e36fcbb12b81ccbffa297",
+      "assets": {
+        "sandbox/assets/units/indirect-fire/wheeled-artillery-hull.png": "930b26c0c3da4a8f69834c9242be26ab5c950fc7afb93650c25580b10b278907"
+      }
+    },
+    {
+      "id": "ballistic-carrier-hull",
+      "prompt": "Original fictional OpenRTS game vehicle sprite, single vehicle isolated on a genuinely transparent RGBA background, strict direct overhead orthographic 90 degree camera. Vehicle is parallel to vertical axis, pointing straight upward. A long olive-green eight-wheel heavy missile transporter without a missile, with a broad rectangular front driving cab with twin dark windows, four heavy black rubber wheels per side, a long clearly empty flat rear bed with narrow rectangular support rails along the centerline. Inspired only by the silhouette of vintage 9P117 transporter artwork, simplified fictional shape. No missile attached, no turret, no gun, no people, no ground, no text, no detached objects, no cast shadow. Classic hand-painted realistic late-1990s RTS sprite with restrained olive tones and subtle weathering. Match an existing top-down RTS vehicle set. Center whole vehicle with transparent margins.",
+      "sourceSha256": "587f536e4cba112c32a87800b2679bb32049136904db1665cf3c5988e369ab29",
+      "assets": {
+        "sandbox/assets/units/indirect-fire/ballistic-carrier-hull.png": "10b941f553e7ea1d529bba1c81e864a25aefcb62c5aa4a19ece520f4e08910f4"
+      }
+    },
+    {
+      "id": "cruise-empty-rail",
+      "prompt": "Edit this overhead RTS turret sprite for the OpenRTS game. Erase the long cream and blue missile from the center, including its fins, nose, and tail. Replace the revealed area with an EMPTY shallow charcoal longitudinal support trough, subtle olive retaining brackets and a green rectangular turntable under the rear third. The launch rail faces north, points straight up, strict overhead orthographic. Preserve the original crisp hand-painted olive drab style, slim vertical proportions and shaded metal, compose as a single isolated sprite with a genuinely transparent RGBA background. No projectile, no text, no ground, no cast shadow.",
+      "sourceSha256": "6af9db481c1e5a362ae6bc2653cf8e395fdcae94c2e86eff51dcfa47a4415ecf",
+      "assets": {
+        "sandbox/assets/units/indirect-fire/cruise-empty-rail.png": "eb53ec0512e0a550be19b58161ab854e1964ad9fa5511f397b8fb76b2f6d3369"
+      }
+    },
+    {
+      "id": "ballistic-missile",
+      "prompt": "One original game sprite of an exaggerated fictional heavy ballistic projectile for OpenRTS. A strict true-overhead 2D RTS sprite where the nose points straight up and exhaust end points straight down. Long symmetrical cylindrical olive-slate body, sharp bone-colored nose cap, dark tint near the tail and four readable small tail fins. One restrained cream identification band. No letters, no ground, no smoke, no flame, no launcher, no cast shadow. Classic hand-painted realistic retro RTS art with restrained olive drab and hand-painted highlights, silhouette readable at 96 pixels. Single object centered on genuinely transparent RGBA, leave generous margins.",
+      "sourceSha256": "6e58e577fe31ae2074dc3db89938ff064f7fadf3c56407aaf0e5141129efca9e",
+      "assets": {
+        "sandbox/assets/effects/indirect-fire/ballistic-missile.png": "f2f364479f880d94bdefd2c115c80cf47c842427a2e57ed4b50a3f5bb3393589"
+      }
+    }
+  ]
+}

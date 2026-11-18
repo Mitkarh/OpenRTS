@@ -1,0 +1,31 @@
+howitzer:
+  Inherits: cannon
+  Effect:
+    ProjectileTexture: res://assets/effects/indirect-fire/howitzer-shell.png
+    Size: 0.22
+    ImpactSize: 1.05
+salvo-rocket:
+  Inherits: missile
+  Effect:
+    ProjectileTexture: res://assets/effects/indirect-fire/salvo-rocket.png
+    Size: 0.30
+    SmokeSize: 0.21
+    SmokeTicks: 18
+cruise-missile:
+  Inherits: missile
+  Effect:
+    ProjectileTexture: res://assets/effects/indirect-fire/cruise-missile.png
+    Size: 0.59
+    ImpactSize: 1.3
+    SmokeSize: 0.34
+    SmokeTicks: 26
+    MountedRocket: { ChassisOffset: -0.30, TailOffset: -0.54, Height: 0.24, LaunchPitch: 18 }
+ballistic-missile:
+  Inherits: missile
+  Effect:
+    ProjectileTexture: res://assets/effects/indirect-fire/ballistic-missile.png
+    Size: 0.70
+    ImpactSize: 1.6
+    SmokeSize: 0.50
+    SmokeTicks: 31
+    MountedRocket: { TailOffset: -0.96, Height: 0.20, LaunchPitch: 82, FollowsBody: true }

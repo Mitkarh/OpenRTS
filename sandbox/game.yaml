@@ -1,13 +1,24 @@
 Version: 1
 Title: OpenRTS Sandbox
 Rules:
-  - content/units/units.yaml
+  - content/units/units-infantry.yaml
+  - content/units/units-vehicles.yaml
+  - content/units/units-aircraft.yaml
   - content/units/buildings.yaml
+  - content/units/buildings-defense.yaml
+  - content/units/buildings-civilian.yaml
+  - content/units/buildings-tech.yaml
+  - content/units/props-test.yaml
+  - content/units/props-nature.yaml
 Terrain: [content/terrain.yaml]
-Weapons: [content/weapons/weapons.yaml]
+Weapons:
+  - content/weapons/weapons.yaml
+  - content/weapons/indirect-fire.yaml
 Models:
   - content/models/models.yaml
   - content/models/buildings-models.yaml
+  - content/models/indirect-fire.yaml
 Effects:
   - content/effects.yaml
+  - content/indirect-fire-effects.yaml
 Settings: [content/settings]

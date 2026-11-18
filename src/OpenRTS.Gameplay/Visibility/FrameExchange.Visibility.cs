@@ -92,7 +92,7 @@ public sealed partial class FrameExchange
                 var w = source.Weapons[p.WeaponOffset + m];
                 weapons.Add(w with { Target = visible.Contains(w.Target) ? w.Target : default,
                     ReadyTick = mine ? w.ReadyTick : 0, BurstRemaining = mine ? w.BurstRemaining : 0, AutoCast = mine && w.AutoCast,
-                    Busy = states && w.Busy });
+                    Busy = states && w.Busy, Reloading = !states || w.Reloading, WindupEndTick = states ? w.WindupEndTick : 0 });
             }
             if ((source.PreviousObservers[i] & bit) == 0) p = p with { Previous = p.Current,
                 Presentation = p.Presentation with { PreviousBodyFacing = p.Presentation.BodyFacing, PreviousWeaponFacing = p.Presentation.WeaponFacing } };
@@ -111,7 +111,11 @@ public sealed partial class FrameExchange
         bool At(WorldPosition p) => player >= 0 && (source.FogCellSize == 0 || p.X >= 0 && p.X < source.FogWidth && p.Y >= 0 && p.Y < source.FogDepth &&
             result.FogStates[p.Y / source.FogCellSize * source.FogColumns + p.X / source.FogCellSize] == CellVisibility.Visible);
         result.Poses = poses.ToArray(); result.Count = poses.Count; result.Weapons = weapons.ToArray(); result.WeaponCount = weapons.Count;
-        result.Projectiles = source.Projectiles.Take(source.ProjectileCount).Where(p => At(p.Current)).Select(p => p with { Previous = At(p.Previous) ? p.Previous : p.Current, Projection = default, Facing = Direction(p.Facing) }).ToArray();
+        result.Projectiles = source.Projectiles.Take(source.ProjectileCount).Where(p => At(p.Current)).Select(p => p with
+        {
+            Previous = At(p.Previous) ? p.Previous : p.Current, Projection = default, Facing = Direction(p.Facing),
+            Departure = visible.Contains(p.Departure.Source) && At(p.Departure.Origin) ? p.Departure : default
+        }).ToArray();
         result.ProjectileCount = result.Projectiles.Length;
         result.Tasks = source.Tasks.Take(source.TaskCount).Where(t => own.Contains(t.Producer)).ToArray(); result.TaskCount = result.Tasks.Length;
         result.Projects = source.Projects.Take(source.ProjectCount).Where(p => p.Owner == viewer).ToArray(); result.ProjectCount = result.Projects.Length;

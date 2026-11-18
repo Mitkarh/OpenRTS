@@ -1,0 +1,26 @@
+light-infantry:
+  Inherits: rifleman
+  Body: { Kind: Circle, Radius: 160 }
+  Presentation: { Name: Пехота · радиус 160 }
+
+medium-apc:
+  Inherits: apc-mg
+  Body: { Kind: Circle, Radius: 384 }
+  Presentation: { Name: БТР · радиус 384 }
+
+large-tank:
+  Inherits: tank
+  Body: { Kind: Circle, Radius: 640 }
+  Presentation: { Name: Танк · радиус 640 }
+
+box-vehicle:
+  Inherits: tank
+  Body: { Kind: Box, HalfSize: [640, 320] }
+  Presentation: { Name: Техника · прямоугольное тело }
+
+range-target:
+  Inherits: ^unit
+  Movement: { Locomotor: tracked, Enabled: false }
+  Health: { HP: 8400, Armor: Mechanical }
+  Presentation:
+    { Animations: [idle], Model: range-target, Name: Испытательная мишень }

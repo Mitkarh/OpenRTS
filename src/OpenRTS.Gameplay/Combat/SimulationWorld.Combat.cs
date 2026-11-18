@@ -68,6 +68,7 @@ public sealed partial class SimulationWorld
         ref var source = ref _entityHandles[index];
         ref var other = ref _entityHandles[target];
         distanceSquared = ObjectGeometry.DistanceSquared(TypeOf(source), source.Get<SpatialState>().Position, TypeOf(other), other.Get<SpatialState>().Position, out var from, out var to);
+        if (weapon.HasFlightProfile) return distanceSquared <= (long)range * range;
         bool spatial = TracesCliffRelief(weapon) || (IsAircraft(source) || IsAircraft(other)) && !(weapon.Effect == WeaponEffect.Repair && TypeOf(source).Flight is { Mode: FlightMode.Hover });
         long dz = (long)from.Elevation - to.Elevation;
         return distanceSquared <= (long)range * range && (!spatial || distanceSquared + dz * dz <= (long)range * range) &&
@@ -245,7 +246,8 @@ public sealed partial class SimulationWorld
                                 }
                                 Impact(weapon, entityOwnership.Owner, hit, impactPoint, entityIdentity.Id, entityIdentity.Type, mountIndex);
                             }
-                            else Launch(origin, target, mountIndex, weapon, ground ? point : null, entityIdentity.Type, hover);
+                            else Launch(origin, target, mountIndex, weapon, ground ? point : null, entityIdentity.Type, hover,
+                                stored ? default : state.Facing);
                             if (manual && state.BurstRemaining == 0) { entityOrders.HasOrder = false; entityOrders.CombatTarget = default; entityOrders.OrderPhase = OrderPhase.Idle; }
                         }
                     }
@@ -341,7 +343,8 @@ public sealed partial class SimulationWorld
             for (int mount = 0; mount < combat.Weapons.Length; mount++)
             {
                 var state = combat.Weapons[mount];
-                destination[offset++] = new(entityIdentity.Id, mount, state.PreviousFacing, state.Facing, state.Animation, state.ReadyTick, state.BurstRemaining, state.Target, state.AutoCast, state.FireAtTick > 0 || orders.HasOrder && orders.ActiveOrder.Kind == UnitActionKind.Ability && AbilityMount(entityIdentity.Type, orders.ActiveOrder.Ability) == mount);
+                destination[offset++] = new(entityIdentity.Id, mount, state.PreviousFacing, state.Facing, state.Animation, state.ReadyTick, state.BurstRemaining, state.Target, state.AutoCast, state.FireAtTick > 0 || orders.HasOrder && orders.ActiveOrder.Kind == UnitActionKind.Ability && AbilityMount(entityIdentity.Type, orders.ActiveOrder.Ability) == mount)
+                { WindupEndTick = state.FireAtTick, Reloading = Tick < state.ReadyTick };
             }
         }
     }

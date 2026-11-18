@@ -1,0 +1,32 @@
+^nature:
+  Health: { HP: 600, Armor: Building, Destruction: Invulnerable }
+  Movement: { Enabled: false }
+  Presentation: { Animations: [idle], States: [destroyed], Selectable: false }
+
+nature-trees:
+  Inherits: ^nature
+  Footprint:
+    Rows: ["ttt", "ttt"]
+    Types: { t: { Traverse: true, Terrain: forest } }
+  Presentation: { Model: nature-trees, Name: Деревья · лес }
+
+nature-rocks:
+  Inherits: ^nature
+  Footprint:
+    Rows: ["rr", "rr"]
+    Types: { r: { Terrain: mountains } }
+  Presentation: { Model: nature-rocks, Name: Груда камней }
+
+nature-cliff:
+  Inherits: ^nature
+  Footprint:
+    Rows: [".rr", "rrr", "rr."]
+    Types: { r: { Terrain: mountains } }
+  Presentation: { Model: nature-cliff, Name: Скала · горы }
+
+nature-debris:
+  Inherits: ^nature
+  Footprint:
+    Rows: ["rrr", "rrr"]
+    Types: { r: { Traverse: false, CanStop: false } }
+  Presentation: { Model: nature-debris, Name: Обломки }

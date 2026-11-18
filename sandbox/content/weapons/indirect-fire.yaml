@@ -1,0 +1,60 @@
+howitzer:
+  Weapon:
+    Projectile: Cannon
+    Trajectory: Arc
+    TrajectoryHeight: 2304
+    Range: 12168
+    AcquireRange: 12168
+    TravelLimit: 16384
+    Speed: 280
+    SplashRadius: 768
+    Damage: 85
+    ReloadTicks: 72
+    WindupTicks: 3
+
+salvo-rocket:
+  Weapon:
+    Projectile: Missile
+    Trajectory: Ballistic
+    TrajectoryHeight: 4096
+    Homing: false
+    Range: 8168
+    AcquireRange: 8168
+    TravelLimit: 20480
+    Speed: 340
+    SplashRadius: 640
+    Burst: 4
+    BurstIntervalTicks: 4
+    ReloadTicks: 100
+    WindupTicks: 2
+    Damage: 30
+
+cruise-missile:
+  Weapon:
+    Projectile: Missile
+    Trajectory: Cruise
+    TrajectoryHeight: 1536
+    Homing: true
+    Range: 18192
+    AcquireRange: 18192
+    TravelLimit: 24576
+    Speed: 280
+    SplashRadius: 1224
+    ReloadTicks: 160
+    WindupTicks: 14
+    Damage: 220
+
+ballistic-missile:
+  Weapon:
+    Projectile: Missile
+    Trajectory: Ballistic
+    TrajectoryHeight: 5120
+    Homing: false
+    Range: 22192
+    AcquireRange: 22192
+    TravelLimit: 26672
+    Speed: 228
+    SplashRadius: 1624
+    ReloadTicks: 220
+    WindupTicks: 26
+    Damage: 265

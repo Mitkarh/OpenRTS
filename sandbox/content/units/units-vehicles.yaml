@@ -1,0 +1,221 @@
+^unit:
+  Sensors: { Signatures: [visual, radar.ground] }
+  Vision: { Radius: 6144 }
+  Buildable: { Ticks: 75, Cost: 100 }
+  Movement: { Locomotor: infantry }
+  Health: { HP: 100, Armor: Living }
+  Presentation:
+    Animations: [idle, move, fire]
+    States: [damaged]
+
+engineer:
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 3072,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
+  Inherits: ^unit
+  Builder: { Range: 1536 }
+  Actions:
+    Definitions:
+      capture: { Capture: true, Range: 1024 }
+      repair: { Mount: main, AutoCast: true }
+      build: { Build: true, AutoCast: true }
+  ActionPanel:
+    Buttons:
+      repair: { Label: Ремонт, Cursor: repair, Order: 0 }
+      capture: { Label: Захват, Cursor: capture, Order: 1 }
+      build: { Label: Помочь строить, Hotkey: P, Cursor: build, Order: 7 }
+  Movement: { Locomotor: amphibious }
+  Health: { HP: 220, Armor: Mechanical }
+  Armaments:
+    Mounts:
+      main: { Weapon: repair, Animation: repair }
+  Presentation:
+    Model: engineer
+    Animations: [idle, move, repair]
+    States: [damaged, swimming]
+    Name: Инженерная машина
+
+construction-engineer:
+  Inherits: engineer
+  Inherits@recipes: ^structure-recipes
+  Actions:
+    Definitions:
+      site-crane: { Unit: crane, OnSite: true }
+  ActionPanel:
+    Buttons:
+      site-crane: { Label: Кран, Hotkey: O, Order: 9 }
+  Presentation: { Name: Инженер }
+
+supply-truck:
+  Inherits: ^unit
+  Supply: { Role: Truck, Capacity: 800 }
+  Buildable: { Ticks: 250, Cost: 450 }
+  Movement: { Locomotor: tracked }
+  Health: { HP: 280, Armor: Mechanical }
+  Body: { Kind: Box, HalfSize: [320, 384] }
+  Actions:
+    Definitions:
+      harvest: { Harvest: true, AutoCast: true }
+  ActionPanel:
+    Buttons:
+      harvest: { Label: Добыча, Cursor: harvest }
+  Presentation:
+    Model: supply-truck
+    Name: Грузовик снабжения
+    Animations: [idle, move]
+    States: [damaged, loaded]
+
+^apc:
+  Inherits: ^unit
+  Passenger: { Type: vehicle, Slots: 6 }
+  Transport: { Accepts: [infantry], Slots: 6, UnloadDistance: 768 }
+  Movement: { Locomotor: amphibious }
+  Health: { HP: 250, Armor: Mechanical }
+  Presentation: { States: [damaged, swimming] }
+
+apc-mg:
+  Inherits: ^apc
+  Armaments:
+    Mounts:
+      main: { Weapon: rifle, FireWhileMoving: true }
+      option-rocket: { Weapon: missile, FireWhileMoving: true }
+      option-cannon: { Weapon: cannon }
+  Upgrades:
+    Variants:
+      rockets:
+        {
+          Cost: 300,
+          Ticks: 90,
+          Support: true,
+          ReplaceWeapons: true,
+          Mounts: [option-rocket],
+        }
+      cannon:
+        {
+          Cost: 450,
+          Ticks: 110,
+          Support: true,
+          ReplaceWeapons: true,
+          Mounts: [option-cannon],
+        }
+      firing-ports: { Cost: 125, Ticks: 75, Support: true, PassengerFire: true }
+  Presentation:
+    Model: apc-upgradable
+    Animations: [idle, move, fire, construct]
+    States: [damaged, swimming, rockets, cannon, firing-ports]
+    Name: БТР · пулемёт
+
+apc-rocket:
+  Inherits: ^apc
+  Transport: { FireFromInside: true }
+  Armaments:
+    Mounts:
+      main: { Weapon: missile }
+  Presentation: { Model: apc-missiles, Name: БТР · ракеты }
+
+tank:
+  Inherits: ^apc
+  -Transport:
+  Armaments:
+    Mounts:
+      main: { Weapon: cannon }
+  Movement: { Locomotor: tracked }
+  Health: { HP: 400 }
+  Presentation: { Model: tank, Name: Танк }
+
+tank-mixed:
+  Sensors:
+    Detectors:
+      [
+        {
+          Channel: radar,
+          Signature: radar.ground,
+          Range: 16384,
+          Display: Classified,
+        },
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 5120,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
+  Inherits: tank
+  Armaments:
+    Mounts:
+      main: { Weapon: rifle, Animation: fire }
+      missiles: { Weapon: missile, Animation: missiles, FireWhileMoving: true }
+  Presentation:
+    Model: tank-mixed
+    Animations: [idle, move, fire, missiles]
+    Name: Мобильный радар · пулемёт и ракеты
+
+stealth-truck:
+  Inherits: tank
+  -Armaments:
+  Health: { HP: 350, Armor: Mechanical }
+  Sensors: { JamRange: 8192, StealthRange: 6144, DeployTicks: 75 }
+  Presentation: { Model: stealth-truck, Name: Мобильный стелс-генератор }
+
+radar-buggy:
+  Inherits: ^unit
+  Armaments: { Mounts: { main: { Weapon: rifle, FireWhileMoving: true } } }
+  Health: { HP: 180, Armor: Mechanical }
+  Sensors:
+    JamRange: 4096
+    Detectors:
+      [
+        {
+          Channel: radar,
+          Signature: radar.ground,
+          Range: 18432,
+          Display: Classified,
+        },
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 5120,
+          Display: Model,
+          Counters: [stealth],
+        },
+      ]
+  Presentation: { Model: radar-buggy, Name: Багги · разведчик }
+
+howitzer:
+  Inherits: tank
+  Armaments:
+    Mounts:
+      main: { Weapon: howitzer }
+  Presentation: { Model: howitzer-carrier, Name: Самоходная гаубица }
+
+mlrs:
+  Inherits: tank
+  Armaments:
+    Mounts:
+      main: { Weapon: salvo-rocket }
+  Presentation:
+    { Model: salvo-carrier, Name: Реактивная система залпового огня }
+
+tomahawk:
+  Inherits: tank
+  Armaments:
+    Mounts:
+      main: { Weapon: cruise-missile }
+  Presentation: { Model: cruise-carrier, Name: Пусковая установка }
+
+scud:
+  Inherits: tank
+  Armaments:
+    Mounts:
+      main: { Weapon: ballistic-missile }
+  Presentation:
+    { Model: ballistic-carrier, Name: Пусковая баллистической ракеты }

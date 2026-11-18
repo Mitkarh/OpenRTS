@@ -403,7 +403,7 @@ public partial class Sandbox : Node3D
             if (_rtsOverlay is not null) _rtsOverlay.RadarStyle = _radarStyle;
             _sprites?.Apply(frame.Poses, alpha, frame.Tick, frame.TickRate, frame.Weapons, _visibleProjects, BuildingPreview() ?? UpgradePreview(), frame.Contacts, _radarStyle);
             _combatEffects?.Apply(frame.Projectiles, alpha, frame.Tick, _sprites?.FlightSurface ?? 0, PlayerFog ? frame : null,
-                reliefProjection: _rampTerrain is not null);
+                reliefProjection: _rampTerrain is not null, actors: frame.Poses, weapons: frame.Weapons, cameraBack: _camera?.Basis.Z);
             UpdateTerminal(frame, alpha);
             if (_jammingScenario && _verifySimulation && completed)
             {

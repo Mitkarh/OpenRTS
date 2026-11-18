@@ -21,10 +21,133 @@ public partial class MapAuthoringChecks : Node
             CheckDiagonalRelief();
             CheckDiagonalCliffMap();
             CheckAircraftOnReliefMaps();
+            CheckIndirectFireMap();
             GD.Print($"OPENRTS_AUTHORING_CHECKS:{_checks} passed"); GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
         finally { foreach (Node child in GetChildren()) child.Free(); }
+    }
+
+    private void CheckIndirectFireMap()
+    {
+        var root = GD.Load<PackedScene>("res://examples/maps/IndirectFire.tscn").Instantiate<OpenRtsMap2D>();
+        AddChild(root);
+        var manifest = GameManifest.Load(ProjectSettings.GlobalizePath(root.ContentManifest));
+        var catalog = manifest.LoadUnits();
+        var compiled = MapCompiler.Compile(MapSceneExtractor2D.Extract(root), catalog);
+        var map = MapCompiler.Read(new("indirect-fire", compiled.Write()), catalog).Map;
+        var players = new Dictionary<string, PlayerDefinition> { ["blue"] = new(1, "Blue"), ["red"] = new(2, "Red") };
+        using var world = map.Prepare(players).CreateWorld();
+        var effects = EffectCatalog.Load(manifest.Effects);
+        var view = new CombatEffectsView(catalog, effects);
+        AddChild(view.Node);
+        var rounds = new ProjectilePose[128];
+        var actors = new EntityPose[world.Count];
+        var mounts = new WeaponPose[world.WeaponCount];
+        var batches = view.Node.GetChildren().OfType<MultiMeshInstance3D>()
+            .Select(batch => (batch.Multimesh, Texture: (batch.Multimesh.Mesh.SurfaceGetMaterial(0) as StandardMaterial3D)?.AlbedoTexture))
+            .Where(batch => !string.IsNullOrEmpty(batch.Texture?.ResourcePath))
+            .ToDictionary(batch => batch.Texture!.ResourcePath, batch => batch.Multimesh);
+        var smoke = view.Node.GetNode<MultiMeshInstance3D>("RocketSmoke").Multimesh;
+        var kinds = new HashSet<ProjectileTrajectory>();
+        var hits = new HashSet<string>();
+        var loaded = new HashSet<string>();
+        var emptied = new HashSet<string>();
+        var departures = new HashSet<string>();
+        var raised = new Dictionary<string, (Vector3 Position, Vector3 Direction)>();
+        var pitched = new HashSet<string>();
+        int texturedBatches = 0;
+        bool descending = false;
+        for (int tick = 0; tick < 300; tick++)
+        {
+            if (tick > 0) world.Step();
+            var active = rounds.AsSpan(0, world.ProjectileCount);
+            world.CopyPoses(actors); world.CopyWeaponPoses(mounts); world.CopyProjectilePoses(active);
+            view.Apply(active, 1, world.Tick, reliefProjection: true, actors: actors, weapons: mounts);
+            foreach (var actor in actors)
+            {
+                if (actor.WeaponCount == 0) continue;
+                var weapon = catalog.Units[actor.UnitType].Weapons[0].Weapon;
+                var effect = effects.Weapons[weapon.Id];
+                if (effect.MountedRocket is null) continue;
+                var channel = mounts[actor.WeaponOffset];
+                var batch = batches[effect.ProjectileTexture!];
+                if (channel.WindupEndTick == world.Tick + 1)
+                {
+                    Check(batch.VisibleInstanceCount == 1, weapon.Id + ": ready projectile missing during windup.");
+                    raised[weapon.Id] = Instance(batch);
+                }
+                if (!channel.Reloading && channel.WindupEndTick == 0 && batch.VisibleInstanceCount == 1)
+                {
+                    Check(MathF.Abs(Instance(batch).Direction.Y) < 0.001f, weapon.Id + ": ready projectile should rest flat.");
+                    loaded.Add(weapon.Id);
+                }
+                if (channel.Reloading && batch.VisibleInstanceCount == 0) emptied.Add(weapon.Id);
+            }
+            foreach (var shot in active)
+            {
+                var weapon = catalog.Units[shot.UnitType].Weapons[shot.Mount].Weapon;
+                var effect = effects.Weapons[weapon.Id];
+                var batch = batches[effect.ProjectileTexture!];
+                if (shot.Current.Elevation > 1536) kinds.Add(weapon.Trajectory);
+                if (shot.Departure.Tick == world.Tick && effect.MountedRocket is { } mount)
+                {
+                    Check(batch.VisibleInstanceCount == 1 && raised.TryGetValue(weapon.Id, out _), weapon.Id + ": launch did not replace the mounted sprite.");
+                    var before = raised[weapon.Id]; var after = Instance(batch);
+                    Check(before.Position.DistanceTo(after.Position) < 0.001f && before.Direction.Dot(after.Direction) > 0.9999f &&
+                        Mathf.IsEqualApprox(after.Direction.Y, MathF.Sin(Mathf.DegToRad((float)mount.LaunchPitch))),
+                        weapon.Id + ": the first flying sprite must match the raised rocket.");
+                    var tail = after.Position - after.Direction * (float)effect.Size;
+                    var smokeBuffer = smoke.Buffer;
+                    bool exhaust = false;
+                    for (int i = 0; i < smoke.VisibleInstanceCount; i++)
+                    {
+                        int n = 16 * i;
+                        exhaust |= new Vector3(smokeBuffer[n + 3], smokeBuffer[n + 7], smokeBuffer[n + 11]).DistanceTo(tail) < 0.001f &&
+                            Mathf.IsEqualApprox(smokeBuffer[n], (float)effect.SmokeSize);
+                    }
+                    Check(exhaust, weapon.Id + ": smoke should originate at the rocket tail, with its own scale.");
+                    if (departures.Count == 0)
+                    {
+                        using var restored = SimulationWorld.RestoreSnapshot(world.CaptureSnapshot(), () => map.Prepare(players).CreateWorld());
+                        var restoredShots = new ProjectilePose[restored.ProjectileCount];
+                        restored.CopyProjectilePoses(restoredShots);
+                        Check(active.SequenceEqual(restoredShots), "A runtime snapshot should keep the exact launch anchor.");
+                    }
+                    departures.Add(weapon.Id);
+                }
+                if (batch.VisibleInstanceCount == 1 && shot.Previous != shot.Current &&
+                    (effect.MountedRocket is null || world.Tick - shot.Departure.Tick >= 5))
+                {
+                    var delta = new Vector3(shot.Current.X - shot.Previous.X, shot.Current.Elevation - shot.Previous.Elevation,
+                        shot.Current.Y - shot.Previous.Y).Normalized();
+                    var actual = Instance(batch).Direction;
+                    Check(actual.Dot(delta) > 0.9999f, weapon.Id + ": projectile sprite did not follow the flight tangent.");
+                    if (actual.Y > 0.1f) pitched.Add(weapon.Id);
+                    descending |= actual.Y < -0.1f;
+                }
+            }
+            foreach (var e in world.Events)
+                if (e.Kind == WorldEventKind.ProjectileImpact && e.TargetEntity != default)
+                    hits.Add(catalog.Units[e.UnitType].Weapons[e.Mount].Weapon.Id);
+            texturedBatches = Math.Max(texturedBatches, batches.Values.Count(batch => batch.VisibleInstanceCount > 0));
+        }
+        string[] launchers = ["ballistic-missile", "cruise-missile"];
+        Check(loaded.SetEquals(launchers) && departures.SetEquals(launchers) && emptied.SetEquals(launchers),
+            "Both launchers must render the loaded, launch and empty states.");
+        Check(pitched.Contains("howitzer") && pitched.Contains("ballistic-missile") && descending,
+            "Elevated flight must exercise both climbing and descending sprite pitch.");
+        Check(kinds.SetEquals([ProjectileTrajectory.Arc, ProjectileTrajectory.Ballistic, ProjectileTrajectory.Cruise]) &&
+            hits.SetEquals(["howitzer", "salvo-rocket", "ballistic-missile", "cruise-missile"]) && texturedBatches == 4,
+            $"Indirect Fire did not render and hit across the cliff with all four units. Flew {string.Join(", ", kinds)}, hit {string.Join(", ", hits)}, textured {texturedBatches}.");
+        view.Apply([], 1, world.Tick + 120);
+        Check(smoke.VisibleInstanceCount == 0, "Rocket smoke should expire after flight.");
+
+        static (Vector3 Position, Vector3 Direction) Instance(MultiMesh batch)
+        {
+            var data = batch.Buffer;
+            return (new(data[3], data[7], data[11]), -new Vector3(data[2], data[6], data[10]).Normalized());
+        }
     }
 
     private void CheckAircraftOnReliefMaps()

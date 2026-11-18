@@ -71,12 +71,13 @@ public sealed partial class SimulationWorld
     private bool TracesCliffRelief(WeaponDefinition weapon) => weapon.SpatialTrajectory && _baseGrid?.HasSurfaceCuts == true;
 
     // Ground poses give the support height. Fire from inside the existing ground hit volume.
-    private WorldPosition WeaponPoint(WorldPosition point, WeaponDefinition weapon, bool airborne = false) => !airborne && TracesCliffRelief(weapon)
+    private WorldPosition WeaponPoint(WorldPosition point, WeaponDefinition weapon, bool airborne = false) =>
+        !airborne && (weapon.HasFlightProfile || TracesCliffRelief(weapon))
         ? point with { Elevation = point.Elevation + 128 } : point;
 
     private bool SpatialTerrainClear(WorldPosition from, WorldPosition to) => SpatialTerrainHit(from, to) == 65537;
 
-    private int SpatialTerrainHit(WorldPosition from, WorldPosition to)
+    private int SpatialTerrainHit(WorldPosition from, WorldPosition to, bool profile = false)
     {
         if (_baseGrid is not { } grid) return 65537;
         int size = grid.CellSize;
@@ -87,7 +88,7 @@ public sealed partial class SimulationWorld
         long ax = Math.Abs(dx), ay = Math.Abs(dy);
         long tx = sx > 0 ? (long)(x + 1) * size - from.X : from.X - (long)x * size;
         long ty = sy > 0 ? (long)(y + 1) * size - from.Y : from.Y - (long)y * size;
-        bool relief = grid.HasSurfaceCuts;
+        bool relief = grid.HasSurfaceCuts || profile;
         int first = 65537;
         while (true)
         {
@@ -109,7 +110,24 @@ public sealed partial class SimulationWorld
             // shortcut: binary terrain blockers have a 512-unit height; author obstacle heights when a game needs tall air obstacles.
             int extra = grid.IsBlocked(cell) ? 512 : -1;
             var cut = grid.SurfaceCutAt(cell);
-            first = Math.Min(first, SpatialBoxHit(from, to, bounds, -WorldPosition.MaximumExtent, surface + extra));
+            var rise = profile ? grid.SurfaceRiseAt(cell) : default;
+            if (rise == default)
+                first = Math.Min(first, SpatialBoxHit(from, to, bounds, -WorldPosition.MaximumExtent, surface + extra));
+            else
+            {
+                int low = 0, high = Math.Min(first, 65536);
+                if (ClipAxis(from.X, dx, bounds.MinX, bounds.MaxX, ref low, ref high) &&
+                    ClipAxis(from.Y, dy, bounds.MinY, bounds.MaxY, ref low, ref high))
+                {
+                    long start = AbovePlane(from), end = AbovePlane(to);
+                    if (AtMost(start, end - start, 2L * size * extra, ref low, ref high))
+                        first = Math.Min(first, low);
+                }
+
+                long AbovePlane(WorldPosition point) => 2L * size * (point.Elevation - (long)surface)
+                    - (2L * (point.X - bounds.MinX) - size) * rise.X
+                    - (2L * (point.Y - bounds.MinY) - size) * rise.Y;
+            }
             if (cut.UpperElevation > surface && cut.UpperCorner != SurfaceCorner.None)
             {
                 // The low slab covers the square. Only the upper triangle adds rock above it.
@@ -125,6 +143,61 @@ public sealed partial class SimulationWorld
             }
             foreach (int obstacle in grid.ObstaclesAt(cell))
                 first = Math.Min(first, SpatialBoxHit(from, to, grid.Obstacle(obstacle), surface, surface + 512));
+        }
+    }
+
+    private static bool AtMost(long start, long delta, long ceiling, ref int low, ref int high)
+    {
+        Int128 distance = ((Int128)ceiling - start) * 65536;
+        if (delta >= 0)
+        {
+            if (distance < (Int128)delta * low) return false;
+            if (delta > 0 && distance < (Int128)delta * high) high = (int)(distance / delta);
+            return true;
+        }
+        if (distance < (Int128)delta * high) return false;
+        if (distance < (Int128)delta * low) low = (int)((-distance - delta - 1) / -delta);
+        return true;
+    }
+
+    private WorldPosition ProfileStep(in ProjectileState shot, int budget)
+    {
+        var weapon = shot.Weapon;
+        int duration = Math.Max(4, (shot.InitialDistance + weapon.ProjectileSpeed - 1) / weapon.ProjectileSpeed);
+        int age = (int)Math.Min(Tick - shot.BornTick, duration);
+        int remainingTicks = duration - age + 1;
+        ulong squared = (ulong)DistanceSquared(shot.Position, shot.Destination);
+        int distance = (int)SquareRoot(squared);
+        if ((ulong)((long)distance * distance) < squared) distance++;
+        int horizontal = Math.Min(weapon.ProjectileSpeed, (distance + remainingTicks - 1) / remainingTicks);
+        var next = StepTowards(shot.Position, shot.Destination, horizontal);
+        const long one = 65536;
+        long t = age * one / duration;
+        long height = weapon.TrajectoryHeight;
+        long baseline = shot.LaunchElevation + (shot.Destination.Elevation - (long)shot.LaunchElevation) * t / one;
+        long elevation = weapon.Trajectory switch
+        {
+            ProjectileTrajectory.Arc => baseline + 4 * height * t * (one - t) / (one * one),
+            ProjectileTrajectory.Ballistic => baseline + BallisticLift(t, height),
+            ProjectileTrajectory.Cruise => CruiseHeight(t, shot.LaunchElevation, shot.Destination.Elevation, height),
+            _ => throw new InvalidOperationException("Expected a flight profile.")
+        };
+        return SpatialStep(shot.Position, next with { Elevation = (int)elevation }, budget);
+
+        static long BallisticLift(long t, long height)
+        {
+            long side = t <= one / 3 ? one / 3 : one - one / 3;
+            long toApex = t - one / 3;
+            return height - height * toApex * toApex / (side * side);
+        }
+
+        static long CruiseHeight(long t, int from, int to, long height)
+        {
+            long shelf = Math.Max(from, to) + height;
+            long leg = one / 5;
+            if (t < leg) return from + (shelf - from) * t / leg;
+            if (t > one - leg) return to + (shelf - to) * (one - t) / leg;
+            return shelf;
         }
     }
 }

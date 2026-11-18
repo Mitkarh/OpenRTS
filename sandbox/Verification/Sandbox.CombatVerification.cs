@@ -21,6 +21,7 @@ public partial class Sandbox
         _camera.Position = new(20, 40, 14); _camera.Size = 21;
         _selectionRing!.Visible = true;
         _combatEffects!.Clear();
+        int effectBatches = _combatEffects.Node.GetChildCount();
         try
         {
             for (int tick = 1; tick <= 40; tick++)
@@ -55,7 +56,10 @@ public partial class Sandbox
                     if (!Mathf.IsEqualApprox(turret[0], MathF.Cos(angle) * 2) || !Mathf.IsEqualApprox(turret[8], MathF.Sin(angle) * 2))
                         throw new InvalidOperationException("Moving turret did not use its mount's target facing.");
                 }
-                if (tick == 18 && (_combatEffects.ProjectileCount < 2 || _combatEffects.Node.GetChildCount() != 3)) throw new InvalidOperationException("Projectile batches missing or per-shot nodes created.");
+                if (tick == 18 && (_combatEffects.ProjectileCount < 2 || _combatEffects.Node.GetChildCount() != effectBatches ||
+                    !_combatEffects.Node.GetChildren().OfType<MultiMeshInstance3D>().Any(batch =>
+                        batch.Multimesh.Mesh is PlaneMesh && batch.Multimesh.VisibleInstanceCount > 0)))
+                    throw new InvalidOperationException("Projectile sprite batches missing or per-shot nodes created.");
                 if (tick == 36)
                 {
                     var tracers = _combatEffects.Node.GetNode<MultiMeshInstance3D>("Tracers").Multimesh;
@@ -86,7 +90,7 @@ public partial class Sandbox
                 }
             }
             if (!firedMain || !firedRocket || !repaired || !exploded) throw new InvalidOperationException($"Combat presentation scenario incomplete: {firedMain}/{firedRocket}/{repaired}/{exploded}.");
-            GD.Print("OPENRTS_COMBAT_PRESENTATION:PASS independent weapons, projectiles, impacts, repair action/cursor and three batched effect nodes");
+            GD.Print("OPENRTS_COMBAT_PRESENTATION:PASS independent weapons, batched projectile sprites, impacts and repair action/cursor");
         }
         finally
         {
