@@ -47,7 +47,7 @@ public partial class Sandbox
                 string armor = type.Armor switch { ArmorKind.Living => "живой", ArmorKind.Mechanical => "техника", _ => "здание" };
                 string movement = type.Movable ? $"скорость {type.Locomotor.Rules[terrain].Speed * 100.0 / 1024:0.#}%" : "неподвижный";
                 selection += $"\nHP {pose.Health}/{type.MaxHealth} · {armor} · {phase} · приказы в очереди {pose.Order.QueuedCount}\nГрунт: {ground} · {movement}";
-                if (_ramps) selection += $" · высота {pose.Current.Elevation / 1024f:0.00}";
+                if (_rampTerrain is not null) selection += $" · высота {pose.Current.Elevation / 1024f:0.00}";
             }
             if (type.TaskQueues.Count > 0) selection += $"\nПроизводство: {_displayTasks.Take(_displayTaskCount).Count(t => t.Producer == pose.Id)} задач · {type.TaskQueues.Count} очередей";
             selection += "\n" + string.Join(" · ", type.Weapons.Select(m => $"{WeaponName(m.Weapon.Id)} ({m.Weapon.Range / 1024.0:0.#})"));
@@ -56,7 +56,7 @@ public partial class Sandbox
             for (int i = 0; i < type.States.Count; i++) if ((pose.Presentation.States & (1u << i)) != 0)
                 selection += type.States[i] switch { "damaged" => " · повреждён", "working" => " · работает", "destroyed" => " · уничтожен", "swimming" => " · в воде", _ => " · " + type.States[i] };
         }
-        return $"OPENRTS  /  {(_ramps ? "СКАЛИСТЫЙ ПЕРЕВАЛ" : _buildings ? "ПРОИЗВОДСТВО И ЗДАНИЯ" : "ПОЛИГОН")}\n\n{selection}\n{_displayCount} объектов · тик {tick} · ×{_playbackSpeed:0.###}{(_paused ? " · ПАУЗА" : "")}" +
+        return $"OPENRTS  /  {(_rampTerrain is not null ? "РЕЛЬЕФ" : _buildings ? "ПРОИЗВОДСТВО И ЗДАНИЯ" : "ПОЛИГОН")}\n\n{selection}\n{_displayCount} объектов · тик {tick} · ×{_playbackSpeed:0.###}{(_paused ? " · ПАУЗА" : "")}" +
             (_notice.Length == 0 ? "" : "\n" + _notice);
     }
     private static string WeaponName(string id) => id switch { "rifle" => "автомат", "cannon" => "пушка", "missile" => "ракеты", "grenade" => "граната", "repair" => "ремонт", _ => id };

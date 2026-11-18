@@ -55,7 +55,9 @@ public sealed class TerrainLayout
         }
     }
 
-    public NavigationGrid CreateGrid() => new(Width, Height, terrain: _terrain);
+    public NavigationGrid CreateGrid() => CreateGrid(null);
+    internal NavigationGrid CreateGrid(IReadOnlyList<MapSurfaceCell>? surface) =>
+        new(Width, Height, terrain: _terrain, surface: surface?.Select(cell => cell.Sample), rises: surface?.Select(cell => cell.Rise));
     public byte TerrainAt(int x, int y) => _terrain[Index(x, y)];
     public string VisualAt(int x, int y) => _visual[Index(x, y)];
     public string[] VisualIds() => _visual.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();

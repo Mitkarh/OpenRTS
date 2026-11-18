@@ -64,7 +64,9 @@ public partial class Sandbox
             if (_reachedPlateau && scout.Current == RampScenario.LowGoal)
             {
                 Require(_descendedRamp, "The scout did not descend the ramp.");
-                using var replay = _rampScenario!.CreateWorld(1);
+                using var replay = _mapMatch is { } match
+                    ? match.CreateWorld(new(), speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, tickRate: _manifest.Settings.Simulation.TickRate)
+                    : _rampScenario!.CreateWorld(1);
                 var log = session.GetCommandLog();
                 int begin = 0;
                 for (long tick = 1; tick <= frame.Tick; tick++)

@@ -8,6 +8,7 @@ public partial class OpenRtsMapObject2D : Marker2D
     [Export] public string ObjectId { get; set; } = "";
     [Export] public int Order { get; set; }
     [Export] public string TypeId { get; set; } = "rifleman";
+    [Export] public string OwnerSlot { get; set; } = "neutral";
 
     [ExportGroup("Initial Properties")]
     [Export(PropertyHint.Enum, "North,East,South,West")] public int QuarterTurns { get; set; }

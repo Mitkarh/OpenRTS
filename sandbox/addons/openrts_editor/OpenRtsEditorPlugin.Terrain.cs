@@ -257,14 +257,15 @@ public partial class OpenRtsEditorPlugin
     }
     internal void SelectErrorSource()
     {
-        if (_lastError is null) return;
+        if (_lastError is null || EditorInterface.Singleton.GetEditedSceneRoot() is not { } root) return;
         string message = _lastError.Message;
         int start = message.IndexOf("::", StringComparison.Ordinal), end = message.IndexOf(":1:1", Math.Max(0, start), StringComparison.Ordinal);
-        if (start >= 0 && end > start && Root().GetNodeOrNull<Node>(message[(start + 2)..end]) is { } node) { SelectNode(node); return; }
-        foreach (var stroke in Root().TerrainStrokes)
-            if (!string.IsNullOrEmpty(stroke.StrokeId) && message.Contains("TerrainStrokes." + stroke.StrokeId, StringComparison.Ordinal))
-            { EditorInterface.Singleton.EditResource(stroke); return; }
-        SelectNode(Root());
+        if (start >= 0 && end > start && root.GetNodeOrNull<Node>(message[(start + 2)..end]) is { } node) { SelectNode(node); return; }
+        if (root is OpenRtsMap map)
+            foreach (var stroke in map.TerrainStrokes)
+                if (!string.IsNullOrEmpty(stroke.StrokeId) && message.Contains("TerrainStrokes." + stroke.StrokeId, StringComparison.Ordinal))
+                { EditorInterface.Singleton.EditResource(stroke); return; }
+        SelectNode(root);
     }
     private void UpdateDetails()
     {
@@ -279,11 +280,19 @@ public partial class OpenRtsEditorPlugin
         _details.Text = $"{unit.Id}{variant} · HP {initial}/{maximum}\nModel: {_previewCatalog.Presentations[index].Model}\nBody: {unit.Body.Kind} {unit.Body.HalfWidth}×{unit.Body.HalfHeight}\nFootprint: {unit.Footprint?.Cells.Count ?? 0} cells";
     }
 
-    internal static void ValidateObjects(MapSource source, UnitCatalog catalog)
+    internal static void ValidateObjects(MapSource source, UnitCatalog catalog) =>
+        ValidateObjects(MapCompiler.Compile(source, catalog), catalog, default);
+
+    private static void ValidateObjects(CompiledMap compiled, UnitCatalog catalog, CancellationToken stop)
     {
-        var fixture = new MapSource(source.Id, false, source.Width, source.Height, source.Terrain, source.Visual,
-            source.IsSkirmish ? [] : source.Slots.Select(slot => new MapSlotSource(slot.Id)).ToArray(), source.Objects);
-        var map = MapCompiler.Compile(fixture, catalog).Map;
+        var source = compiled.Source;
+        var map = compiled.Map;
+        if (source.IsSkirmish)
+        {
+            var fixture = new MapSource(source.Id, false, source.Width, source.Height, source.Terrain, source.Visual,
+                [], source.Objects, source.CellSize, source.Origin, source.Surface);
+            map = MapCompiler.Compile(fixture, catalog, stop).Map;
+        }
         var players = map.Slots.Select((id, i) => (id, player: new PlayerDefinition((uint)i + 1, id))).ToDictionary(p => p.id, p => p.player);
         using var world = map.Prepare(players).CreateWorld();
     }

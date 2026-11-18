@@ -15,12 +15,14 @@ public partial class Sandbox
         return UnitCatalog.Load(_manifest.Rules.Append(ReadFile("res://content/ramp-units.yaml")), locomotion, weapons);
     }
 
-    private void AddRampTerrain()
+    private void AddRampTerrain(NavigationGrid grid, GameMap? map, Func<string, Texture2D> textureFor)
     {
-        Texture2D Tile(string name) => GD.Load<Texture2D>($"res://assets/terrain/{name}.png")
-            ?? throw new InvalidOperationException($"Missing terrain texture: {name}");
-        _rampTerrain = new(_rampScenario!.Grid, Tile("grass"), Tile("rock-ramp"), Tile("cliff-face"));
-        AddChild(new MeshInstance3D { Name = "RockyPass", Mesh = _rampTerrain.Mesh });
+        var covers = (map?.VisualIds ?? ["grass", "rock-ramp"]).ToDictionary(id => id, textureFor, StringComparer.Ordinal);
+        var cliff = GD.Load<Texture2D>("res://assets/terrain/cliff-face.png")
+            ?? throw new InvalidOperationException("Missing terrain texture: cliff-face");
+        _rampTerrain = new(grid, (x, y) => covers[map?.VisualAt(x, y) ??
+            (grid.SurfaceRiseAt(grid.Index(new(x, y))) == default ? "grass" : "rock-ramp")], cliff);
+        AddChild(new MeshInstance3D { Name = "RaisedTerrain", Mesh = _rampTerrain.Mesh });
     }
 
     private WorldPosition? RampPick(Vector2 pixel) =>

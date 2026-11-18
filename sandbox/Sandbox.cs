@@ -66,12 +66,8 @@ public partial class Sandbox : Node3D
             {
                 if (arg == "--jamming") { _jammingScenario = _fogScenario = _buildings = _showcase = true; continue; }
                 if (arg == "--verify") continue;
-                if (arg is "--ramps" or "--verify-ramps")
-                {
-                    _ramps = _showcase = true;
-                    if (arg == "--verify-ramps") _verifyRamps = _paused = true;
-                    continue;
-                }
+                if (arg == "--ramps") { _ramps = _showcase = true; continue; }
+                if (arg == "--verify-ramps") { _verifyRamps = _paused = true; continue; }
                 if (arg.StartsWith("--directory-test=", StringComparison.Ordinal)) { _networkVerifyDirectoryUrl = arg[17..]; continue; }
                 if (arg.StartsWith("--verify-network=", StringComparison.Ordinal)) { _verifyNetwork = true; _networkVerifyRole = arg[17..]; continue; }
                 if (arg.StartsWith("--network-port=", StringComparison.Ordinal)) { _networkVerifyPort = int.Parse(arg[15..]); continue; }
@@ -126,6 +122,7 @@ public partial class Sandbox : Node3D
                 if (arg.StartsWith("--workers=", StringComparison.Ordinal) && int.TryParse(arg[10..], out value) && value is >= 1 and <= 64) { _workers = value; continue; }
                 throw new ArgumentException("Параметры: --ramps, --verify-ramps, --mod=path, --sensors, --fog, --fog-hold=0..250, --skirmish, --verify-match-setup, --verify-ai-match, --ai-profile=id, --map=path, --start-set=path, --buildings, --verify-buildings, --verify-actions, --verify-production, --showcase, --verify-presentation, --capture=path, --verify, --verify-simulation, --verify-controls, --realtime, --navigation, --workers=1..64, --reverse-jobs, --count=1..1000000 (лимит диагностического стенда), --ticks=1..1000000, --fps=1..240.");
             }
+            if (_verifyRamps && mapPath is null) _ramps = _showcase = true;
             if (mapPath is not null && (_showcase || _navigation || _verifyControls || verify))
                 throw new ArgumentException("--map выбирает отдельный сценарий.");
             if (_ramps && (_buildings || _skirmish || _navigation || _fogScenario || _verifySimulation || _verifyControls || verify))
@@ -186,6 +183,9 @@ public partial class Sandbox : Node3D
                     : mapPath == AviationScenario.Map ? AviationScenario.Load(_catalog, ReadMapSource) : MapScenario.Load(_catalog, ReadMapSource, mapPath ?? _manifest.Settings.Match.DefaultMap, startSetPath, _manifest.Settings.Match.DefaultStartSet);
                 if (_sensorScenario) _matchFogMode = OpenRTS.Core.Visibility.FogMode.Hidden;
                 _skirmish = _mapMatch.Map.IsSkirmish || mapPath == AviationScenario.Map;
+                if (_mapMatch.Map.Grid.HasSurface && !_skirmish) _buildings = false;
+                if (_verifyRamps && !_mapMatch.Map.Grid.HasSlopedSurface)
+                    throw new ArgumentException("--verify-ramps requires a reference map with ramps.");
             }
             if (_showcase) _count = _mapMatch?.UnitCount ?? (_ramps ? RampScenario.UnitCount : _buildings ? BuildingScenario.UnitCount : ShowcaseScenario.UnitCount);
             if (verify)
@@ -224,13 +224,14 @@ public partial class Sandbox : Node3D
             Texture2D TextureFor(string id) => entry is not null && entry.VisualTextures.TryGetValue(id, out var texture) && texture is not null
                 ? texture : GD.Load<Texture2D>("res://resources/terrain/" + id + ".tres");
             var map = _mapMatch?.Map;
-            var view = _ramps || entry?.DrawCompiledTerrain == false ? null : map is not null
+            var grid = _rampScenario?.Grid ?? map?.Grid;
+            if (grid?.HasSurface == true) AddRampTerrain(grid, map, TextureFor);
+            var view = _rampTerrain is not null || entry?.DrawCompiledTerrain == false ? null : map is not null
                 ? new TerrainView(map.Grid.Width, map.Grid.Height, 1, map.VisualIds, map.VisualAt, TextureFor)
                 : new TerrainView(_buildings ? BuildingScenario.Width : ShowcaseScenario.Width,
                     _buildings ? BuildingScenario.Height : ShowcaseScenario.Height, _buildings ? 1 : ShowcaseScenario.TileSize,
                     ShowcaseScenario.TerrainIds, _buildings ? BuildingScenario.TerrainAt : ShowcaseScenario.TerrainAt, TextureFor);
             if (view is not null) AddChild(view.Node);
-            if (_ramps) AddRampTerrain();
             AddChild(_sprites.Node);
             if (PlayerFog) { _fogView = new(); AddChild(_fogView.Node); }
             CreateSelectionRing();
@@ -643,14 +644,14 @@ public partial class Sandbox : Node3D
         var camera = new Camera3D
         {
             Projection = Camera3D.ProjectionType.Orthogonal,
-            Size = _ramps ? 26 : _skirmish ? 24 : _mapMatch is not null ? side * 1.18f : _buildings ? 64 : _showcase ? 28 : side * 1.18f,
+            Size = _rampTerrain is not null ? side * (26f / 32f) : _skirmish ? 24 : _mapMatch is not null ? side * 1.18f : _buildings ? 64 : _showcase ? 28 : side * 1.18f,
             Position = center + new Vector3(0, side, 0),
             Far = side * 4,
             Current = true
         };
         AddChild(camera);
-        camera.RotationDegrees = _ramps ? new(-53, -18, 0) : new(-90, 0, 0);
-        if (_ramps)
+        camera.RotationDegrees = _rampTerrain is not null ? new(-53, -18, 0) : new(-90, 0, 0);
+        if (_rampTerrain is not null)
         {
             camera.Position = center + new Vector3(0, 1, 4.1f) + camera.Basis.Z * side;
             // Move the existing overlay lift along the view ray so height does not shift its screen position.

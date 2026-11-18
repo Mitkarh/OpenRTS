@@ -67,6 +67,33 @@ internal static class MapCompilationChecks
             NavigationChecks.Reject<ContentException>(() => MapCompiler.Read(new("v2 bad effective fingerprint", bad.ToJsonString()), catalog));
         });
 
+        test("Maps compiled: v3 derives exact start and object heights from canonical relief", () =>
+        {
+            var grass = new MapLayer(["grass"], new int[64]);
+            var cells = Enumerable.Range(0, 64).Select(i => new MapSurfaceCell(1920 - i / 8 * 256, RiseY: -256)).ToArray();
+            MapSource Source(MapSurfaceCell[] surface) => new("relief", true, 8, 8, grass, grass,
+                [new("west", new(1536, 1792))], [new("scout", "rifleman", new(5632, 2432), "neutral", InitialHealth: 35)], surface: surface);
+            var compiled = MapCompiler.Compile(MapSource.Read(new("relief", Source(cells).Write())), catalog);
+            var restored = MapCompiler.Read(new("relief artifact", compiled.Write()), catalog);
+            var set = StartingSet.Load(new("relief starts",
+                "version: 1\nid: scout\ncredits: 0\nunits: [{ type: rifleman, offset: [0, 512] }]"));
+            using var world = restored.Map.Prepare(new Dictionary<string, PlayerDefinition> { ["west"] = new(1, "West") }, set).CreateWorld();
+            var poses = new EntityPose[2];
+            world.CopyPoses(poses);
+            NavigationChecks.Check(restored.Source.Surface!.SequenceEqual(cells) &&
+                restored.Map.StartPosition("west") == new WorldPosition(1536, 1792, 1600) &&
+                poses[0].Current == new WorldPosition(1536, 2304, 1472) &&
+                poses[1].Current == new WorldPosition(5632, 2432, 1440) && poses[1].Health == 35,
+                "Surface, exact start offsets or v2-compatible initial HP were lost.");
+
+            var tampered = JsonNode.Parse(compiled.Write())!;
+            tampered["map"]!["surface"]![0]![0] = 1921;
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Read(new("tampered surface", tampered.ToJsonString()), catalog));
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(cells[..^1]), catalog));
+            cells[0] = new(0, RiseX: 256, RiseY: 256);
+            NavigationChecks.Reject<ContentException>(() => MapCompiler.Compile(Source(cells), catalog));
+        });
+
         test("Maps compiled: independent input and artifact preserve exact world and every journal hash", () =>
         {
             var baseline = JsonNode.Parse(File.ReadAllText("docs/verification/047-map-compilation/baseline.json"))!;

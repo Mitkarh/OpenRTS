@@ -11,44 +11,63 @@ internal sealed class TerrainSurface
     private readonly Face[] _faces;
     public ArrayMesh Mesh { get; }
 
-    public TerrainSurface(NavigationGrid grid, Texture2D? ground = null, Texture2D? ramp = null, Texture2D? cliff = null)
+    public TerrainSurface(NavigationGrid grid, Func<int, int, Texture2D>? textureAt = null, Texture2D? cliff = null)
     {
         _grid = grid;
         int size = grid.CellSize;
         var faces = new List<Face>(2 * grid.CellCount);
-        using var deck = Builder(ground);
-        using var slopes = Builder(ramp);
-        using var walls = Builder(cliff);
-        bool hasDeck = false, hasRamps = false, hasWalls = false;
-        for (int y = 0; y < grid.Height; y++)
-            for (int x = 0; x < grid.Width; x++)
-            {
-                int cell = grid.Index(new(x, y)), left = x * size, top = y * size, right = left + size, bottom = top + size;
-                var a = Vertex(cell, left, top);
-                var b = Vertex(cell, right, top);
-                var c = Vertex(cell, left, bottom);
-                var d = Vertex(cell, right, bottom);
-                bool rising = grid.SurfaceRiseAt(cell) != default;
-                bool raised = grid.SurfaceAt(cell).Elevation > 0;
-                var color = ground is null ? rising ? new Color("#64854c") : raised ? new Color("#527256") : new Color("#394950") :
-                    raised && !rising ? new Color("#c3cdaf") : Colors.White;
-                var surface = rising && ramp is not null ? slopes : deck;
-                hasDeck |= surface == deck;
-                hasRamps |= surface == slopes;
-                Add(surface, a, b, c, cell, color);
-                Add(surface, b, d, c, cell, color);
-                if (x + 1 < grid.Width)
-                    AddCliff(b, d, Vertex(cell + 1, right, top), Vertex(cell + 1, right, bottom));
-                if (y + 1 < grid.Height)
-                    AddCliff(c, d, Vertex(cell + grid.Width, left, bottom), Vertex(cell + grid.Width, right, bottom));
-            }
+        using var untextured = Builder(null);
+        var builders = new Dictionary<Texture2D, SurfaceTool>();
+        bool hasUntextured = false;
         Mesh = new ArrayMesh();
-        if (hasDeck) Finish(deck);
-        if (hasRamps) Finish(slopes);
-        if (hasWalls) Finish(walls);
+        try
+        {
+            for (int y = 0; y < grid.Height; y++)
+                for (int x = 0; x < grid.Width; x++)
+                {
+                    int cell = grid.Index(new(x, y)), left = x * size, top = y * size, right = left + size, bottom = top + size;
+                    var a = Vertex(cell, left, top);
+                    var b = Vertex(cell, right, top);
+                    var c = Vertex(cell, left, bottom);
+                    var d = Vertex(cell, right, bottom);
+                    bool rising = grid.SurfaceRiseAt(cell) != default;
+                    bool raised = grid.SurfaceAt(cell).Elevation > 0;
+                    var texture = textureAt?.Invoke(x, y);
+                    var color = texture is null ? rising ? new Color("#64854c") : raised ? new Color("#527256") : new Color("#394950") :
+                        raised && !rising ? new Color("#c3cdaf") : Colors.White;
+                    var surface = Surface(texture);
+                    Add(surface, a, b, c, cell, color);
+                    Add(surface, b, d, c, cell, color);
+                    if (x + 1 < grid.Width)
+                        AddCliff(b, d, Vertex(cell + 1, right, top), Vertex(cell + 1, right, bottom));
+                    if (y + 1 < grid.Height)
+                        AddCliff(c, d, Vertex(cell + grid.Width, left, bottom), Vertex(cell + grid.Width, right, bottom));
+                }
+            if (hasUntextured) Finish(untextured);
+            foreach (var builder in builders.Values) Finish(builder);
+        }
+        finally
+        {
+            foreach (var builder in builders.Values) builder.Dispose();
+        }
         _faces = faces.ToArray();
 
         Vector3 Vertex(int cell, int x, int y) => new Vector3(x, grid.SurfaceElevationAt(cell, x, y), y) / WorldPosition.UnitsPerCell;
+
+        SurfaceTool Surface(Texture2D? texture)
+        {
+            if (texture is null)
+            {
+                hasUntextured = true;
+                return untextured;
+            }
+            if (!builders.TryGetValue(texture, out var builder))
+            {
+                builder = Builder(texture);
+                builders.Add(texture, builder);
+            }
+            return builder;
+        }
 
         void Finish(SurfaceTool builder)
         {
@@ -76,9 +95,7 @@ internal sealed class TerrainSurface
         {
             float start = a.Y - c.Y, end = b.Y - d.Y;
             if (start == 0 && end == 0) return;
-            var surface = cliff is null ? deck : walls;
-            hasDeck |= surface == deck;
-            hasWalls |= surface == walls;
+            var surface = Surface(cliff);
             bool alongX = a.X != b.X;
             var rock = cliff is null ? new Color("#a47351") : alongX ? new Color("#e3d6c3") : new Color("#b9b6ac");
             if (start * end < 0)
@@ -97,6 +114,15 @@ internal sealed class TerrainSurface
 
     private static SurfaceTool Builder(Texture2D? texture)
     {
+        if (texture is AtlasTexture atlas)
+        {
+            if (atlas.Region.Size == Vector2.Zero && atlas.Margin == default) texture = atlas.Atlas;
+            else
+            {
+                using var image = atlas.GetImage();
+                texture = ImageTexture.CreateFromImage(image);
+            }
+        }
         var builder = new SurfaceTool();
         builder.Begin(global::Godot.Mesh.PrimitiveType.Triangles);
         builder.SetSmoothGroup(uint.MaxValue);

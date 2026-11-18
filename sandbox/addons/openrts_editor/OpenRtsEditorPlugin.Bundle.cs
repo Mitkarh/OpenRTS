@@ -49,10 +49,10 @@ public partial class OpenRtsEditorPlugin
         return manifest;
     }
 
-    private static void PlayBundle(string manifest, string mod)
+    private static void PlayMap(string map, string mod)
     {
         int process = OS.CreateProcess(OS.GetExecutablePath(),
-            ["--path", ProjectSettings.GlobalizePath("res://"), "res://Main.tscn", "--", "--map=" + manifest, "--mod=" + mod]);
+            ["--path", ProjectSettings.GlobalizePath("res://"), "res://Main.tscn", "--", "--map=" + map, "--mod=" + mod]);
         if (process <= 0) throw new IOException("Godot could not start the map player.");
     }
 

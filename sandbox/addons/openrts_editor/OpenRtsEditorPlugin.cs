@@ -34,7 +34,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         Button("Extract source", () => _ = BuildAsync(sourceOnly: true));
         Button("Compile map", () => _ = BuildAsync());
         Button("Build scene-map bundle", () => _ = BuildAsync(bundle: true));
-        Button("Build and play map", () => _ = BuildAsync(bundle: true, play: true));
+        Button("Build and play map", () => _ = BuildAsync(play: true));
         Button("Cancel compilation", () => Invalidate("Cancelled; previous file retained."));
         _status = new Label { Text = "Open a map scene, or create an empty scene.", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _dock.AddChild(_status);
@@ -197,7 +197,8 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
             if (root is null && map2D is null)
                 throw new ArgumentException("Open an OpenRtsMap or OpenRtsMap2D scene to compile it.");
             if (bundle && root is null)
-                throw new ArgumentException("The 2D pilot supports Extract source and Compile map.");
+                throw new ArgumentException("Use Build and play map to launch a 2D scene's compiled map.");
+            bundle |= play && root is not null;
 
             string OutputPath() => root?.CompiledPath ?? map2D!.CompiledPath;
             string ContentPath() => root?.ContentManifest ?? map2D!.ContentManifest;
@@ -216,7 +217,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
             var compiled = await Task.Run(() =>
             {
                 var result = MapCompiler.Compile(source, catalog, stop.Token);
-                if (!sourceOnly) ValidateObjects(source, catalog);
+                if (!sourceOnly) ValidateObjects(result, catalog, stop.Token);
                 stop.Token.ThrowIfCancellationRequested(); return result;
             }, stop.Token);
             stop.Token.ThrowIfCancellationRequested();
@@ -233,9 +234,9 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
             else if (dependencies is not null)
             {
                 output = PublishBundle(root!, output, compiled, dependencies, stop.Token);
-                if (play) PlayBundle(ProjectSettings.LocalizePath(output), contentPath);
             }
             else MapCompiler.Save(compiled, output, stop.Token);
+            if (play) PlayMap(ProjectSettings.LocalizePath(output), contentPath);
             _status.Text = $"{(sourceOnly ? "Extracted" : "Compiled")} {compiled.Map.Id}\n{compiled.Source.Objects.Count} objects, {compiled.Source.Slots.Count} slots\n{ProjectSettings.LocalizePath(output)}\n{(sourceOnly ? "Structural validation only." : "Placed objects validated; starting armies are checked at match creation.")}";
             if (saveScene) EditorInterface.Singleton.GetResourceFilesystem().Scan();
         }

@@ -35,6 +35,16 @@ internal static class MapSceneExtractor2D
         var visual = new Dictionary<string, int>(StringComparer.Ordinal);
         var groundCells = new int[size.X * size.Y];
         var visualCells = new int[groundCells.Length];
+        int elevationLayer = tiles.GetCustomDataLayerByName("Elevation");
+        int riseLayer = tiles.GetCustomDataLayerByName("Rise");
+        MapSurfaceCell[]? surface = null;
+        if (elevationLayer >= 0 || riseLayer >= 0)
+        {
+            if (elevationLayer < 0 || riseLayer < 0 || tiles.GetCustomDataLayerType(elevationLayer) != Variant.Type.Int ||
+                tiles.GetCustomDataLayerType(riseLayer) != Variant.Type.Vector2I)
+                throw Error(layer, "TileSet", "A relief TileSet requires integer Elevation and Vector2i Rise custom data.");
+            surface = new MapSurfaceCell[groundCells.Length];
+        }
         int ReadId(TileData tile, Vector2I cell, string field, Dictionary<string, int> palette)
         {
             Variant value = tile.GetCustomData(field);
@@ -54,6 +64,17 @@ internal static class MapSceneExtractor2D
             var tile = layer.GetCellTileData(cell) ?? throw Error(layer, $"cell {cell}", "Every map cell needs an atlas tile.");
             groundCells[i] = ReadId(tile, cell, "TerrainId", terrain);
             visualCells[i] = ReadId(tile, cell, "VisualId", visual);
+            if (surface is not null)
+            {
+                long elevation = tile.GetCustomData("Elevation").AsInt64();
+                var rise = tile.GetCustomData("Rise").AsVector2I();
+                const long transform = TileSetAtlasSource.TransformFlipH | TileSetAtlasSource.TransformFlipV | TileSetAtlasSource.TransformTranspose;
+                if (rise != default && ((layer.GetCellAlternativeTile(cell) & transform) != 0 || tile.FlipH || tile.FlipV || tile.Transpose))
+                    throw Error(layer, $"cell {cell}.Rise", "Use an explicit ramp tile for each direction instead of flipping or transposing it.");
+                if (elevation is < int.MinValue or > int.MaxValue)
+                    throw Error(layer, $"cell {cell}.Elevation", "Expected an Int32 height.");
+                surface[i] = new((int)elevation, rise.X, rise.Y);
+            }
         }
 
         // Godot addresses tile centers. Simulation cell coordinates start at the corner of cell (0, 0).
@@ -89,11 +110,12 @@ internal static class MapSceneExtractor2D
             switch (marker)
             {
                 case OpenRtsMapStart2D start:
+                    if (!root.IsSkirmish) throw Error(start, "Start", "Fixture maps use FixtureSlots instead of start markers.");
                     slots.Add(new(start.StartId, Position(start), start.Reverse));
                     break;
                 case OpenRtsMapObject2D obj:
                     var variant = obj.HealthVariant;
-                    var entry = new MapObjectSource(obj.ObjectId, obj.TypeId, Position(obj), "neutral", Origin(obj),
+                    var entry = new MapObjectSource(obj.ObjectId, obj.TypeId, Position(obj), obj.OwnerSlot, Origin(obj),
                         obj.QuarterTurns, obj.InitialHealth == 0 ? null : obj.InitialHealth,
                         variant is null ? null : new(variant.VariantId, variant.MaxHealth));
                     if (obj.Order < 0 || !objects.TryAdd(obj.Order, entry))
@@ -101,9 +123,10 @@ internal static class MapSceneExtractor2D
                     break;
             }
         }
-        return new(root.MapId, true, size.X, size.Y,
+        if (!root.IsSkirmish) slots.AddRange(root.FixtureSlots.Select(id => new MapSlotSource(id)));
+        return new(root.MapId, root.IsSkirmish, size.X, size.Y,
             new(terrain.OrderBy(item => item.Value).Select(item => item.Key).ToArray(), groundCells),
             new(visual.OrderBy(item => item.Value).Select(item => item.Key).ToArray(), visualCells),
-            slots, objects.Values.ToArray(), origin: Origin(root));
+            slots, objects.Values.ToArray(), origin: Origin(root), surface: surface);
     }
 }

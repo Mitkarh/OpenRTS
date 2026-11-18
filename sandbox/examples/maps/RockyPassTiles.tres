@@ -1,0 +1,68 @@
+[gd_resource type="TileSet" format=3]
+
+[ext_resource type="Texture2D" path="res://examples/maps/RockyPassTiles.png" id="1_23lq1"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_05wwb"]
+texture = ExtResource("1_23lq1")
+texture_region_size = Vector2i(64, 96)
+0:0/0 = 0
+0:0/0/custom_data_0 = "grass"
+0:0/0/custom_data_1 = "grass"
+1:0/0 = 0
+1:0/0/custom_data_0 = "grass"
+1:0/0/custom_data_1 = "grass"
+1:0/0/custom_data_2 = 2048
+2:0/0 = 0
+2:0/0/custom_data_0 = "road"
+2:0/0/custom_data_1 = "rock-ramp"
+2:0/0/custom_data_2 = 1920
+2:0/0/custom_data_3 = Vector2i(0, -256)
+3:0/0 = 0
+3:0/0/custom_data_0 = "road"
+3:0/0/custom_data_1 = "rock-ramp"
+3:0/0/custom_data_2 = 1664
+3:0/0/custom_data_3 = Vector2i(0, -256)
+4:0/0 = 0
+4:0/0/custom_data_0 = "road"
+4:0/0/custom_data_1 = "rock-ramp"
+4:0/0/custom_data_2 = 1408
+4:0/0/custom_data_3 = Vector2i(0, -256)
+5:0/0 = 0
+5:0/0/custom_data_0 = "road"
+5:0/0/custom_data_1 = "rock-ramp"
+5:0/0/custom_data_2 = 1152
+5:0/0/custom_data_3 = Vector2i(0, -256)
+6:0/0 = 0
+6:0/0/custom_data_0 = "road"
+6:0/0/custom_data_1 = "rock-ramp"
+6:0/0/custom_data_2 = 896
+6:0/0/custom_data_3 = Vector2i(0, -256)
+7:0/0 = 0
+7:0/0/custom_data_0 = "road"
+7:0/0/custom_data_1 = "rock-ramp"
+7:0/0/custom_data_2 = 640
+7:0/0/custom_data_3 = Vector2i(0, -256)
+8:0/0 = 0
+8:0/0/custom_data_0 = "road"
+8:0/0/custom_data_1 = "rock-ramp"
+8:0/0/custom_data_2 = 384
+8:0/0/custom_data_3 = Vector2i(0, -256)
+9:0/0 = 0
+9:0/0/custom_data_0 = "road"
+9:0/0/custom_data_1 = "rock-ramp"
+9:0/0/custom_data_2 = 128
+9:0/0/custom_data_3 = Vector2i(0, -256)
+
+[resource]
+tile_shape = 1
+tile_layout = 5
+tile_size = Vector2i(64, 32)
+custom_data_layer_0/name = "TerrainId"
+custom_data_layer_0/type = 4
+custom_data_layer_1/name = "VisualId"
+custom_data_layer_1/type = 4
+custom_data_layer_2/name = "Elevation"
+custom_data_layer_2/type = 2
+custom_data_layer_3/name = "Rise"
+custom_data_layer_3/type = 6
+sources/0 = SubResource("TileSetAtlasSource_05wwb")

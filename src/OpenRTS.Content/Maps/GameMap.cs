@@ -27,17 +27,19 @@ public sealed class GameMap
     {
         Id = data.Id; IsSkirmish = data.IsSkirmish; _catalog = catalog; _source = data.Origin;
         _types = catalog.Units.Select((type, index) => (type.Id, index)).ToDictionary(p => p.Id, p => p.index, StringComparer.Ordinal);
-        _slots = data.Slots.ToDictionary(s => s.Id, s => new Slot(s.Position ?? default, s.Reverse), StringComparer.Ordinal);
-        Slots = Array.AsReadOnly(_slots.Keys.Order(StringComparer.Ordinal).ToArray());
-        _objects = data.Objects.Select(o => new Placed(o.Id, _types[UnitCatalog.MapTypeId(data.Id, o)], o.Position, o.Owner, o.Origin ?? data.Origin, o.QuarterTurns, o.InitialHealth)).ToArray();
         var terrainIds = data.Terrain.Palette.Select(id => (byte)catalog.Locomotion!.Terrains.IndexOf(id)).ToArray();
         _layout = new(data.Width, data.Height, data.Terrain.Cells.Select(i => terrainIds[i]), data.Visual.Cells.Select(i => data.Visual.Palette[i]));
-        Grid = _layout.CreateGrid();
+        Grid = _layout.CreateGrid(data.Surface);
+        _slots = data.Slots.ToDictionary(s => s.Id, s => new Slot(s.Position is { } point ? OnGround(point) : default, s.Reverse), StringComparer.Ordinal);
+        Slots = Array.AsReadOnly(_slots.Keys.Order(StringComparer.Ordinal).ToArray());
+        _objects = data.Objects.Select(o => new Placed(o.Id, _types[UnitCatalog.MapTypeId(data.Id, o)], OnGround(o.Position), o.Owner, o.Origin ?? data.Origin, o.QuarterTurns, o.InitialHealth)).ToArray();
         TerrainIds = Array.AsReadOnly(terrainIds.Order().Select(i => catalog.Locomotion!.Terrains[i]).ToArray());
         VisualIds = Array.AsReadOnly(_layout.VisualIds());
     }
 
     public string VisualAt(int x, int y) => _layout.VisualAt(x, y);
+
+    private WorldPosition OnGround(WorldPosition point) => Grid.HasSurface ? point with { Elevation = Grid.SurfaceElevationAt(point) } : point;
 
     public string TerrainAt(int x, int y) => _catalog.Locomotion!.Terrains[Grid.TerrainAt(Grid.Index(new(x, y)))];
 
@@ -90,7 +92,7 @@ public sealed class GameMap
                 var point = new WorldPosition(anchor.Position.X + sign * unit.Offset.X, anchor.Position.Y + sign * unit.Offset.Y);
                 if (point.X < 0 || point.X >= Grid.Width * Grid.CellSize || point.Y < 0 || point.Y >= Grid.Height * Grid.CellSize)
                     throw new ContentException(unit.Source, label, $"Unit '{unit.Type}' at ({point.X}, {point.Y}) is outside the map.");
-                placements.Add(new(label, type, point, player.Id, unit.Source, IsStart: true));
+                placements.Add(new(label, type, OnGround(point), player.Id, unit.Source, IsStart: true));
             }
         }
 

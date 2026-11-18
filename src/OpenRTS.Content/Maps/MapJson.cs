@@ -18,7 +18,7 @@ internal static class MapJson
         Header(writer, CompiledFormat, version);
         writer.WriteNumber("compilerVersion", version);
         writer.WriteString("contentFingerprint", map.ContentFingerprint);
-        if (version == 2) writer.WriteString("effectiveContentFingerprint", map.EffectiveContentFingerprint);
+        if (version >= 2) writer.WriteString("effectiveContentFingerprint", map.EffectiveContentFingerprint);
         writer.WriteString("gameplayFingerprint", map.GameplayFingerprint);
         writer.WriteString("dataFingerprint", map.DataFingerprint);
         WriteMap(writer, map.Source, false, stop); writer.WriteEndObject();
@@ -48,7 +48,7 @@ internal static class MapJson
     private static void Header(Utf8JsonWriter writer, string format, int version)
     {
         writer.WriteStartObject(); writer.WriteString("format", format); writer.WriteNumber("version", version);
-        writer.WriteString("geometry", MapCompiler.Geometry);
+        writer.WriteString("geometry", version == 3 ? MapCompiler.SurfaceGeometry : MapCompiler.Geometry);
     }
 
     private static void WriteMap(Utf8JsonWriter writer, MapSource source, bool gameplayOnly, CancellationToken stop)
@@ -74,6 +74,21 @@ internal static class MapJson
         }
         Layer("terrain", source.Terrain);
         if (!gameplayOnly) Layer("visual", source.Visual);
+        if (source.Surface is { } surface)
+        {
+            writer.WriteStartArray("surface");
+            for (int i = 0; i < surface.Count; i++)
+            {
+                if ((i & 1023) == 0) { stop.ThrowIfCancellationRequested(); writer.Flush(); }
+                var cell = surface[i];
+                writer.WriteStartArray();
+                writer.WriteNumberValue(cell.Elevation);
+                writer.WriteNumberValue(cell.RiseX);
+                writer.WriteNumberValue(cell.RiseY);
+                writer.WriteEndArray();
+            }
+            writer.WriteEndArray();
+        }
         writer.WriteStartArray("slots");
         foreach (var slot in source.Slots)
         {
@@ -153,7 +168,8 @@ internal static class MapJson
                 : ["format", "version", "geometry", "map"]);
             int version = Number(Required(root, "version"), "version");
             if (Text(Required(root, "format"), "format") != (compiled ? CompiledFormat : SourceFormat) ||
-                version is not (1 or 2) || Text(Required(root, "geometry"), "geometry") != MapCompiler.Geometry)
+                version is not (1 or 2 or 3) ||
+                Text(Required(root, "geometry"), "geometry") != (version == 3 ? MapCompiler.SurfaceGeometry : MapCompiler.Geometry))
                 throw Error("format", "Unsupported map format, version or geometry.");
             string content = "", gameplay = "", data = "", effectiveContent = "";
             if (compiled)
@@ -168,14 +184,31 @@ internal static class MapJson
                 if (version == 1 && root.ContainsKey("effectiveContentFingerprint"))
                     throw Error("effectiveContentFingerprint", "Effective content fingerprint requires version 2.");
                 content = Fingerprint("contentFingerprint");
-                effectiveContent = version == 2 ? Fingerprint("effectiveContentFingerprint") : content;
+                effectiveContent = version >= 2 ? Fingerprint("effectiveContentFingerprint") : content;
                 gameplay = Fingerprint("gameplayFingerprint"); data = Fingerprint("dataFingerprint");
             }
-            var map = Fields(Required(root, "map"), "map", "id", "kind", "size", "cellSize", "terrain", "visual", "slots", "objects");
+            var map = Fields(Required(root, "map"), "map", version == 3
+                ? ["id", "kind", "size", "cellSize", "terrain", "visual", "slots", "objects", "surface"]
+                : ["id", "kind", "size", "cellSize", "terrain", "visual", "slots", "objects"]);
             var size = Pair(Required(map, "size"), "size");
             int cellSize = Number(Required(map, "cellSize"), "cellSize");
             MapCompiler.ValidateDimensions(size.X, size.Y, cellSize, new(source.Name, 1, 1));
             int count = checked(size.X * size.Y);
+            MapSurfaceCell[]? surface = null;
+            if (version == 3)
+            {
+                var cells = Array(Required(map, "surface"), "surface", count);
+                if (cells.GetArrayLength() != count) throw Error("surface", "The surface must cover every map cell.");
+                surface = new MapSurfaceCell[count];
+                int i = 0;
+                foreach (var node in cells.EnumerateArray())
+                {
+                    string path = $"surface[{i}]";
+                    var cell = Array(node, path, 3);
+                    if (cell.GetArrayLength() != 3) throw Error(path, "Expected [elevation, riseX, riseY].");
+                    surface[i++] = new(Number(cell[0], path), Number(cell[1], path), Number(cell[2], path));
+                }
+            }
             MapLayer Layer(string name)
             {
                 var layer = Fields(Required(map, name), name, "palette", "cells");
@@ -198,7 +231,7 @@ internal static class MapJson
             }).ToArray();
             var objects = Array(Required(map, "objects"), "objects", MapCompiler.MaximumObjects).EnumerateArray().Select(node =>
             {
-                var obj = Fields(node, "objects", version == 2
+                var obj = Fields(node, "objects", version >= 2
                     ? ["id", "type", "position", "owner", "quarterTurns", "initialHealth", "healthVariant"]
                     : ["id", "type", "position", "owner"]);
                 MapHealthVariant? variant = null;
@@ -214,8 +247,8 @@ internal static class MapJson
                     HealthVariant: variant);
             }).ToArray();
             var result = new MapSource(Text(Required(map, "id"), "id"), skirmish, size.X, size.Y, Layer("terrain"), Layer("visual"),
-                slots, objects, cellSize, new(source.Name, 1, 1));
-            if (result.FormatVersion != version) throw Error("version", "Map version must match its initializers.");
+                slots, objects, cellSize, new(source.Name, 1, 1), surface);
+            if (result.FormatVersion != version) throw Error("version", "Map version must match its surface and initializers.");
             return (result, content, gameplay, data, effectiveContent);
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException or ArgumentException or OverflowException)

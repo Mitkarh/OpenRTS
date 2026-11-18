@@ -121,6 +121,7 @@ internal static class MapEditorChecks
             root.GetNode<OpenRtsMapGroup>("Patrol").GetNode<OpenRtsMapObject>("Tank").TypeId = "tank";
             string editedScenePath = root.SceneFilePath;
             await CheckMap2D(plugin, tree, Check, "InitialPropertiesMapIsometric", isometric: true);
+            await CheckReliefMap(plugin, tree, Check);
             editor.OpenSceneFromPath(editedScenePath);
             await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
             await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
@@ -213,5 +214,65 @@ internal static class MapEditorChecks
         GD.Print($"OPENRTS_MAP_2D:{sceneName}, {expected.Source.Width}x{expected.Source.Height}, {expected.Source.Slots.Count} starts, " +
             $"{expected.Source.Objects.Count} objects, gameplay={expected.GameplayFingerprint}, data={expected.DataFingerprint}");
     }
+
+    private static async Task CheckReliefMap(OpenRtsEditorPlugin plugin, SceneTree tree, Action<bool, string> check)
+    {
+        const string scenePath = "res://examples/maps/RockyPass.tscn";
+        var editor = EditorInterface.Singleton;
+        editor.OpenSceneFromPath(scenePath);
+        OpenRtsMap2D? map = null;
+        for (int i = 0; i < 120 && map is null; i++)
+        {
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+            if (editor.GetEditedSceneRoot() is OpenRtsMap2D opened && opened.SceneFilePath == scenePath)
+                map = opened;
+        }
+        if (map is null) throw new InvalidOperationException("Rocky Pass did not open in the editor.");
+        editor.EditNode(map);
+        await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+        await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+
+        var catalog = GameManifest.Load(ProjectSettings.GlobalizePath(map.ContentManifest)).LoadUnits();
+        var original = MapSceneExtractor2D.Extract(map);
+        var expected = new OpenRTS.Samples.RampScenario(catalog);
+        var compiled = MapCompiler.Compile(original, catalog);
+        var grid = compiled.Map.Grid;
+        check(grid.Width == expected.Grid.Width && grid.Height == expected.Grid.Height && grid.HasSlopedSurface &&
+            Enumerable.Range(0, grid.CellCount).All(i => grid.SurfaceAt(i) == expected.Grid.SurfaceAt(i) &&
+                grid.SurfaceRiseAt(i) == expected.Grid.SurfaceRiseAt(i) && grid.TerrainAt(i) == expected.Grid.TerrainAt(i)),
+            "The authored terrain differs from the original Rocky Pass.");
+        var players = new Dictionary<string, PlayerDefinition> { ["blue"] = new(1, "Синий") };
+        using var reference = expected.CreateWorld(1);
+        using var actual = compiled.Map.Prepare(players).CreateWorld();
+        var referencePoses = new EntityPose[original.Objects.Count];
+        var actualPoses = new EntityPose[original.Objects.Count];
+        reference.CopyPoses(referencePoses);
+        actual.CopyPoses(actualPoses);
+        check(referencePoses.AsSpan().SequenceEqual(actualPoses), "The authored spawn positions, heights or owners differ.");
+
+        var layer = map.Terrain!;
+        var cell = new Vector2I(15, 14);
+        var rampTile = layer.GetCellAtlasCoords(cell);
+        int atlas = layer.GetCellSourceId(cell);
+        layer.SetCell(cell, atlas, layer.GetCellAtlasCoords(Vector2I.Zero));
+        var edited = MapCompiler.Compile(MapSceneExtractor2D.Extract(map), catalog);
+        check(edited.Map.Grid.SurfaceAt(grid.Index(new(15, 14))).Elevation == 0 &&
+            edited.GameplayFingerprint != compiled.GameplayFingerprint, "Repainting a ramp did not change the playable terrain.");
+        layer.SetCell(cell, atlas, rampTile);
+
+        await plugin.BuildAsync(sourceOnly: true);
+        string path = ProjectSettings.GlobalizePath(map.CompiledPath);
+        string sourcePath = path.Replace(".ortmap.json", ".mapsource.json", StringComparison.Ordinal);
+        check(plugin.Status.StartsWith("Extracted", StringComparison.Ordinal) && File.Exists(sourcePath) &&
+            MapCompiler.Compile(MapSource.Read(new(sourcePath, File.ReadAllText(sourcePath))), catalog).Write() == compiled.Write(),
+            "Relief MapSource did not round-trip: " + plugin.Status);
+
+        await plugin.BuildAsync();
+        check(plugin.Status.StartsWith("Compiled", StringComparison.Ordinal) && File.Exists(path) &&
+            MapCompiler.Read(new(path, File.ReadAllText(path)), catalog).Write() == compiled.Write(),
+            "The editor did not publish a compatible relief map: " + plugin.Status);
+        GD.Print($"OPENRTS_RELIEF_MAP:{grid.Width}x{grid.Height}, {original.Objects.Count} objects, game={compiled.GameplayFingerprint}");
+    }
+
 }
 #endif

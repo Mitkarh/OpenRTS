@@ -27,8 +27,9 @@ public sealed class CompiledMap
 
 public static class MapCompiler
 {
-    public const int Version = 2;
+    public const int Version = 3;
     public const string Geometry = "ground-plane-v1";
+    internal const string SurfaceGeometry = "single-surface-v1";
     public const int MaximumDocumentBytes = 64 * 1024 * 1024;
     public const int MaximumPaletteEntries = 65536;
     public const int MaximumObjects = 1000000;
@@ -50,11 +51,23 @@ public static class MapCompiler
         {
             if (point.Elevation != 0 || point.X < 0 || point.Y < 0 ||
                 point.X >= (long)source.Width * source.CellSize || point.Y >= (long)source.Height * source.CellSize)
-                throw Error(path, "Expected an exact position inside the ground-plane map, with zero elevation.");
+                throw Error(path, "Expected an exact XY anchor inside the map. Elevation is derived from the surface.");
         }
         Text(source.Id, "id");
         ValidateDimensions(source.Width, source.Height, source.CellSize, source.Origin);
         int cells = checked(source.Width * source.Height);
+        if (source.Surface is { } surface)
+        {
+            if (surface.Count != cells) throw Error("surface", "The surface must cover every map cell.");
+            for (int i = 0; i < cells; i++)
+            {
+                if ((i & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
+                var cell = surface[i];
+                if (cell.RiseX != 0 && cell.RiseY != 0 ||
+                    2 * Math.Abs((long)cell.Elevation) + Math.Abs((long)cell.RiseX) + Math.Abs((long)cell.RiseY) > 2 * 1048576)
+                    throw Error($"surface[{i}]", "Use a bounded elevation and a rise along at most one axis.");
+            }
+        }
         var locomotion = catalog.Locomotion ?? throw Error("terrain", "Maps require a terrain catalog.");
         MapLayer Normalize(MapLayer layer, string path)
         {
@@ -117,7 +130,7 @@ public static class MapCompiler
             Position(obj.Position, path + ".position");
         }
         var normalized = new MapSource(source.Id, source.IsSkirmish, source.Width, source.Height, terrain, visual,
-            source.Slots.OrderBy(s => s.Id, StringComparer.Ordinal).ToArray(), source.Objects, source.CellSize, source.Origin);
+            source.Slots.OrderBy(s => s.Id, StringComparer.Ordinal).ToArray(), source.Objects, source.CellSize, source.Origin, source.Surface);
         var effective = catalog.PrepareMapUnits(normalized, cancellationToken);
         var result = new CompiledMap(normalized, new GameMap(normalized, effective), catalog.Summary.Fingerprint, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
