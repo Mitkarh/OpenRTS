@@ -66,6 +66,12 @@ public partial class Sandbox : Node3D
             {
                 if (arg == "--jamming") { _jammingScenario = _fogScenario = _buildings = _showcase = true; continue; }
                 if (arg == "--verify") continue;
+                if (arg is "--ramps" or "--verify-ramps")
+                {
+                    _ramps = _showcase = true;
+                    if (arg == "--verify-ramps") _verifyRamps = _paused = true;
+                    continue;
+                }
                 if (arg.StartsWith("--directory-test=", StringComparison.Ordinal)) { _networkVerifyDirectoryUrl = arg[17..]; continue; }
                 if (arg.StartsWith("--verify-network=", StringComparison.Ordinal)) { _verifyNetwork = true; _networkVerifyRole = arg[17..]; continue; }
                 if (arg.StartsWith("--network-port=", StringComparison.Ordinal)) { _networkVerifyPort = int.Parse(arg[15..]); continue; }
@@ -118,10 +124,12 @@ public partial class Sandbox : Node3D
                 if (arg.StartsWith("--ticks=", StringComparison.Ordinal) && int.TryParse(arg[8..], out value) && value is >= 1 and <= 1000000) { _ticks = value; continue; }
                 if (arg.StartsWith("--fps=", StringComparison.Ordinal) && int.TryParse(arg[6..], out value) && value is >= 1 and <= 240) { Engine.MaxFps = value; continue; }
                 if (arg.StartsWith("--workers=", StringComparison.Ordinal) && int.TryParse(arg[10..], out value) && value is >= 1 and <= 64) { _workers = value; continue; }
-                throw new ArgumentException("Параметры: --mod=path, --sensors, --fog, --fog-hold=0..250, --skirmish, --verify-match-setup, --verify-ai-match, --ai-profile=id, --map=path, --start-set=path, --buildings, --verify-buildings, --verify-actions, --verify-production, --showcase, --verify-presentation, --capture=path, --verify, --verify-simulation, --verify-controls, --realtime, --navigation, --workers=1..64, --reverse-jobs, --count=1..1000000 (лимит диагностического стенда), --ticks=1..1000000, --fps=1..240.");
+                throw new ArgumentException("Параметры: --ramps, --verify-ramps, --mod=path, --sensors, --fog, --fog-hold=0..250, --skirmish, --verify-match-setup, --verify-ai-match, --ai-profile=id, --map=path, --start-set=path, --buildings, --verify-buildings, --verify-actions, --verify-production, --showcase, --verify-presentation, --capture=path, --verify, --verify-simulation, --verify-controls, --realtime, --navigation, --workers=1..64, --reverse-jobs, --count=1..1000000 (лимит диагностического стенда), --ticks=1..1000000, --fps=1..240.");
             }
             if (mapPath is not null && (_showcase || _navigation || _verifyControls || verify))
                 throw new ArgumentException("--map выбирает отдельный сценарий.");
+            if (_ramps && (_buildings || _skirmish || _navigation || _fogScenario || _verifySimulation || _verifyControls || verify))
+                throw new ArgumentException("--ramps выбирает отдельный полигон.");
             if (mapPath is not null) _buildings = _showcase = true;
             bool defaultSkirmish = !_navigation && !_verifySimulation && !_verifyControls && !verify && !_showcase &&
                 !Array.Exists(OS.GetCmdlineUserArgs(), a => a.StartsWith("--count=", StringComparison.Ordinal));
@@ -144,7 +152,7 @@ public partial class Sandbox : Node3D
                 string bundlePath = Path.IsPathRooted(mapPath) || mapPath.StartsWith("res://", StringComparison.Ordinal) ? mapPath : "res://" + mapPath;
                 modPath ??= SceneMapBundle.Read(ReadFile(bundlePath)).Mod;
             }
-            _activeManifestPath = modPath ?? (_buildings || checkBundles ? "res://game.yaml" : "res://diagnostic-game.yaml");
+            _activeManifestPath = modPath ?? (_buildings || _ramps || checkBundles ? "res://game.yaml" : "res://diagnostic-game.yaml");
             _manifest = LoadManifest(_activeManifestPath);
             LoadRangeDefaults(_manifest.Settings.SensorRanges);
             var unitSources = _manifest.Rules.Select(source =>
@@ -154,8 +162,9 @@ public partial class Sandbox : Node3D
                 if (_fogScenario && !_jammingScenario) text = FogScenario.AddVision(text);
                 return source with { Text = text };
             });
-            _catalog = _manifest.LoadUnits(unitSources, _sensorScenario ?
+            _catalog = _ramps ? LoadRampCatalog() : _manifest.LoadUnits(unitSources, _sensorScenario ?
                 _manifest.Weapons.Select(source => source with { Text = FogScenario.AddRadarWeapons(source.Text) }) : null);
+            if (_ramps) _rampScenario = new(_catalog);
             _sensorVisibility = _catalog.Units.Any(unit => unit.Sensors is not null);
             if (_verifySkirmish) _sensorVisibility = false; // This scripted laboratory controls and inspects both players.
             if (checkBundles)
@@ -178,7 +187,7 @@ public partial class Sandbox : Node3D
                 if (_sensorScenario) _matchFogMode = OpenRTS.Core.Visibility.FogMode.Hidden;
                 _skirmish = _mapMatch.Map.IsSkirmish || mapPath == AviationScenario.Map;
             }
-            if (_showcase) _count = _mapMatch?.UnitCount ?? (_buildings ? BuildingScenario.UnitCount : ShowcaseScenario.UnitCount);
+            if (_showcase) _count = _mapMatch?.UnitCount ?? (_ramps ? RampScenario.UnitCount : _buildings ? BuildingScenario.UnitCount : ShowcaseScenario.UnitCount);
             if (verify)
             {
                 var preview = PreviewRenderer.Create(_catalog.Units[0], _count);
@@ -197,7 +206,7 @@ public partial class Sandbox : Node3D
         catch (Exception error)
         {
             GD.PushError(error.ToString());
-            if (checkBundles || _verifyMenu || _verifyNetwork || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
+            if (checkBundles || _verifyMenu || _verifyNetwork || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup || _verifyRamps) GetTree().Quit(1);
             else AddOverlay("Ошибка загрузки контента\n" + error.Message);
         }
     }
@@ -215,12 +224,13 @@ public partial class Sandbox : Node3D
             Texture2D TextureFor(string id) => entry is not null && entry.VisualTextures.TryGetValue(id, out var texture) && texture is not null
                 ? texture : GD.Load<Texture2D>("res://resources/terrain/" + id + ".tres");
             var map = _mapMatch?.Map;
-            var view = entry?.DrawCompiledTerrain == false ? null : map is not null
+            var view = _ramps || entry?.DrawCompiledTerrain == false ? null : map is not null
                 ? new TerrainView(map.Grid.Width, map.Grid.Height, 1, map.VisualIds, map.VisualAt, TextureFor)
                 : new TerrainView(_buildings ? BuildingScenario.Width : ShowcaseScenario.Width,
                     _buildings ? BuildingScenario.Height : ShowcaseScenario.Height, _buildings ? 1 : ShowcaseScenario.TileSize,
                     ShowcaseScenario.TerrainIds, _buildings ? BuildingScenario.TerrainAt : ShowcaseScenario.TerrainAt, TextureFor);
             if (view is not null) AddChild(view.Node);
+            if (_ramps) AddRampTerrain();
             AddChild(_sprites.Node);
             if (PlayerFog) { _fogView = new(); AddChild(_fogView.Node); }
             CreateSelectionRing();
@@ -255,7 +265,7 @@ public partial class Sandbox : Node3D
             ? configured.Seats.Select((seat, i) => (seat, i)).Where(p => p.seat.Controller == OpenRTS.Network.SlotController.Ai)
                 .Select(p => SkirmishAiScenario.Create(catalog, _opponentProfile, map.Map, (uint)p.i + 1, _opponentStarts, opponents: configured.Opponents((uint)p.i + 1))).ToArray() : [];
         _opponent = offlineAis.FirstOrDefault();
-        _session = new SandboxSession(new SimulationSession(() => _jammingScenario ? JammingScenario.Create(catalog) : _fogScenario && (!_sensorScenario || map is null) ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? _configuredOptions is { } selectedOptions ? CreateConfiguredWorld(map, selectedOptions) : map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, workers: _workers, restrictPlayerCommands: offlineAis.Length != 0, tickRate: _manifest.Settings.Simulation.TickRate) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
+        _session = new SandboxSession(new SimulationSession(() => _rampScenario is { } ramps ? ramps.CreateWorld(_workers) : _jammingScenario ? JammingScenario.Create(catalog) : _fogScenario && (!_sensorScenario || map is null) ? FogScenario.Create(catalog, _fogHoldTicks, _sensorScenario) : map is not null ? _configuredOptions is { } selectedOptions ? CreateConfiguredWorld(map, selectedOptions) : map.CreateWorld(new GameplayMechanics { FogCellSize = _matchFogMode == OpenRTS.Core.Visibility.FogMode.Visible ? null : 1024, FogMode = _matchFogMode, FogVisibilityHoldTicks = _fogHoldTicks }, speedPerTick: _manifest.Settings.Simulation.SpeedPerTick, workers: _workers, restrictPlayerCommands: offlineAis.Length != 0, tickRate: _manifest.Settings.Simulation.TickRate) : _buildings ? BuildingScenario.Create(catalog, _workers) : _showcase ? ShowcaseScenario.Create(catalog) : _navigation ? NavigationScenario.Create(catalog, _count, _workers, _reverseJobs) : DiagnosticScenario.Create(catalog, _count),
             _verifySensors ? FogScenario.RadarCommands : _verifyFog ? FogScenario.Commands : _verifyAviation ? AviationScenario.Commands.Where(c => c.Tick <= _ticks).ToArray() : map is not null ? [] : _productionScenario ? ProductionScenario.Commands(catalog) : _buildings ? BuildingScenario.Commands(catalog) : _showcase ? (_verifyPresentation ? ShowcaseScenario.VerificationCommands(catalog) : []) : _navigation ? (_verifySimulation ? NavigationScenario.Commands(_count, _ticks) : [])
                 : DiagnosticScenario.Commands(_count, _verifySimulation ? _ticks : long.MaxValue),
             _verifySimulation ? _ticks : null, realtime: !_verifySimulation || _pacedVerification,
@@ -283,7 +293,7 @@ public partial class Sandbox : Node3D
             return;
         }
         if (_verifyNetwork && (_networkVerifyElapsed += delta) > 40) { GD.PushError("Network verification timed out."); GetTree().Quit(1); return; }
-        if (!_verifySimulation) PanCamera(delta);
+        if (!_verifySimulation && !_verifyRamps) PanCamera(delta);
         if (_session is null || _view is null && _sprites is null || _verificationDone) return;
         try
         {
@@ -375,6 +385,7 @@ public partial class Sandbox : Node3D
                 _label.Text = $"OpenRTS · симуляция {frame.TickRate} Гц · ×{_playbackSpeed:0.###}{(_paused ? " · ПАУЗА" : "")}\n\n{frame.Poses.Length:N0} объектов · тик {frame.Tick} · {Engine.GetFramesPerSecond()} FPS\n" +
                     (_navigation ? $"Навигация · до {_workers} потоков поиска\nПриказ выполняют {frame.MovingCount} · ожидают {frame.NavigationWaitingCount} (очередь {frame.NavigationQueueWaitingCount})\nОбходов {frame.NavigationLocalSearches} · уступаний {frame.NavigationYields} за тик\n\nПКМ — компактная область · Пробел — сменить сторону\nB — препятствие под курсором · R — перезапуск\n\nТочные координаты и свободный угол. Локальные обходы ограничены."
                         : "Отдельный поток · целые координаты · MultiMesh\n\nПКМ — приказ всем · Пробел — случайные цели\nR — перезапуск · Esc — выход\n\nПрямое движение без навигации и столкновений.") + "\nКолесо — масштаб · WASD/стрелки/СКМ — камера\n+/− — темп · P — пауза · N — один тик" + (_notice.Length == 0 ? "" : "\nПоследний отказ: " + _notice);
+            if (_verifyRamps) { VerifyRamps(frame); return; }
             if (_productionScenario && completed)
             {
                 var production = _session.Completion.GetAwaiter().GetResult();
@@ -451,7 +462,7 @@ public partial class Sandbox : Node3D
             _session = null;
             bool verifyReconnect = _verifyNetwork && _networkVerifyReconnect && _networkVerifyRole == "join" && !_networkReconnectAttempted &&
                 _networkResume is not null && error is System.IO.IOException;
-            if ((_verifyNetwork && !verifyReconnect) || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup) GetTree().Quit(1);
+            if ((_verifyNetwork && !verifyReconnect) || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup || _verifyRamps) GetTree().Quit(1);
             else if (replayFailed) ShowNetworkFailure(error.Message, "Ошибка повтора");
             else if (_networkMode != 0) ShowNetworkFailure(error.Message);
             else if (_label is not null)
@@ -520,7 +531,8 @@ public partial class Sandbox : Node3D
             }
             else if (input is InputEventMouseMotion motion && (motion.ButtonMask & MouseButtonMask.Middle) != 0 && _camera is not null)
             {
-                PlanarCamera.Drag(_camera, motion.Position, motion.Relative, Playfield().GetCenter(), new(_mapWidth, _mapDepth));
+                PlanarCamera.Drag(_camera, motion.Position, motion.Relative, Playfield().GetCenter(), new(_mapWidth, _mapDepth),
+                    RampPick(motion.Position - motion.Relative)?.Elevation / 1024f ?? 0);
                 if (_showcase) { _pointer = motion.Position; UpdateRtsCursor(); }
             }
             else if (_showcase && input is InputEventMouseButton click && click.ButtonIndex is MouseButton.Left or MouseButton.Right)
@@ -534,10 +546,16 @@ public partial class Sandbox : Node3D
         catch (Exception error) { GD.PushError(error.Message); }
     }
 
-    private Vector3? GroundPoint(Vector2 mouse) => _camera is null ? null : PlanarCamera.GroundPoint(_camera, mouse);
+    private Vector3? GroundPoint(Vector2 mouse)
+    {
+        if (_rampTerrain is not null)
+            return RampPick(mouse) is { } p ? new Vector3(p.X, p.Elevation, p.Y) / WorldPosition.UnitsPerCell : null;
+        return _camera is null ? null : PlanarCamera.GroundPoint(_camera, mouse);
+    }
 
     private WorldPosition? MousePoint(Vector2 mouse)
     {
+        if (_rampTerrain is not null) return RampPick(mouse);
         if (GroundPoint(mouse) is not { } point) return null;
         int width = _displayGrid is { } grid ? grid.Width * grid.CellSize : 4096 * 1024;
         int height = _displayGrid is { } map ? map.Height * map.CellSize : 4096 * 1024;
@@ -547,7 +565,8 @@ public partial class Sandbox : Node3D
     private void ZoomCamera(Vector2 mouse, float factor)
     {
         if (_camera is null) return;
-        PlanarCamera.ZoomAt(_camera, mouse, factor, _baseCameraSize, Playfield().GetCenter(), new(_mapWidth, _mapDepth));
+        PlanarCamera.ZoomAt(_camera, mouse, factor, _baseCameraSize, Playfield().GetCenter(), new(_mapWidth, _mapDepth),
+            RampPick(mouse)?.Elevation / 1024f ?? 0);
     }
 
     private void PanCamera(double delta)
@@ -603,7 +622,7 @@ public partial class Sandbox : Node3D
         Vector2 groundSize = new(side, side);
         if (_navigation || _showcase)
         {
-            var grid = _mapMatch?.Map.Grid ?? (_buildings ? BuildingScenario.Grid(catalog.Locomotion!) : _showcase ? ShowcaseScenario.Grid(catalog.Locomotion) : NavigationScenario.Grid(count));
+            var grid = _rampScenario?.Grid ?? _mapMatch?.Map.Grid ?? (_buildings ? BuildingScenario.Grid(catalog.Locomotion!) : _showcase ? ShowcaseScenario.Grid(catalog.Locomotion) : NavigationScenario.Grid(count));
             float sample = grid.CellSize / (float)WorldPosition.UnitsPerCell;
             side = Math.Max(grid.Width, grid.Height) * sample;
             center = new(grid.Width * sample / 2f, 0, grid.Height * sample / 2f);
@@ -624,13 +643,21 @@ public partial class Sandbox : Node3D
         var camera = new Camera3D
         {
             Projection = Camera3D.ProjectionType.Orthogonal,
-            Size = _skirmish ? 24 : _mapMatch is not null ? side * 1.18f : _buildings ? 64 : _showcase ? 28 : side * 1.18f,
+            Size = _ramps ? 26 : _skirmish ? 24 : _mapMatch is not null ? side * 1.18f : _buildings ? 64 : _showcase ? 28 : side * 1.18f,
             Position = center + new Vector3(0, side, 0),
             Far = side * 4,
             Current = true
         };
         AddChild(camera);
-        camera.RotationDegrees = new(-90, 0, 0);
+        camera.RotationDegrees = _ramps ? new(-53, -18, 0) : new(-90, 0, 0);
+        if (_ramps)
+        {
+            camera.Position = center + new Vector3(0, 1, 4.1f) + camera.Basis.Z * side;
+            // Move the existing overlay lift along the view ray so height does not shift its screen position.
+            var offset = (camera.Basis.Z / camera.Basis.Z.Y - Vector3.Up) * SpriteWorldView.OverlayHeight;
+            _selectionRing!.Position = offset;
+            _combatEffects!.Node.Position = offset;
+        }
         _camera = camera;
         _baseCameraSize = camera.Size;
         _mapWidth = groundSize.X; _mapDepth = groundSize.Y;

@@ -153,6 +153,28 @@
       "origin_file": "exec-650a1e0b-5593-4247-afc8-ec94ef64727b.png",
       "width": 1254,
       "height": 1254
+    },
+    {
+      "id": "terrain-cliff-face",
+      "destination": "sandbox/assets/terrain/cliff-face.png",
+      "date": "2026-11-18",
+      "prompt": "Use case: stylized-concept. Asset type: a single square, edge-to-edge opaque diffuse texture tile for the vertical rock wall of an original desktop RTS of the late-1990s isometric genre. Orthographic exactly face-on elevation view of a cliff face, so the top of this image maps to the upper edge of the wall and the bottom to its foot. Gray-brown sedimentary shale and sandstone in chunky fractured columns with broad readable ledges, weathered layered ochre-gray rock, restrained olive patina in thin seams, medium value and low saturation, matching muted hand-painted game terrain. Main detail at 1/4 to 1/8 image scale for a small on-screen tile, crisp stone planes, gentle baked ambient crevice shading, even neutral illumination, no directional shadows. Tileable across the left and right edges, no distinct end caps. Rock fills entire square. No terrain plane, no grassy top, no horizon, no surrounding scene, no lettering, no borders, no UI. Original material, no reproduction of any existing videogame asset.",
+      "transparent_background": false,
+      "sha256": "cdef4db06d807fa1c5e2cc993a9e93ddc5e451d66866e804d68c39022b5838b0",
+      "origin_file": "exec-a20e7d1e-8d49-4769-b41b-1efbe3ef883c.png",
+      "width": 512,
+      "height": 512
+    },
+    {
+      "id": "terrain-rock-ramp",
+      "destination": "sandbox/assets/terrain/rock-ramp.png",
+      "date": "2026-11-18",
+      "prompt": "Use case: stylized-concept. Asset type: a single square edge-to-edge opaque diffuse texture tile for the walking surface of a broad, traversable earthen switch-free ramp in an original classic military RTS. Orthographic exactly overhead material view. Dry compacted warm ochre-gray gritty shale soil, fine striations and weathered stone grains, calm light middle-value path material with restrained moss flecks and two or three flat scuffed rock plates embedded nearly flush. From a distance it reads as a clear smooth lighter path beside darker jagged cliffs. Muted hand-painted game texture, middle-scale detail, evenly diffused flat lighting, tileable on all four edges, no dark edges or vignette, seamless repeat. Entire square is texture. No carved arrows, no stairs, no large rocks obstructing it, no ramp silhouette, no perspective, no terrain border, no objects, text or HUD. Original material, no reproduction of existing game assets.",
+      "transparent_background": false,
+      "sha256": "6f67ab5b45927ea1870f5c4d633a5c983e226d09ae7e1ffec415fc471e185de2",
+      "origin_file": "exec-9584ad93-ac1f-4cd2-8e65-a708746c3af6.png",
+      "width": 512,
+      "height": 512
     }
   ]
 }

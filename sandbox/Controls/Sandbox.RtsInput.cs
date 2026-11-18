@@ -299,6 +299,7 @@ public partial class Sandbox
     private WorldPosition? CommandPoint(Vector2 pixel)
     {
         if (_terminal is not null && (!Playfield().HasPoint(pixel) || OverRtsPanel(pixel))) return null;
+        if (_rampTerrain is not null) return RampPick(pixel);
         if (GroundPoint(pixel) is not { } ground || ground.X < 0 || ground.Z < 0 || ground.X > _mapWidth || ground.Z > _mapDepth) return null;
         return MousePoint(pixel);
     }

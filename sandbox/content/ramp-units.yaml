@@ -1,0 +1,6 @@
+ramp-rifleman:
+  Inherits: rifleman
+  Movement: {Locomotor: ramp-infantry}
+ramp-tank:
+  Inherits: tank
+  Movement: {Locomotor: ramp-tracked}

@@ -1,3 +1,4 @@
+using OpenRTS.Godot.Rendering;
 using Godot;
 using DeclarativeContent;
 using OpenRTS.Content;

@@ -1,0 +1,6 @@
+ramp-infantry:
+  Inherits: infantry
+  Locomotor: {MaximumSlope: 256, MaximumStep: 0}
+ramp-tracked:
+  Inherits: tracked
+  Locomotor: {MaximumSlope: 256, MaximumStep: 0}
