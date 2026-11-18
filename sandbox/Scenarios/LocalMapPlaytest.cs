@@ -51,6 +51,16 @@ internal sealed record LocalMapPlaytest(string MapFingerprint, string CatalogFin
     internal MapMatch Prepare(GameMap map, GameManifest manifest) =>
         MapScenario.Prepare(map, ReadStartingSet(manifest), Slots);
 
+    internal MapMatch Load(string path, Func<string, ContentSource> read, UnitCatalog catalog, GameManifest manifest)
+    {
+        var source = read(path);
+        var compiled = SceneMapBundle.IsPath(path)
+            ? SceneMapBundle.Read(source).LoadMap(path, read, catalog)
+            : MapCompiler.Read(source, catalog);
+        CheckMap(compiled);
+        return Prepare(compiled.Map, manifest);
+    }
+
     internal StartingSet? ReadStartingSet(GameManifest manifest)
     {
         var simulation = manifest.Settings.Simulation;

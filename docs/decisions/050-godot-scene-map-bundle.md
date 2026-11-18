@@ -21,3 +21,25 @@
 ```
 
 Пресет PCK настроен на macOS arm64. Для экспорта Godot должен видеть совместимый с `global.json` SDK и пакеты целевого .NET runtime. Для сборки приложения нужен установленный Godot .NET export template.
+
+## Сборка и проверка
+
+В панели OpenRTS **Compile map** выпускает `.ortmap.json`, а **Build scene-map bundle** выпускает `.scenemap.json` для 3D. **Build and verify map** выбирает формат по корню сцены. Skirmish использует выбранные старты и стартовый набор, fixture использует фиксированную расстановку. Сохраните 3D-сцену в проекте перед сборкой bundle.
+
+CLI читает сохранённую `.tscn`, при необходимости импортирует ресурсы и вызывает ту же сборку. Формат определяется корнем сцены или флагом `--format`. Bundle требует корня `OpenRtsMap`. Для `OpenRtsMap2D` доступен формат `compiled`. Прежняя команда `scene-map` соответствует `map-build --format=bundle`.
+
+| Профиль | Сборка с проверкой | Результат |
+|---|---|---|
+| 2D compiled map | `./tools/dev.sh map-build res://examples/maps/RockyPass.tscn --format=compiled --verify` | `res://artifacts/maps/rocky-pass.ortmap.json` |
+| 3D bundle | `./tools/dev.sh map-build res://examples/maps/AuthoringMap.tscn --format=bundle --verify --start=west --start-set=content/start-sets/infantry.yaml` | `res://artifacts/maps/scene-authoring-sample.scenemap.json` и проекция рядом |
+
+При `--verify` без `--start` skirmish использует все старты карты в порядке ID. На картах с более чем четырьмя кандидатами передайте от одного до четырёх `--start=ID`. Порядок аргументов задаёт порядок игроков. Без `--start-set` используется набор из настроек манифеста. Без `--verify` сборка проверяет игровой контент и размещённые объекты.
+
+Проверка читает временный артефакт с диска, проверяет выбранный матч и сравнивает тик, число сущностей и хеш состояния после восьми тиков в Godot и в независимой симуляции. Godot при этом загружает 3D entry-сцену bundle, а для 2D строит карту из проекции. При ошибке, отмене или изменении исходников во время проверки предыдущий опубликованный файл сохраняется. `OPENRTS_MAP_BUILD` в CLI содержит путь, формат, манифест и результат проверки. Для повторения того же матча в отдельном headless-процессе можно передать поле `Playtest` как `--local-playtest` вместе с `--map` и `--mod`.
+
+```sh
+./tools/dev.sh headless --map=artifacts/maps/rocky-pass.ortmap.json --mod=sandbox/rocky-pass-game.yaml --ticks=8
+./tools/dev.sh headless --map=artifacts/maps/scene-authoring-sample.scenemap.json --mod=sandbox/game.yaml --start-set=content/start-sets/infantry.yaml --ticks=8
+```
+
+Для установки задайте `CompiledPath` под `res://content/` и добавьте итоговый путь skirmish-карты в `Match.Maps` манифеста этой игры. ID карты должен быть уникальным в меню. Для 2D укажите `.ortmap.json`. Для 3D укажите `.scenemap.json` и сохраните рядом его проекцию. Пресет экспорта проверяет оба типа зарегистрированных артефактов. Fixture запускается напрямую через `--map` или редактор. `./tools/dev.sh verify-authoring` проверяет авторинг и обе CLI-сборки.

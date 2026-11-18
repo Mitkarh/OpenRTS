@@ -24,15 +24,22 @@ public partial class Sandbox
     private void CheckInstalledSceneMaps(UnitCatalog catalog)
     {
         var settings = _manifest.Settings.Match;
-        foreach (string path in settings.Maps.Select(choice => choice.Path).Append(settings.DefaultMap).Where(SceneMapBundle.IsPath).Distinct())
+        foreach (string path in settings.Maps.Select(choice => choice.Path).Append(settings.DefaultMap).Distinct(StringComparer.Ordinal))
         {
+            bool bundle = SceneMapBundle.IsPath(path);
+            string suffix = bundle ? SceneMapBundle.Suffix : ".ortmap.json";
+            if (!path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
             string resource = path.StartsWith("res://", StringComparison.Ordinal) ? path : "res://" + path;
-            if (!resource.StartsWith("res://content/", StringComparison.Ordinal) || !SceneMapBundle.ResourcePath(resource, SceneMapBundle.Suffix))
-                throw new InvalidDataException($"Install the scene-map bundle under res://content/ before export: {path}.");
-            var map = LoadSceneMap(path, catalog);
-            var entry = InstantiateMapScene(map)!;
-            entry.Free();
-            GD.Print("OPENRTS_SCENEMAP_CHECK:" + path);
+            if (!resource.StartsWith("res://content/", StringComparison.Ordinal) || !SceneMapBundle.ResourcePath(resource, suffix))
+                throw new InvalidDataException($"Install the map under res://content/ before export: {path}.");
+            var map = bundle ? LoadSceneMap(path, catalog) : MapCompiler.Read(ReadMapSource(path), catalog).Map;
+            if (!map.IsSkirmish) throw new InvalidDataException($"Match.Maps accepts skirmish maps. Launch the fixed fixture directly: {path}.");
+            if (bundle)
+            {
+                InstantiateMapScene(map)!.Free();
+                GD.Print("OPENRTS_SCENEMAP_CHECK:" + path);
+            }
+            else GD.Print("OPENRTS_COMPILED_MAP_CHECK:" + path);
         }
     }
 

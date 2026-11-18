@@ -17,15 +17,29 @@ build() {
   local target="${1:-OpenRTS.sln}"
   local configuration="${2:-Debug}"
   if [[ -n "${OPENRTS_NUGET_SOURCE:-}" ]]; then
-    dotnet restore "$target" --disable-build-servers --source "$OPENRTS_NUGET_SOURCE"
+    dotnet restore "$target" --disable-build-servers -m:1 --source "$OPENRTS_NUGET_SOURCE"
   else
-    dotnet restore "$target" --disable-build-servers
+    dotnet restore "$target" --disable-build-servers -m:1
   fi
   dotnet build "$target" --configuration "$configuration" --no-restore --disable-build-servers -m:1 -p:UseSharedCompilation=false
 }
 
 import_assets() {
   "$godot_bin" --headless --editor --path "$PWD/${1:-sandbox}" --import
+}
+
+build_map() {
+  local scene="$1" output
+  shift
+  if ! output="$("$godot_bin" --headless --editor --path "$PWD/sandbox" --max-fps 60 --quit-after 7200 "$scene" -- "--build-map=$scene" "$@")"; then
+    printf '%s\n' "$output" >&2
+    return 1
+  fi
+  printf '%s\n' "$output"
+  if ! rg -q '^OPENRTS_MAP_BUILD:' <<< "$output"; then
+    echo 'Map authoring did not report a published build.' >&2
+    return 1
+  fi
 }
 
 action="${1:-build}"
@@ -63,17 +77,19 @@ case "$action" in
     fi
     exec "$godot_bin" --path "$PWD/sandbox3d" -- "$@"
     ;;
-  scene-map)
-    if [[ $# -ne 1 || "$1" != res://*.tscn ]]; then
-      echo 'Usage: tools/dev.sh scene-map res://path/to/map.tscn' >&2
+  map-build|scene-map)
+    if [[ "${1:-}" != res://*.tscn || ( "$action" == scene-map && $# -ne 1 ) ]]; then
+      echo 'Usage: tools/dev.sh map-build res://path/to/map.tscn [--format=compiled|bundle] [--verify [--start=slot ...] [--start-set=path]]' >&2
+      echo '       tools/dev.sh scene-map res://path/to/map.tscn' >&2
       exit 2
     fi
-    if ! grep -q '^enabled=.*"res://addons/openrts_editor/plugin.cfg"' sandbox/project.godot; then
-      echo 'Enable OpenRTS Map Authoring before building a scene-map bundle.' >&2
+    if ! rg -q '^enabled=.*"res://addons/openrts_editor/plugin.cfg"' sandbox/project.godot; then
+      echo 'Enable OpenRTS Map Authoring before building a map.' >&2
       exit 1
     fi
-    build; import_assets
-    exec "$godot_bin" --headless --editor --path "$PWD/sandbox" "$1" -- --build-scene-map
+    if [[ "$action" == scene-map ]]; then set -- "$1" --format=bundle; fi
+    build sandbox/OpenRTS.Sandbox.csproj; import_assets
+    build_map "$@"
     ;;
   scene-map-pack)
     if [[ $# -ne 1 || "$1" != /*.pck ]]; then
@@ -100,9 +116,15 @@ case "$action" in
       echo 'Enable OpenRTS Map Authoring in Sandbox Project Settings > Plugins before verify-authoring.' >&2
       exit 1
     fi
-    build; import_assets
+    build sandbox/OpenRTS.Sandbox.csproj; import_assets
     "$godot_bin" --headless --path "$PWD/sandbox" res://Verification/MapAuthoringChecks.tscn
     "$godot_bin" --headless --editor --path "$PWD/sandbox" res://examples/maps/AuthoringMap.tscn -- --verify-map-editor
+    build_map res://examples/maps/RockyPass.tscn --format=compiled --verify
+    build_map res://examples/maps/AuthoringMap.tscn --format=bundle --verify --start=west --start-set=content/start-sets/infantry.yaml
+    if build_map res://examples/maps/RockyPass.tscn --format=bundle; then
+      echo '2D authoring incorrectly published a scene-map bundle.' >&2
+      exit 1
+    fi
     ;;
   verify-wan)
     build
@@ -126,5 +148,5 @@ case "$action" in
     ;;
   verify-network) build; import_assets; python3 tools/verify_network.py "$godot_bin" "$@" ;;
   verify) "$0" test; import_assets; python3 tools/verify.py "$godot_bin" ;;
-  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|run3d|editor3d|verify3d|scene-map|scene-map-pack|verify|verify-authoring|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
+  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|run3d|editor3d|verify3d|map-build|scene-map|scene-map-pack|verify|verify-authoring|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
 esac

@@ -84,7 +84,9 @@ internal static class MapEditorChecks
             Check(MapSceneExtractor.Extract(reopened).Write() == original, "Saved scene lost marker data or prefab ownership.");
             reopened.Free();
 
-            await plugin.BuildAsync(bundle: true);
+            var verifiedBundle = await plugin.BuildAsync(bundle: true, verify: true, selectedStarts: ["west"],
+                selectedStartSet: MapScenario.InfantryStartSet);
+            Check(verifiedBundle?.Verification is { Tick: 8, EntityCount: 6 }, "3D bundle verification failed: " + plugin.Status);
             string bundlePath = ProjectSettings.GlobalizePath(root.CompiledPath).Replace(".ortmap.json", SceneMapBundle.Suffix, StringComparison.Ordinal);
             Check(plugin.Status.StartsWith("Compiled ", StringComparison.Ordinal) && File.Exists(bundlePath), "Bundle build failed: " + plugin.Status);
             string published = File.ReadAllText(bundlePath);
@@ -299,7 +301,7 @@ internal static class MapEditorChecks
         const string set = MapScenario.InfantryStartSet;
         try
         {
-            var validated = await plugin.BuildAsync(validatePlaytest: true, selectedStarts: ["west"], selectedStartSet: set);
+            var validated = (await plugin.BuildAsync(verify: true, selectedStarts: ["west"], selectedStartSet: set))?.Playtest;
             check(validated is not null && validated.Slots.SequenceEqual(["west"]) && validated.StartSetPath == set,
                 "Selecting one of more than four starts did not validate: " + plugin.Status);
             string good = File.ReadAllText(path);
@@ -318,18 +320,30 @@ internal static class MapEditorChecks
             catch (InvalidDataException) { changedSetRejected = true; }
             check(changedSetRejected, "A replaced starting set passed the local launch check.");
 
-            var refused = await plugin.BuildAsync(validatePlaytest: true, selectedStarts: ["candidate-1", "west"], selectedStartSet: set);
+            var refused = await plugin.BuildAsync(verify: true, selectedStarts: ["candidate-1", "west"], selectedStartSet: set);
             plugin.SelectErrorSource();
             check(refused is null && plugin.Status.Contains("west/infantry", StringComparison.Ordinal) && File.ReadAllText(path) == good &&
                 EditorInterface.Singleton.GetSelection().GetSelectedNodes().Single() == west,
                 "An occupied start was accepted, replaced the last valid artifact or did not select its marker: " + plugin.Status);
-            refused = await plugin.BuildAsync(validatePlaytest: true, selectedStarts: [], selectedStartSet: set);
+            refused = await plugin.BuildAsync(verify: true, selectedStarts: [], selectedStartSet: set);
             check(refused is null && plugin.Status.StartsWith("Failed", StringComparison.Ordinal) && File.ReadAllText(path) == good,
                 "An empty choice replaced the last valid artifact.");
         }
         finally { foreach (var start in candidates) { map.RemoveChild(start); start.Free(); } }
-        var repeat = await plugin.BuildAsync(validatePlaytest: true, selectedStarts: ["west"], selectedStartSet: set);
+        var repeat = await plugin.BuildAsync(verify: true, selectedStarts: ["west"], selectedStartSet: set);
         check(repeat is not null && File.ReadAllText(path) == previous, "Repeating a valid match failed after the refusal.");
+
+        var tile = map.Terrain!.GetCellTileData(Vector2I.Zero)!;
+        var visual = tile.GetCustomData("VisualId");
+        tile.SetCustomData("VisualId", "p0-missing-terrain-resource");
+        try
+        {
+            var failed = await plugin.BuildAsync(verify: true, selectedStarts: ["west"], selectedStartSet: set);
+            check(failed is null && plugin.Status.Contains("Godot map verification failed", StringComparison.Ordinal) &&
+                plugin.Status.Contains("p0-missing-terrain-resource", StringComparison.Ordinal) && File.ReadAllText(path) == previous,
+                "Failed Godot verification replaced a previously published compiled map: " + plugin.Status);
+        }
+        finally { tile.SetCustomData("VisualId", visual); }
     }
 
     private static async Task CheckReliefMap(OpenRtsEditorPlugin plugin, SceneTree tree, Action<bool, string> check)
@@ -384,11 +398,12 @@ internal static class MapEditorChecks
             MapCompiler.Compile(MapSource.Read(new(sourcePath, File.ReadAllText(sourcePath))), catalog).Write() == compiled.Write(),
             "Relief MapSource did not round-trip: " + plugin.Status);
 
-        var playtest = await plugin.BuildAsync(validatePlaytest: true);
+        var verified = await plugin.BuildAsync(verify: true);
         check(plugin.Status.StartsWith("Compiled", StringComparison.Ordinal) && File.Exists(path) &&
             MapCompiler.Read(new(path, File.ReadAllText(path)), catalog).Write() == compiled.Write(),
             "The editor did not publish a compatible relief map: " + plugin.Status);
-        check(playtest is not null && playtest.Slots.SequenceEqual(["blue"]) && playtest.StartSetPath is null,
+        check(verified?.Playtest is { StartSetPath: null } playtest && playtest.Slots.SequenceEqual(["blue"]) &&
+            verified.Verification is { Tick: 8, EntityCount: 6 },
             "Rocky Pass did not validate as a fixture with its fixed placements.");
         GD.Print($"OPENRTS_RELIEF_MAP:{grid.Width}x{grid.Height}, {original.Objects.Count} objects, game={compiled.GameplayFingerprint}");
     }

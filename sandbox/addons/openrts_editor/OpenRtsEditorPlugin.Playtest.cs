@@ -9,6 +9,7 @@ public partial class OpenRtsEditorPlugin
     private ConfirmationDialog _playtestDialog = null!;
     private ItemList _playtestStarts = null!;
     private OptionButton _playtestSets = null!;
+    private bool _verifyPlaytest;
 
     private void SetupPlaytest()
     {
@@ -26,20 +27,26 @@ public partial class OpenRtsEditorPlugin
         {
             string[] slots = _playtestStarts.GetSelectedItems().Order().Select(index => _playtestStarts.GetItemText(index)).ToArray();
             string path = _playtestSets.GetItemMetadata(_playtestSets.Selected).AsString();
-            _ = BuildAsync(play: true, selectedStarts: slots, selectedStartSet: path);
+            StartPlaytest(_verifyPlaytest, slots, path);
         };
     }
 
-    private void ChoosePlaytest()
+    private void StartPlaytest(bool verify, string[]? slots = null, string? set = null) =>
+        _ = BuildAsync(play: !verify, verify: verify, bundle: verify && EditedMap() is OpenRtsMap,
+            selectedStarts: slots, selectedStartSet: set);
+
+    private void ChoosePlaytest(bool verify)
     {
         CommitStroke();
         var root = EditedMap();
         var source = Extract(root);
         if (!source.IsSkirmish)
         {
-            _ = BuildAsync(play: true);
+            StartPlaytest(verify);
             return;
         }
+        _verifyPlaytest = verify;
+        _playtestDialog.OkButtonText = verify ? "Build and verify" : "Validate and play";
         var match = GameManifest.Load(ProjectFile(ContentPath(root), ".yaml")).Settings.Match;
         _playtestStarts.Clear();
         foreach (var slot in source.Slots.OrderBy(slot => slot.Id, StringComparer.Ordinal))

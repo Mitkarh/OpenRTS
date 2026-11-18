@@ -10,6 +10,7 @@ try
 {
     var path = "sandbox/content/units/units.yaml";
     string? mapPath = null, startSetPath = null, aiConfig = null, aiProfile = null, modPath = null, compileMapPath = null;
+    LocalMapPlaytest? localPlaytest = null;
     bool fogRetentionBenchmark = false, fogGroupsBenchmark = false, fogBenchmark = false, fog = false, skirmishAi = false, ticksSpecified = false, aviation = false;
     uint? aiPlayer = null;
     bool simulate = false, benchmark = false, hasPath = false, navigation = false, reverseJobs = false, showcase = false, buildings = false, sizeBenchmark = false, production = false, ecsBenchmark = false, skirmish = false;
@@ -28,6 +29,7 @@ try
         else if (argument.StartsWith("--ai-config=", StringComparison.Ordinal) && argument.Length > 12) aiConfig = argument[12..];
         else if (argument.StartsWith("--ai-profile=", StringComparison.Ordinal) && argument.Length > 13) aiProfile = argument[13..];
         else if (argument.StartsWith("--map=", StringComparison.Ordinal) && argument.Length > 6) { mapPath = argument[6..]; simulate = true; }
+        else if (argument.StartsWith("--local-playtest=", StringComparison.Ordinal)) localPlaytest = LocalMapPlaytest.Read(argument[17..]);
         else if (argument.StartsWith("--compile-map=", StringComparison.Ordinal) && argument.Length > 14) compileMapPath = argument[14..];
         else if (argument.StartsWith("--start-set=", StringComparison.Ordinal) && argument.Length > 12) { startSetPath = argument[12..]; simulate = true; }
         else if (argument == "--ecs-benchmark") ecsBenchmark = true;
@@ -45,6 +47,9 @@ try
         else if (!argument.StartsWith("--", StringComparison.Ordinal) && !hasPath) { path = argument; hasPath = true; }
         else throw new ArgumentException("Usage: OpenRTS.Headless [units.yaml] [--mod=game.yaml] [--simulate|--benchmark|--fog-retention-benchmark|--ecs-benchmark|--size-benchmark|--showcase|--buildings|--production] [--navigation] [--skirmish|--skirmish-ai|--map=path] [--ai-player=1..4] [--ai-config=path] [--ai-profile=id] [--start-set=path] [--compile-map=output.ortmap.json] [--workers=1..64] [--reverse-jobs] [--count=1..1000000] [--ticks=1..1000000]");
     }
+    if (localPlaytest is not null && (mapPath is null || hasPath || startSetPath is not null || compileMapPath is not null ||
+        fog || aviation || skirmish || skirmishAi))
+        throw new ArgumentException("--local-playtest requires its compiled map and game manifest and uses its validated starting set.");
     if (skirmishAi && skirmish)
         throw new ArgumentException("Select either the scripted skirmish or the AI skirmish.");
     if (!skirmishAi && (aiConfig is not null || aiPlayer.HasValue || aiProfile is not null))
@@ -103,7 +108,10 @@ try
     }
     if (simulate)
     {
-        var map = aviation ? AviationScenario.Load(catalog, ReadMapSource) : mapRequested ? MapScenario.Load(catalog, ReadMapSource, mapPath ?? settings.Match.DefaultMap, startSetPath, settings.Match.DefaultStartSet) : null;
+        var map = localPlaytest is not null ? localPlaytest.Load(mapPath!, ReadMapSource, catalog, manifest!)
+            : aviation ? AviationScenario.Load(catalog, ReadMapSource)
+            : mapRequested ? MapScenario.Load(catalog, ReadMapSource, mapPath ?? settings.Match.DefaultMap, startSetPath, settings.Match.DefaultStartSet)
+            : null;
         SimulationWorld Create() => fog ? FogScenario.Create(catalog) : map is not null ? map.CreateWorld(new(), speedPerTick: settings.Simulation.SpeedPerTick, workers: workers, tickRate: settings.Simulation.TickRate) : buildings ? BuildingScenario.Create(catalog, workers) : showcase ? ShowcaseScenario.Create(catalog) : navigation ? NavigationScenario.Create(catalog, count, workers, reverseJobs) : DiagnosticScenario.Create(catalog, count);
         using var world = Create();
         var commands = fog ? [] : skirmish && startSetPath is null ? SkirmishScenario.Commands() : aviation ? AviationScenario.Commands : map is not null ? [] : production ? ProductionScenario.Commands(catalog) : buildings ? BuildingScenario.Commands(catalog) : showcase ? ShowcaseScenario.VerificationCommands(catalog) : navigation ? NavigationScenario.Commands(count, ticks) : benchmark

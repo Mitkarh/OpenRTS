@@ -1,12 +1,15 @@
 #if TOOLS
 using Godot;
 using OpenRTS.Content;
+using OpenRTS.Core;
 
 namespace OpenRTS.Godot.Authoring;
 
 [Tool]
 public partial class OpenRtsEditorPlugin : EditorPlugin
 {
+    internal sealed record MapBuild(string Path, string Mod, LocalMapPlaytest? Playtest, SimulationReport? Verification);
+
     private VBoxContainer _dock = null!;
     private EditorDock _editorDock = null!;
     private OptionButton _types = null!;
@@ -41,8 +44,9 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         Button("Extract source", () => _ = BuildAsync(sourceOnly: true));
         Button("Compile map", () => _ = BuildAsync());
         _buildBundle = Button("Build scene-map bundle", () => _ = BuildAsync(bundle: true));
-        Button("Build and play map", ChoosePlaytest);
-        Button("Cancel compilation", () => Invalidate("Cancelled; previous file retained."));
+        Button("Build and play map", () => ChoosePlaytest(verify: false));
+        Button("Build and verify map", () => ChoosePlaytest(verify: true));
+        Button("Cancel build", () => Invalidate("Cancelled; previous file retained."));
         _status = new Label { Text = "Open a map scene, or create an empty scene.", AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _dock.AddChild(_status);
         _editorDock = new() { Title = "OpenRTS", LayoutKey = "OpenRTSMapAuthoring", Global = true, DefaultSlot = EditorDock.DockSlot.LeftBr };
@@ -55,7 +59,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         _gizmos = new(); AddNode3DGizmoPlugin(_gizmos);
         SceneChanged += OnSceneChanged;
         GetUndoRedo().VersionChanged += OnEdited;
-        if (OS.GetCmdlineUserArgs().Contains("--build-scene-map"))
+        if (OS.GetCmdlineUserArgs().Any(arg => arg == "--build-scene-map" || arg.StartsWith("--build-map=", StringComparison.Ordinal)))
             Callable.From(() => { _ = BuildFromCommandLine(); }).CallDeferred();
         if (OS.GetCmdlineUserArgs().Contains("--verify-map-editor"))
             Callable.From(() => { _ = MapEditorChecks.Run(this); }).CallDeferred();
@@ -216,20 +220,21 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         undo.CommitAction();
     }
 
-    internal async Task<LocalMapPlaytest?> BuildAsync(bool sourceOnly = false, bool bundle = false, bool play = false, bool saveScene = true,
-        bool validatePlaytest = false, string[]? selectedStarts = null, string? selectedStartSet = null)
+    internal async Task<MapBuild?> BuildAsync(bool sourceOnly = false, bool bundle = false, bool play = false, bool saveScene = true,
+        string[]? selectedStarts = null, string? selectedStartSet = null, bool verify = false)
     {
         try { CommitStroke(); } catch (Exception error) { Fail(error); return null; }
         _lastError = null;
         Invalidate("Extracting…");
         var stop = _build = new(); int generation = _generation;
+        string? staged = null;
         try
         {
             var edited = EditedMap();
             var root = edited as OpenRtsMap;
             var map2D = edited as OpenRtsMap2D;
             if (bundle && root is null)
-                throw new ArgumentException("Use Build and play map to launch a 2D scene's compiled map.");
+                throw new ArgumentException("A 2D scene publishes a .ortmap.json compiled map. Use Build and verify map or --format=compiled.");
             bundle |= play && root is not null;
 
             string OutputPath() => root?.CompiledPath ?? map2D!.CompiledPath;
@@ -244,44 +249,72 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
             var catalog = manifest.LoadUnits();
             var source = Extract(edited);
             string snapshot = source.Write();
+            void CheckInputs()
+            {
+                stop.Token.ThrowIfCancellationRequested();
+                if (generation != _generation || !GodotObject.IsInstanceValid(edited) ||
+                    EditorInterface.Singleton.GetEditedSceneRoot() != edited || OutputPath() != outputPath ||
+                    ContentPath(edited) != contentPath || Extract(edited).Write() != snapshot)
+                    throw new OperationCanceledException("Scene changed during compilation.");
+            }
+
             _status.Text = "Compiling…";
             var (compiled, receipt) = await Task.Run(() =>
             {
                 var result = MapCompiler.Compile(source, catalog, stop.Token);
                 LocalMapPlaytest? receipt = null;
-                if (play || validatePlaytest) receipt = LocalMapPlaytest.Validate(result, manifest, selectedStarts, selectedStartSet);
+                if (play || verify) receipt = LocalMapPlaytest.Validate(result, manifest, selectedStarts, selectedStartSet);
                 else if (!sourceOnly) ValidateObjects(result, catalog, stop.Token);
                 stop.Token.ThrowIfCancellationRequested(); return (result, receipt);
             }, stop.Token);
-            stop.Token.ThrowIfCancellationRequested();
-            if (generation != _generation || !GodotObject.IsInstanceValid(edited) || EditorInterface.Singleton.GetEditedSceneRoot() != edited ||
-                OutputPath() != outputPath || ContentPath(edited) != contentPath || Extract(edited).Write() != snapshot)
-                throw new OperationCanceledException("Scene changed during compilation.");
-            var currentManifest = Manifest();
-            if (currentManifest.LoadUnits().Summary.Fingerprint != catalog.Summary.Fingerprint)
-                throw new OperationCanceledException("Scene/content changed during compilation.");
-            receipt?.ReadStartingSet(currentManifest);
+            void CheckContent()
+            {
+                var currentManifest = Manifest();
+                if (currentManifest.LoadUnits().Summary.Fingerprint != catalog.Summary.Fingerprint)
+                    throw new OperationCanceledException("Scene/content changed during compilation.");
+                receipt?.ReadStartingSet(currentManifest);
+            }
+            CheckInputs();
+            CheckContent();
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+            if (sourceOnly) output = output[..^".ortmap.json".Length] + ".mapsource.json";
+            else if (bundle) output = output[..^".ortmap.json".Length] + SceneMapBundle.Suffix;
+            if (verify) staged = Path.Combine(Path.GetDirectoryName(output)!, $".verify-{Guid.NewGuid():N}-{Path.GetFileName(output)}");
+            string destination = staged ?? output;
             if (sourceOnly)
+                SaveTextAtomically(compiled.Source.Write(), destination, stop.Token);
+            else if (dependencies is not null) PublishBundle(root!, destination, compiled, dependencies, stop.Token);
+            else MapCompiler.Save(compiled, destination, stop.Token);
+
+            SimulationReport? verification = null;
+            if (staged is not null)
             {
-                output = output[..^".ortmap.json".Length] + ".mapsource.json";
-                SaveTextAtomically(compiled.Source.Write(), output, stop.Token);
+                _status.Text = "Verifying in Godot and headless…";
+                verification = await VerifyMap(staged, contentPath, receipt!, manifest, catalog, stop.Token);
+                CheckInputs();
+                CheckContent();
+                if (bundle) Sandbox.CheckSceneMapDependencies(SceneMapBundle.Read(new(staged, File.ReadAllText(staged))));
+                stop.Token.ThrowIfCancellationRequested();
+                File.Move(staged, output, overwrite: true);
+                staged = null;
             }
-            else if (dependencies is not null)
-            {
-                output = PublishBundle(root!, output, compiled, dependencies, stop.Token);
-            }
-            else MapCompiler.Save(compiled, output, stop.Token);
-            if (play) PlayMap(ProjectSettings.LocalizePath(output), contentPath, receipt!);
-            string validation = receipt is not null ? "Selected local match validated." :
+            string resource = ProjectSettings.LocalizePath(output);
+            if (play) PlayMap(resource, contentPath, receipt!);
+            string validation = verification is not null ? $"Godot and headless agree after {verification.Tick} ticks ({verification.EntityCount} objects)." :
+                receipt is not null ? "Selected local match validated." :
                 sourceOnly ? "Structural validation only." : "Placed objects validated; starting armies are checked at match creation.";
-            _status.Text = $"{(sourceOnly ? "Extracted" : "Compiled")} {compiled.Map.Id}\n{compiled.Source.Objects.Count} objects, {compiled.Source.Slots.Count} slots\n{ProjectSettings.LocalizePath(output)}\n{validation}";
+            _status.Text = $"{(sourceOnly ? "Extracted" : "Compiled")} {compiled.Map.Id}\n{compiled.Source.Objects.Count} objects, {compiled.Source.Slots.Count} slots\n{resource}\n{validation}";
             if (saveScene) EditorInterface.Singleton.GetResourceFilesystem().Scan();
-            return receipt;
+            return new(resource, contentPath, receipt, verification);
         }
         catch (OperationCanceledException) { if (generation == _generation) _status.Text = "Cancelled/stale; previous file retained."; }
         catch (Exception error) { if (generation == _generation) Fail(error); }
-        finally { if (_build == stop) _build = null; stop.Dispose(); }
+        finally
+        {
+            if (_build == stop) _build = null;
+            stop.Dispose();
+            if (staged is not null) File.Delete(staged);
+        }
         return null;
     }
 
