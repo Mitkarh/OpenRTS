@@ -19,7 +19,7 @@ internal static class WeaponChecks
             int boundary = origin + minimum + 2 * BodyShape.Default.HalfWidth;
             foreach (bool explicitAttack in new[] { false, true })
             {
-                using var world = new SimulationWorld([Armed("gun", weapon), new("target", 100)], 16384, 8192);
+                using var world = new SimulationWorld([Armed("gun", weapon, movable: !explicitAttack), new("target", 100)], 16384, 8192);
                 world.AddInitialUnit(0, new(origin, 4096), 1);
                 var target = world.AddInitialUnit(1, new(boundary - 1, 4096), 2);
                 world.Step(explicitAttack ? [Attack(world)] : []);
@@ -30,6 +30,61 @@ internal static class WeaponChecks
                 for (int tick = 0; tick < 8; tick++) world.Step();
                 NavigationChecks.Check(Pose(world, 2).Health == 75, "The weapon should fire at exactly MinRange.");
             }
+        });
+        test("Weapons: an attack order withdraws from MinRange and Hold Position cancels the withdrawal", () =>
+        {
+            const int minimum = 3072;
+            var weapon = new WeaponDefinition(6144, 6144, 25, 1000, 0, projectile: ProjectileKind.Cannon,
+                trajectory: ProjectileTrajectory.Arc, minRange: minimum);
+            var start = new WorldPosition(5632, 4608);
+            var enemy = start with { X = start.X + 1024 };
+            SimulationWorld Create(NavigationGrid? grid = null)
+            {
+                var world = new SimulationWorld([Armed("artillery", weapon), new("target", 100)],
+                    16384, 10240, navigationGrid: grid);
+                world.AddInitialUnit(0, start, 1);
+                world.AddInitialUnit(1, enemy, 2);
+                return world;
+            }
+
+            foreach (var grid in new NavigationGrid?[] { null, new(16, 10, [new(4, 3), new(4, 4), new(4, 5)]) })
+            {
+                using var world = Create(grid);
+                world.Step([Attack(world)]);
+                using var restored = SimulationWorld.RestoreSnapshot(world.CaptureSnapshot(), () => Create(grid));
+                for (int tick = 0; tick < 200 && Pose(world, 2).Health == 100; tick++)
+                {
+                    world.Step();
+                    restored.Step();
+                    NavigationChecks.Check(world.Report() == restored.Report(), "Restoring the retreat changed the next tick.");
+                }
+                var position = Pose(world, 1).Current;
+                long dx = position.X - enemy.X, dy = position.Y - enemy.Y;
+                long edge = minimum + 2L * BodyShape.Default.HalfWidth;
+                NavigationChecks.Check(Pose(world, 2).Health == 75 && dx * dx + dy * dy >= edge * edge,
+                    "The artillery should move to a reachable firing position and fire.");
+            }
+
+            var blocked = from y in Enumerable.Range(0, 10) from x in Enumerable.Range(0, 16)
+                where y != 4 || x is not (5 or 6)
+                select new GridCell(x, y);
+            using var trapped = Create(new(16, 10, blocked));
+            trapped.Step([Attack(trapped)]);
+            for (int tick = 0; tick < 16; tick++) trapped.Step();
+            NavigationChecks.Check(Pose(trapped, 1).Current == start && Pose(trapped, 2).Health == 100,
+                "There was no reachable firing position in the enclosure.");
+
+            using var held = Create();
+            held.Step([new(1, 0, 1, CommandKind.HoldPosition, new(1))]);
+            for (int tick = 0; tick < 12; tick++) held.Step();
+            NavigationChecks.Check(Pose(held, 1).Current == start && Pose(held, 2).Health == 100, "Hold Position caused a withdrawal.");
+            held.Step([Attack(held)]);
+            var stopped = Pose(held, 1).Current;
+            NavigationChecks.Check(stopped != start, "Attack should start the withdrawal.");
+            held.Step([new(held.Tick + 1, 0, 2, CommandKind.HoldPosition, new(1))]);
+            for (int tick = 0; tick < 25; tick++) held.Step();
+            NavigationChecks.Check(Pose(held, 1).Current == stopped && Pose(held, 2).Health == 100,
+                "Hold Position should cancel a withdrawal in progress.");
         });
         test("Weapons: MinRange applies to manual ground-target abilities", () =>
         {

@@ -194,7 +194,17 @@ public sealed partial class SimulationWorld
             if (repair && !PrepareAirWork(entity, _entityHandles[target].Get<SpatialState>().Position))
             { entityOrders.OrderPhase = OrderPhase.Approaching; continue; }
             if (InWeaponRange(i, target, weapon.Range, weapon) && (_types[entityIdentity.Type].Footprint is not null || StopAllowed(entityIdentity.Type, entity.Get<SpatialState>().Position))) { Halt(i); entityOrders.OrderPhase = OrderPhase.Engaging; }
-            else if (TargetBelowMinimum(i, target, weapon)) { Halt(i); entityOrders.OrderPhase = OrderPhase.Waiting; }
+            else if (TargetBelowMinimum(i, target, weapon) || entityOrders.OrderPhase == OrderPhase.Withdrawing && entityMotion.Moving)
+            {
+                if (attack && !repair && TypeOf(entity).Movable && !IsAircraft(entity) &&
+                    UpdateWithdrawal(i, target, weapon, entityOrders.OrderStarted == Tick))
+                    entityOrders.OrderPhase = OrderPhase.Withdrawing;
+                else
+                {
+                    Halt(i);
+                    entityOrders.OrderPhase = OrderPhase.Waiting;
+                }
+            }
             else if ((aggressive || attack) && _types[entityIdentity.Type].Movable)
             {
                 if (!entityMotion.Moving || (Tick + entityIdentity.Id.Value) % 4 == 0)

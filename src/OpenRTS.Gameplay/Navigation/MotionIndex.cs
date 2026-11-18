@@ -141,12 +141,12 @@ internal sealed class MotionIndex(int maximumStep)
         }
         return blocker.Value == 0;
     }
-    internal bool ClearPlacement(WorldPosition position, out EntityId blocker, BodyShape? shape = null)
+    internal bool ClearPlacement(WorldPosition position, out EntityId blocker, BodyShape? shape = null, EntityId ignore = default)
     {
         var actor = shape ?? BodyShape.Default;
         QuerySlots(position, position, Math.Max(actor.HalfWidth, actor.HalfHeight), _candidates); blocker = default;
         foreach (int other in _candidates)
-            if (BodyGeometry.Overlap(position, position, actor, _bodies[other].End, _bodies[other].End, _bodies[other].Shape) &&
+            if (_bodies[other].Id != ignore && BodyGeometry.Overlap(position, position, actor, _bodies[other].End, _bodies[other].End, _bodies[other].Shape) &&
                 (blocker.Value == 0 || _bodies[other].Id.Value < blocker.Value)) blocker = _bodies[other].Id;
         return blocker.Value == 0;
     }

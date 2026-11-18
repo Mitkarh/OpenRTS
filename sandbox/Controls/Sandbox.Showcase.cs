@@ -43,6 +43,7 @@ public partial class Sandbox
                 string ground = locomotion.Terrains[terrain] switch
                 { "road" => "бетон", "grass" => "трава", "mud" => "грязь", "water" => "вода", "forest" => "лес", "swamp" => "болото", _ => "горы" };
                 string phase = pose.Order.Phase switch { OpenRTS.Core.Orders.OrderPhase.Moving => "идёт", OpenRTS.Core.Orders.OrderPhase.Approaching => "сближается",
+                    OpenRTS.Core.Orders.OrderPhase.Withdrawing => "отходит",
                     OpenRTS.Core.Orders.OrderPhase.Engaging => "бой", OpenRTS.Core.Orders.OrderPhase.Holding => "держит позицию", _ => "ожидает" };
                 string armor = type.Armor switch { ArmorKind.Living => "живой", ArmorKind.Light => "лёгкая броня", ArmorKind.Mechanical => "техника", _ => "здание" };
                 string movement = type.Movable ? $"скорость {type.Locomotor.Rules[terrain].Speed * 100.0 / 1024:0.#}%" : "неподвижный";

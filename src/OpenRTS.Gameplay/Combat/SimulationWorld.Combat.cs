@@ -71,9 +71,10 @@ public sealed partial class SimulationWorld
     }
     private bool InWeaponRange(int index, int target, int range, WeaponDefinition weapon) => InWeaponRange(index, target, range, weapon, out _);
 
-    private bool InWeaponRange(int index, int target, int range, WeaponDefinition weapon, out long distanceSquared)
+    private bool InWeaponRange(int index, int target, int range, WeaponDefinition weapon, out long distanceSquared,
+        WorldPosition? sourcePosition = null)
     {
-        long distance = WeaponDistance(index, target, weapon, out var from, out var to, out bool spatial, out distanceSquared);
+        long distance = WeaponDistance(index, target, weapon, out var from, out var to, out bool spatial, out distanceSquared, sourcePosition);
         return !weapon.BelowMinimum(distance) && distance <= (long)range * range &&
             (weapon.HasFlightProfile || _baseGrid is null || (spatial
                 ? SpatialTerrainClear(WeaponPoint(from, weapon, Airborne(_entityHandles[index])), WeaponPoint(to, weapon, Airborne(_entityHandles[target])))
@@ -84,11 +85,11 @@ public sealed partial class SimulationWorld
         weapon.BelowMinimum(WeaponDistance(index, target, weapon, out _, out _, out _, out _));
 
     private long WeaponDistance(int index, int target, WeaponDefinition weapon, out WorldPosition from, out WorldPosition to,
-        out bool spatial, out long horizontalSquared)
+        out bool spatial, out long horizontalSquared, WorldPosition? sourcePosition = null)
     {
         ref var source = ref _entityHandles[index];
         ref var other = ref _entityHandles[target];
-        horizontalSquared = ObjectGeometry.DistanceSquared(TypeOf(source), source.Get<SpatialState>().Position,
+        horizontalSquared = ObjectGeometry.DistanceSquared(TypeOf(source), sourcePosition ?? source.Get<SpatialState>().Position,
             TypeOf(other), other.Get<SpatialState>().Position, out from, out to);
         spatial = !weapon.HasFlightProfile && (TracesCliffRelief(weapon) || (IsAircraft(source) || IsAircraft(other)) &&
             !(weapon.Effect == WeaponEffect.Repair && TypeOf(source).Flight is { Mode: FlightMode.Hover }));
