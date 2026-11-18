@@ -1,5 +1,31 @@
 # Набор графики полигона
 
+## 3D-полигон
+
+В [AssetShowcase.tscn](../../sandbox3d/AssetShowcase.tscn) собраны четыре здания и четыре юнита. Для просмотра можно открыть сцену через `./tools/dev.sh editor3d res://AssetShowcase.tscn` и запустить её клавишей F6. Размеры и повороты экземпляров в витрине заданы для сравнения силуэтов.
+
+| Роль | Ресурс в `sandbox3d/assets` | Происхождение |
+| --- | --- | --- |
+| Завод, электростанция, казармы, нефтепереработка | `kenney/factory.glb`, `power-plant.glb`, `barracks.glb`, `refinery.glb` | `building-m`, `building-e`, `building-b`, `building-c` из [Kenney City Kit (Industrial) 2.0](https://kenney.nl/assets/city-kit-industrial). Названия файлов адаптированы для полигона. GLB используют общий `Textures/colormap.png`. |
+| Танк и гусеничный БТР | `quaternius/tank.glb`, `apc.glb` | `Tank2.glb` и `Tank3.glb` из [Animated Tanks Pack](https://quaternius.com/packs/animatedtanks.html). Взяты из [публичного зеркала GLB](https://github.com/trebeljahr/quaternius-showcase/tree/main/public/glb/tank_pack). |
+| Инженерная машина | `quaternius/engineer.glb` | `Tank4.glb` из того же зеркала. В Blender 5.3 удалён меш `Tank_Gun`, применён масштаб оставшегося `Tank_Turret` и переэкспортированы четыре клипа гусениц. [Исходник Blender](sources/sandbox3d-engineer.blend) · [Папка оригинальных .blend](https://drive.google.com/drive/folders/1MsH24X-roZs9c_UILBbchk2Ue5cMeE9A). |
+| Пехотинец | `quaternius/Infantry.tscn` | Манекен и 46 клипов из [Universal Animation Library Standard](https://store.godotengine.org/asset/quaternius/universal-animation-library/). [Пистолет Quaternius](https://poly.pizza/m/J3i9KDQ3kt) закреплён на `DEF-hand.R`. При запуске сцена проигрывает `Pistol_Idle`. |
+
+Модели распространяются по CC0-1.0. Уведомления авторов лежат рядом с GLB в [каталоге Kenney](../../sandbox3d/assets/kenney/LICENSE.txt) и [каталоге Quaternius](../../sandbox3d/assets/quaternius/LICENSE.txt). Для инженерной машины проверена геометрия с однотонными материалами. В исходном кузове и гусеницах есть раздельные вершины на швах и скрытые пары граней, UV-развёрток нет.
+
+### SHA-256 исходников
+
+| Файл | SHA-256 |
+| --- | --- |
+| `kenney_city-kit-industrial_2.0.zip` | `5b381164e5760f3830a2dbee43b972deee38b2a695d091b56e238ab2910c96d2` |
+| `Universal_Animation_LibraryStandard.zip` | `18ff1a7215f4852b320203e8aaf02a1578b5c8eef9027fbaedfcedc7b85a3ac2` |
+| `Tank2.glb` | `d46acaeb563f401bfb389bd7708342f97d0cd62f9b2c6dc88f8537be8c85ed80` |
+| `Tank3.glb` | `1763818d11cb5cef32dcbe9cf52af108710310c034591e9bdf4555847e73e979` |
+| `Tank4.glb` | `dd99da632fd89cae38aa6bc4af4179364bb592f87fac3e2abac4c60af55f2f1a` |
+| `pistol.glb` | `4622ab2909aa0f4e88b74a13f52f9e28183a6ff5fca5896fc7e98d44008f2148` |
+
+## 2D-полигон
+
 16 ноября 2026 добавлены инженерный конвертоплан, конвертоплан снабжения и тяжёлый четырёхроторный транспорт. [Промпты, источники и SHA-256](air-support-art.json) · [Техническая нормализация через Godot](../../tools/prepare_air_support_art.gd). Встроенный imagegen создаёт RGBA-источники, нормализация сохраняет изображение и альфу, укладывает их в 1024×1024 и создаёт SpriteFrames. Роторы используют существующий отдельный анимируемый слой.
 
 Сгенерирован 4 ноября 2026 года встроенным `image_gen`, затем скопирован в проект. Внешние игровые ассеты не заимствовались. [Промпты, происхождение и SHA-256](generated-art.json).

@@ -25,7 +25,7 @@ build() {
 }
 
 import_assets() {
-  "$godot_bin" --headless --editor --path "$PWD/sandbox" --import
+  "$godot_bin" --headless --editor --path "$PWD/${1:-sandbox}" --import
 }
 
 action="${1:-build}"
@@ -46,6 +46,23 @@ case "$action" in
     ;;
   run) build; import_assets; exec "$godot_bin" --path "$PWD/sandbox" -- "$@" ;;
   editor) build; exec "$godot_bin" --path "$PWD/sandbox" --editor ;;
+  run3d|editor3d|verify3d)
+    build sandbox3d/OpenRTS.Sandbox3D.csproj
+    if [[ "$action" == editor3d ]]; then
+      exec "$godot_bin" --path "$PWD/sandbox3d" --editor "$@"
+    fi
+    import_assets sandbox3d
+    if [[ "$action" == verify3d ]]; then
+      verification_output="$("$godot_bin" --headless --max-fps 60 --quit-after 600 --path "$PWD/sandbox3d" -- --verify)"
+      printf '%s\n' "$verification_output"
+      if ! grep -q '^Sandbox3D verified:' <<< "$verification_output"; then
+        echo 'Sandbox3D did not report a completed verification.' >&2
+        exit 1
+      fi
+      exit 0
+    fi
+    exec "$godot_bin" --path "$PWD/sandbox3d" -- "$@"
+    ;;
   scene-map)
     if [[ $# -ne 1 || "$1" != res://*.tscn ]]; then
       echo 'Usage: tools/dev.sh scene-map res://path/to/map.tscn' >&2
@@ -109,5 +126,5 @@ case "$action" in
     ;;
   verify-network) build; import_assets; python3 tools/verify_network.py "$godot_bin" "$@" ;;
   verify) "$0" test; import_assets; python3 tools/verify.py "$godot_bin" ;;
-  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|scene-map|scene-map-pack|verify|verify-authoring|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
+  *) echo 'Usage: tools/dev.sh [build|test|headless|benchmark|run|editor|run3d|editor3d|verify3d|scene-map|scene-map-pack|verify|verify-authoring|verify-network|verify-menu|verify-replay|verify-wan|match-directory|verify-directory]' >&2; exit 2 ;;
 esac

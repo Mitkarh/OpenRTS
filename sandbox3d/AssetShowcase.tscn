@@ -1,0 +1,133 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/kenney/factory.glb" id="1"]
+[ext_resource type="PackedScene" path="res://assets/kenney/power-plant.glb" id="2"]
+[ext_resource type="PackedScene" path="res://assets/kenney/barracks.glb" id="3"]
+[ext_resource type="PackedScene" path="res://assets/kenney/refinery.glb" id="4"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/tank.glb" id="5"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/apc.glb" id="6"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/engineer.glb" id="7"]
+[ext_resource type="PackedScene" path="res://assets/quaternius/Infantry.tscn" id="8"]
+
+[sub_resource type="StandardMaterial3D" id="GroundMaterial"]
+albedo_color = Color(0.19, 0.23, 0.25, 1)
+roughness = 1.0
+
+[sub_resource type="PlaneMesh" id="GroundMesh"]
+material = SubResource("GroundMaterial")
+size = Vector2(28, 16)
+
+[sub_resource type="Environment" id="Lighting"]
+ambient_light_source = 2
+ambient_light_color = Color(0.8, 0.88, 1, 1)
+ambient_light_energy = 0.42
+
+[node name="AssetShowcase" type="Node3D"]
+
+[node name="Environment" type="WorldEnvironment" parent="."]
+environment = SubResource("Lighting")
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("GroundMesh")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-55, -35, 0)
+light_energy = 0.78
+shadow_enabled = true
+shadow_bias = 0.2
+directional_shadow_max_distance = 35.0
+
+[node name="Camera" type="Camera3D" parent="."]
+position = Vector3(0, 20, 15)
+rotation_degrees = Vector3(-53.13, 0, 0)
+projection = 1
+current = true
+size = 18.0
+
+[node name="Factory" parent="." instance=ExtResource("1")]
+position = Vector3(-10.5, 0, -3.8)
+rotation_degrees = Vector3(0, 18, 0)
+scale = Vector3(2.3, 2.3, 2.3)
+
+[node name="PowerPlant" parent="." instance=ExtResource("2")]
+position = Vector3(-3.5, 0, -3.8)
+rotation_degrees = Vector3(0, 18, 0)
+scale = Vector3(2.3, 2.3, 2.3)
+
+[node name="Barracks" parent="." instance=ExtResource("3")]
+position = Vector3(3.5, 0, -3.8)
+rotation_degrees = Vector3(0, 18, 0)
+scale = Vector3(2.3, 2.3, 2.3)
+
+[node name="Refinery" parent="." instance=ExtResource("4")]
+position = Vector3(10.5, 0, -3.8)
+rotation_degrees = Vector3(0, 18, 0)
+scale = Vector3(2.3, 2.3, 2.3)
+
+[node name="Tank" parent="." instance=ExtResource("5")]
+position = Vector3(-10.5, 0, 3.6)
+rotation_degrees = Vector3(0, 116, 0)
+scale = Vector3(0.31, 0.31, 0.31)
+
+[node name="APC" parent="." instance=ExtResource("6")]
+position = Vector3(-3.5, 0, 3.6)
+rotation_degrees = Vector3(0, 116, 0)
+scale = Vector3(0.31, 0.31, 0.31)
+
+[node name="Engineer" parent="." instance=ExtResource("7")]
+position = Vector3(3.5, 0, 3.6)
+rotation_degrees = Vector3(0, 116, 0)
+scale = Vector3(0.31, 0.31, 0.31)
+
+[node name="Infantry" parent="." instance=ExtResource("8")]
+position = Vector3(10.5, 0, 3.6)
+rotation_degrees = Vector3(0, -35, 0)
+scale = Vector3(1.65, 1.65, 1.65)
+
+[node name="FactoryLabel" type="Label3D" parent="."]
+position = Vector3(-10.5, 0.3, -0.45)
+billboard = 1
+pixel_size = 0.014
+text = "Завод"
+
+[node name="PowerPlantLabel" type="Label3D" parent="."]
+position = Vector3(-3.5, 0.3, -0.45)
+billboard = 1
+pixel_size = 0.014
+text = "Электростанция"
+
+[node name="BarracksLabel" type="Label3D" parent="."]
+position = Vector3(3.5, 0.3, -0.45)
+billboard = 1
+pixel_size = 0.014
+text = "Казармы"
+
+[node name="RefineryLabel" type="Label3D" parent="."]
+position = Vector3(10.5, 0.3, -0.45)
+billboard = 1
+pixel_size = 0.014
+text = "Нефтепереработка"
+
+[node name="TankLabel" type="Label3D" parent="."]
+position = Vector3(-10.5, 0.3, 7.25)
+billboard = 1
+pixel_size = 0.014
+text = "Танк"
+
+[node name="APCLabel" type="Label3D" parent="."]
+position = Vector3(-3.5, 0.3, 7.25)
+billboard = 1
+pixel_size = 0.014
+text = "БТР"
+
+[node name="EngineerLabel" type="Label3D" parent="."]
+position = Vector3(3.5, 0.3, 7.25)
+billboard = 1
+pixel_size = 0.014
+text = "Инженерная машина"
+
+[node name="InfantryLabel" type="Label3D" parent="."]
+position = Vector3(10.5, 0.3, 7.25)
+billboard = 1
+pixel_size = 0.014
+text = "Пехота"
