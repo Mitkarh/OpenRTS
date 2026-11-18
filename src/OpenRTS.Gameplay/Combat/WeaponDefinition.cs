@@ -25,6 +25,7 @@ public sealed record WeaponDefinition
     public int LaunchFan { get; }
     public SensorDisplay MinimumContact { get; }
     public int Range { get; }
+    public int MinRange { get; }
     public int AcquireRange { get; }
     public int Damage { get; }
     public int CooldownTicks { get; }
@@ -39,6 +40,7 @@ public sealed record WeaponDefinition
     public int SplashRadius { get; }
     public int LivingModifier { get; }
     public int MechanicalModifier { get; }
+    public int LightModifier { get; }
     public int BuildingModifier { get; }
     public bool FriendlyFire { get; }
     public int PassengerDamage { get; }
@@ -49,7 +51,8 @@ public sealed record WeaponDefinition
         int burst = 1, int burstIntervalTicks = 2, int animationTicks = 4,
         int livingModifier = 100, int mechanicalModifier = 100, int buildingModifier = 100, bool friendlyFire = false, int passengerDamage = 0, bool passengerDamageSpill = false, TargetCategories? targets = null, bool spatialTrajectory = false, TargetCategories? excludedTargets = null,
         SensorDisplay minimumContact = SensorDisplay.Model, ProjectileTrajectory? trajectory = null,
-        int? trajectoryHeight = null, bool? homing = null, int scatterRadius = 0, int launchFan = 0)
+        int? trajectoryHeight = null, bool? homing = null, int scatterRadius = 0, int launchFan = 0,
+        int minRange = 0, int? lightModifier = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         Targets = targets ?? TargetCategories.Ground; ExcludedTargets = excludedTargets;
@@ -69,6 +72,8 @@ public sealed record WeaponDefinition
         ScatterRadius = scatterRadius; LaunchFan = launchFan;
         MinimumContact = minimumContact;
         if (range is < 512 or > MaximumRange) throw new ArgumentOutOfRangeException(nameof(range), $"Weapon range must be in 512..{MaximumRange}.");
+        if (minRange < 0 || minRange > range)
+            throw new ArgumentOutOfRangeException(nameof(minRange), $"Minimum range must be in 0..{range}.");
         if (acquireRange < range || acquireRange > MaximumRange)
             throw new ArgumentOutOfRangeException(nameof(acquireRange), $"Acquisition range must be in {range}..{MaximumRange}.");
         int travel = travelLimit ?? Math.Max(16384, 2 * range);
@@ -83,19 +88,28 @@ public sealed record WeaponDefinition
             Homing && projectile != ProjectileKind.Missile ||
             (HasFlightProfile ? projectile == ProjectileKind.Hitscan || TrajectoryHeight is < 1 or > 16384 : trajectoryHeight.HasValue) ||
             !Enum.IsDefined(effect) || !Enum.IsDefined(minimumContact) ||
-            livingModifier is < 0 or > 1000 || mechanicalModifier is < 0 or > 1000 || buildingModifier is < 0 or > 1000 ||
+            livingModifier is < 0 or > 1000 || mechanicalModifier is < 0 or > 1000 || buildingModifier is < 0 or > 1000 || lightModifier is < 0 or > 1000 ||
             effect == WeaponEffect.Repair && (projectile != ProjectileKind.Hitscan || splashRadius != 0 || friendlyFire || passengerDamage != 0 || minimumContact != SensorDisplay.Model))
             throw new ArgumentException("Invalid weapon range, timing, projectile or effect parameters.");
-        Id = id; Range = range; AcquireRange = acquireRange; Damage = damage; CooldownTicks = cooldownTicks; WindupTicks = windupTicks;
+        Id = id; Range = range; MinRange = minRange; AcquireRange = acquireRange; Damage = damage; CooldownTicks = cooldownTicks; WindupTicks = windupTicks;
         Projectile = projectile; Effect = effect; ProjectileSpeed = projectileSpeed; TravelLimit = travel; SplashRadius = splashRadius;
         Burst = burst; BurstIntervalTicks = burstIntervalTicks; AnimationTicks = animationTicks;
         LivingModifier = livingModifier; MechanicalModifier = mechanicalModifier; BuildingModifier = buildingModifier; FriendlyFire = friendlyFire; PassengerDamage = passengerDamage; PassengerDamageSpill = passengerDamageSpill;
+        LightModifier = lightModifier ?? mechanicalModifier;
     }
-    public int Modifier(ArmorKind armor) => armor switch { ArmorKind.Living => LivingModifier, ArmorKind.Mechanical => MechanicalModifier, _ => BuildingModifier };
+    public int Modifier(ArmorKind armor) => armor switch
+    {
+        ArmorKind.Living => LivingModifier,
+        ArmorKind.Light => LightModifier,
+        ArmorKind.Mechanical => MechanicalModifier,
+        _ => BuildingModifier
+    };
+    internal bool BelowMinimum(long distanceSquared) => distanceSquared < (long)MinRange * MinRange;
     public bool CanTarget(TargetCategories categories) => Targets.Intersects(categories) && ExcludedTargets?.Intersects(categories) != true;
     public bool CanAttackContact(SensorDisplay level) => Effect == WeaponEffect.Damage && level >= MinimumContact;
     public void WriteState(BinaryWriter writer)
     {
+        if (MinRange != 0 || LightModifier != MechanicalModifier) { writer.Write(-34); writer.Write(MinRange); writer.Write(LightModifier); }
         if (ScatterRadius != 0 || LaunchFan != 0) { writer.Write(-33); writer.Write(ScatterRadius); writer.Write(LaunchFan); }
         if (MinimumContact != SensorDisplay.Model) { writer.Write(-31); writer.Write((byte)MinimumContact); }
         if (HasFlightProfile || Homing != (Projectile == ProjectileKind.Missile))

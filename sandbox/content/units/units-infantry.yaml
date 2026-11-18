@@ -1,4 +1,6 @@
 rifleman:
+  Inherits: ^unit
+  Vision: { Radius: 8144 }
   Sensors:
     Detectors:
       [
@@ -10,7 +12,6 @@ rifleman:
           Counters: [stealth],
         },
       ]
-  Inherits: ^unit
   Passenger: { Type: infantry }
   Armaments:
     Mounts:
@@ -30,6 +31,8 @@ rifleman:
   Presentation: { Model: infantry-rifle, Name: Пехотинец с автоматом }
 
 rocketeer:
+  Inherits: ^unit
+  Vision: { Radius: 6144 }
   Sensors:
     Detectors:
       [
@@ -41,7 +44,6 @@ rocketeer:
           Counters: [stealth],
         },
       ]
-  Inherits: ^unit
   Passenger: { Type: infantry }
   Armaments:
     Mounts:
@@ -49,18 +51,19 @@ rocketeer:
   Presentation: { Model: infantry-rocket, Name: Пехотинец с ракетницей }
 
 sniper:
+  Inherits: ^unit
+  Vision: { Radius: 8144 }
   Sensors:
     Detectors:
       [
         {
           Channel: optical,
           Signature: visual,
-          Range: 3072,
+          Range: 8144,
           Display: Model,
           Counters: [stealth],
         },
       ]
-  Inherits: ^unit
   Passenger: { Type: infantry }
   Armaments:
     Mounts:

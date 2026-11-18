@@ -26,7 +26,7 @@ public sealed class WeaponCatalog
                 o.Speed, o.TravelLimit, o.SplashRadius, o.Burst, o.BurstIntervalTicks, o.AnimationTicks,
                 o.Versus.Living, o.Versus.Mechanical, o.Versus.Building, o.FriendlyFire, o.PassengerDamage, o.PassengerDamageSpill, new TargetCategories(o.Targets), o.SpatialTrajectory ?? false,
                 o.ExcludedTargets.Length == 0 ? null : new TargetCategories(o.ExcludedTargets), o.MinimumContact, o.Trajectory,
-                o.TrajectoryHeight, o.Homing, o.ScatterRadius, o.LaunchFan)); }
+                o.TrajectoryHeight, o.Homing, o.ScatterRadius, o.LaunchFan, o.MinRange, o.Versus.Light)); }
             catch (ArgumentException error) { throw node.Error(id + ".Weapon", error.Message); }
         }
         return new(weapons);
@@ -43,6 +43,7 @@ public sealed class WeaponCatalog
         public int LaunchFan { get; set; }
         public SensorDisplay MinimumContact { get; set; } = SensorDisplay.Model;
         public int Range { get; set; } = 4096;
+        public int MinRange { get; set; }
         public int? AcquireRange { get; set; }
         public int Damage { get; set; } = 10;
         public int ReloadTicks { get; set; } = 20;
@@ -64,6 +65,7 @@ public sealed class WeaponCatalog
     {
         public int Living { get; set; } = 100;
         public int Mechanical { get; set; } = 100;
+        public int? Light { get; set; }
         public int Building { get; set; } = 100;
     }
 }

@@ -12,6 +12,65 @@ internal static class WeaponChecks
     private static WeaponPose[] Mounts(SimulationWorld world) { var poses = new WeaponPose[world.WeaponCount]; world.CopyWeaponPoses(poses); return poses; }
     public static void Run(Action<string, Action> test)
     {
+        test("Weapons: MinRange blocks targets inside the minimum and allows the exact boundary", () =>
+        {
+            const int origin = 2048, minimum = 2048;
+            var weapon = new WeaponDefinition(4096, 4096, 25, 100, 2, minRange: minimum);
+            int boundary = origin + minimum + 2 * BodyShape.Default.HalfWidth;
+            foreach (bool explicitAttack in new[] { false, true })
+            {
+                using var world = new SimulationWorld([Armed("gun", weapon), new("target", 100)], 16384, 8192);
+                world.AddInitialUnit(0, new(origin, 4096), 1);
+                var target = world.AddInitialUnit(1, new(boundary - 1, 4096), 2);
+                world.Step(explicitAttack ? [Attack(world)] : []);
+                for (int tick = 0; tick < 4; tick++) world.Step();
+                NavigationChecks.Check(Pose(world, 2).Health == 100 && Pose(world, 1).Current.X == origin &&
+                    Mounts(world)[0].WindupEndTick == 0, "A target in the dead zone started a windup or made the gun approach.");
+                world.Step([new(6, 0, 2, CommandKind.Move, target, new(boundary, 4096))]);
+                for (int tick = 0; tick < 8; tick++) world.Step();
+                NavigationChecks.Check(Pose(world, 2).Health == 75, "The weapon should fire at exactly MinRange.");
+            }
+        });
+        test("Weapons: MinRange applies to manual ground-target abilities", () =>
+        {
+            const int minimum = 2048;
+            var weapon = new WeaponDefinition(4096, 4096, 25, 100, 0, projectile: ProjectileKind.Cannon,
+                splashRadius: 512, trajectory: ProjectileTrajectory.Arc, minRange: minimum);
+            foreach (bool atBoundary in new[] { false, true })
+            {
+                var gun = new UnitDefinition("gun", 100, ["idle", "move", "fire"], weapon: weapon,
+                    body: BodyShape.None, abilities: [new("bombard", "main", GroundTarget: true)]);
+                using var world = new SimulationWorld([gun], 16384, 8192);
+                var start = new WorldPosition(4096, 4096);
+                var entity = world.AddInitialUnit(0, start, 1);
+                var aim = start with { X = start.X + minimum - (atBoundary ? 0 : 1) };
+                world.Step([new(1, 0, 1, CommandKind.UseAbility, entity, aim, Action: "bombard")]);
+                for (int tick = 0; tick < 4; tick++) world.Step();
+                NavigationChecks.Check(world.ProjectileCount == (atBoundary ? 1 : 0) && Pose(world, 1).Current == start,
+                    "The ground-target ability should honor the minimum firing distance.");
+            }
+        });
+        test("Weapons: Light armor can override damage and otherwise uses the Mechanical modifier", () =>
+        {
+            WeaponDefinition Load(string fields) => WeaponCatalog.Load([new("light", $$"""
+                rifle:
+                  Weapon: {MinRange: 512, Damage: 100, ReloadTicks: 100, WindupTicks: 0, Versus: {Mechanical: 10, Building: 5{{fields}} } }
+                """)]).Weapons["rifle"];
+            var fallback = Load("");
+            var weapon = Load(", Light: 35");
+            NavigationChecks.Check(weapon.MinRange == 512 && fallback.Modifier(ArmorKind.Light) == 10 && weapon.Modifier(ArmorKind.Light) == 35,
+                "Light must use its own modifier or fall back to Mechanical.");
+            NavigationChecks.Reject<ArgumentException>(() => new WeaponDefinition(2048, 4096, 10, 10, minRange: 2049));
+            NavigationChecks.Reject<ArgumentException>(() => new WeaponDefinition(2048, 4096, 10, 10, minRange: -1));
+            foreach (var (armor, health) in new[] { (ArmorKind.Light, 65), (ArmorKind.Mechanical, 90) })
+            {
+                using var world = new SimulationWorld([Armed("rifle", weapon), new("target", 100, armor: armor)], 8192, 8192);
+                world.AddInitialUnit(0, new(2048, 4096), 1);
+                world.AddInitialUnit(1, new(4096, 4096), 2);
+                world.Step([Attack(world)]);
+                NavigationChecks.Check(Pose(world, 2).Health == health, "Damage did not use the configured armor modifier.");
+            }
+        });
         test("Weapons: artillery scatter and salvo fan keep their sampled destinations through snapshot and target removal", () =>
         {
             const int radius = 680;

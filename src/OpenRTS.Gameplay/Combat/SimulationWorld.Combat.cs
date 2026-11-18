@@ -28,7 +28,7 @@ public sealed partial class SimulationWorld
     }
     private WeaponDefinition? OrderWeapon(int index, bool repair = false, EntityId target = default)
     {
-        WeaponDefinition? best = null, compatible = null;
+        WeaponDefinition? best = null, compatible = null, outsideMinimum = null;
         var actor = _entityHandles[index];
         if (UpgradeImmobilizes(actor)) return null;
         var type = TypeOf(actor);
@@ -41,7 +41,7 @@ public sealed partial class SimulationWorld
             if (MountAbility(_entityHandles[index].Get<EntityIdentity>().Type, m) >= 0 && !repair && !_entityHandles[index].Get<CombatState>().Weapons[m].AutoCast) continue;
             if ((mount.Weapon.Effect == WeaponEffect.Repair) != repair) continue;
             if (best is null || mount.Weapon.Range < best.Range) best = mount.Weapon;
-            if (ValidTarget(index, target, mount.Weapon, out _) && (compatible is null || mount.Weapon.Range < compatible.Range)) compatible = mount.Weapon;
+            ConsiderTarget(mount.Weapon);
         }
         var carrier = _entityHandles[index];
         if (!repair && _transport is { } transport)
@@ -56,24 +56,44 @@ public sealed partial class SimulationWorld
                     if ((enabledPassengerMounts & (1 << m)) == 0 || !mount.FireFromTransport ||
                         mount.Weapon.Effect != WeaponEffect.Damage) continue;
                     if (best is null || mount.Weapon.Range < best.Range) best = mount.Weapon;
-                    if (ValidTarget(index, target, mount.Weapon, out _) && (compatible is null || mount.Weapon.Range < compatible.Range)) compatible = mount.Weapon;
+                    ConsiderTarget(mount.Weapon);
                 }
             }
-        return compatible ?? best;
+        return outsideMinimum ?? compatible ?? best;
+
+        void ConsiderTarget(WeaponDefinition weapon)
+        {
+            if (!ValidTarget(index, target, weapon, out int other)) return;
+            if (compatible is null || weapon.Range < compatible.Range) compatible = weapon;
+            if ((outsideMinimum is null || weapon.Range < outsideMinimum.Range) && !TargetBelowMinimum(index, other, weapon))
+                outsideMinimum = weapon;
+        }
     }
     private bool InWeaponRange(int index, int target, int range, WeaponDefinition weapon) => InWeaponRange(index, target, range, weapon, out _);
 
     private bool InWeaponRange(int index, int target, int range, WeaponDefinition weapon, out long distanceSquared)
     {
+        long distance = WeaponDistance(index, target, weapon, out var from, out var to, out bool spatial, out distanceSquared);
+        return !weapon.BelowMinimum(distance) && distance <= (long)range * range &&
+            (weapon.HasFlightProfile || _baseGrid is null || (spatial
+                ? SpatialTerrainClear(WeaponPoint(from, weapon, Airborne(_entityHandles[index])), WeaponPoint(to, weapon, Airborne(_entityHandles[target])))
+                : TerrainGeometry.Clear(_baseGrid, from, to, 0)));
+    }
+
+    private bool TargetBelowMinimum(int index, int target, WeaponDefinition weapon) => weapon.MinRange > 0 &&
+        weapon.BelowMinimum(WeaponDistance(index, target, weapon, out _, out _, out _, out _));
+
+    private long WeaponDistance(int index, int target, WeaponDefinition weapon, out WorldPosition from, out WorldPosition to,
+        out bool spatial, out long horizontalSquared)
+    {
         ref var source = ref _entityHandles[index];
         ref var other = ref _entityHandles[target];
-        distanceSquared = ObjectGeometry.DistanceSquared(TypeOf(source), source.Get<SpatialState>().Position, TypeOf(other), other.Get<SpatialState>().Position, out var from, out var to);
-        if (weapon.HasFlightProfile) return distanceSquared <= (long)range * range;
-        bool spatial = TracesCliffRelief(weapon) || (IsAircraft(source) || IsAircraft(other)) && !(weapon.Effect == WeaponEffect.Repair && TypeOf(source).Flight is { Mode: FlightMode.Hover });
-        long dz = (long)from.Elevation - to.Elevation;
-        return distanceSquared <= (long)range * range && (!spatial || distanceSquared + dz * dz <= (long)range * range) &&
-            (_baseGrid is null || (spatial ? SpatialTerrainClear(WeaponPoint(from, weapon, Airborne(source)), WeaponPoint(to, weapon, Airborne(other)))
-                : TerrainGeometry.Clear(_baseGrid, from, to, 0)));
+        horizontalSquared = ObjectGeometry.DistanceSquared(TypeOf(source), source.Get<SpatialState>().Position,
+            TypeOf(other), other.Get<SpatialState>().Position, out from, out to);
+        spatial = !weapon.HasFlightProfile && (TracesCliffRelief(weapon) || (IsAircraft(source) || IsAircraft(other)) &&
+            !(weapon.Effect == WeaponEffect.Repair && TypeOf(source).Flight is { Mode: FlightMode.Hover }));
+        long dz = spatial ? (long)from.Elevation - to.Elevation : 0;
+        return horizontalSquared + dz * dz;
     }
     private WorldPosition AimPoint(int source, int target) => ObjectGeometry.ClosestPoint(TypeOf(_entityHandles[target]), _entityHandles[target].Get<SpatialState>().Position, _entityHandles[source].Get<SpatialState>().Position);
 
@@ -172,7 +192,7 @@ public sealed partial class SimulationWorld
                     if (contactOrder)
                     {
                         if (!stored && TryGetContact(entityOwnership.Owner, entityOrders.ActiveOrder.ContactId, out var contact) &&
-                            weapon.CanAttackContact(contact.Level) && ContactInRange(origin, contact.Position, weapon))
+                            weapon.CanAttackContact(contact.Level) && ContactInRange(origin, contact.Position, weapon, out _))
                         {
                             ground = true;
                             point = ContactWeaponPoint(contact.Position, weapon);
@@ -182,7 +202,7 @@ public sealed partial class SimulationWorld
                     else if (manual)
                     {
                         var order = entityOrders.ActiveOrder;
-                        if (AbilityInRange(i, order, weapon))
+                        if (AbilityInRange(i, order, weapon, out _))
                         { ground = order.Target.Value == 0; point = order.Position; if (!ground) ValidTarget(i, order.Target, weapon, out target); }
                     }
                     else

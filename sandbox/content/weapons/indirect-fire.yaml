@@ -1,12 +1,14 @@
 howitzer:
   Weapon:
     Projectile: Cannon
+    MinimumContact: Contact
     Trajectory: Arc
     TrajectoryHeight: 2304
     ScatterRadius: 580
-    Range: 12168
-    AcquireRange: 12168
-    TravelLimit: 16384
+    MinRange: 2048
+    Range: 16168
+    AcquireRange: 16168
+    TravelLimit: 18384
     Speed: 280
     SplashRadius: 768
     Damage: 85
@@ -16,13 +18,15 @@ howitzer:
 salvo-rocket:
   Weapon:
     Projectile: Missile
+    MinimumContact: Contact
     Trajectory: Ballistic
     TrajectoryHeight: 4096
     Homing: false
     ScatterRadius: 720
     LaunchFan: 480
-    Range: 8168
-    AcquireRange: 8168
+    MinRange: 4072
+    Range: 14168
+    AcquireRange: 14168
     TravelLimit: 20480
     Speed: 340
     SplashRadius: 440
@@ -35,9 +39,11 @@ salvo-rocket:
 cruise-missile:
   Weapon:
     Projectile: Missile
+    MinimumContact: Contact
     Trajectory: Cruise
     TrajectoryHeight: 1536
     Homing: true
+    MinRange: 4072
     Range: 18192
     AcquireRange: 18192
     TravelLimit: 24576
@@ -50,9 +56,11 @@ cruise-missile:
 ballistic-missile:
   Weapon:
     Projectile: Missile
+    MinimumContact: Contact
     Trajectory: Ballistic
     TrajectoryHeight: 5120
     Homing: false
+    MinRange: 4072
     Range: 22192
     AcquireRange: 22192
     TravelLimit: 26672

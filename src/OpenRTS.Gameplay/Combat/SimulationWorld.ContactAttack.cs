@@ -26,7 +26,7 @@ public sealed partial class SimulationWorld
         }
     }
 
-    private bool HasContactWeapon(int index, ContactKnowledge contact, bool inRange = false)
+    private bool HasContactWeapon(int index, ContactKnowledge contact, bool inRange = false, bool outsideMinimum = false)
     {
         var actor = _entityHandles[index];
         var type = TypeOf(actor);
@@ -35,25 +35,27 @@ public sealed partial class SimulationWorld
         for (int m = 0; m < type.Weapons.Count; m++)
         {
             var weapon = type.Weapons[m].Weapon;
-            if ((enabled & (1 << m)) != 0 && weapon.CanAttackContact(contact.Level) &&
-                (MountAbility(actor.Get<EntityIdentity>().Type, m) < 0 || mounts[m].AutoCast) &&
-                (!inRange || ContactInRange(index, contact.Position, weapon)))
-                return true;
+            if ((enabled & (1 << m)) == 0 || !weapon.CanAttackContact(contact.Level) ||
+                MountAbility(actor.Get<EntityIdentity>().Type, m) >= 0 && !mounts[m].AutoCast) continue;
+            if (!inRange && (!outsideMinimum || weapon.MinRange == 0)) return true;
+            bool canFire = ContactInRange(index, contact.Position, weapon, out bool tooClose);
+            if (inRange ? canFire : !tooClose) return true;
         }
         return false;
     }
 
-    private bool ContactInRange(int index, WorldPosition point, WeaponDefinition weapon)
+    private bool ContactInRange(int index, WorldPosition point, WeaponDefinition weapon, out bool tooClose)
     {
         var actor = _entityHandles[index];
         var from = actor.Get<SpatialState>().Position;
         var muzzle = WeaponPoint(ObjectGeometry.ClosestPoint(TypeOf(actor), from, point) with { Elevation = from.Elevation },
             weapon, Airborne(actor));
-        if (weapon.HasFlightProfile) return DistanceSquared(muzzle, point) <= (long)weapon.Range * weapon.Range;
-        point = ContactWeaponPoint(point, weapon);
-        bool spatial = weapon.SpatialTrajectory || IsAircraft(actor);
-        return ProjectileDistanceSquared(muzzle, point, spatial) <= (long)weapon.Range * weapon.Range &&
-            (_baseGrid is null || (spatial ? SpatialTerrainClear(muzzle, point) : TerrainGeometry.Clear(_baseGrid, muzzle, point, 0)));
+        if (!weapon.HasFlightProfile) point = ContactWeaponPoint(point, weapon);
+        bool spatial = !weapon.HasFlightProfile && (weapon.SpatialTrajectory || IsAircraft(actor));
+        long distance = ProjectileDistanceSquared(muzzle, point, spatial);
+        tooClose = weapon.BelowMinimum(distance);
+        return !tooClose && distance <= (long)weapon.Range * weapon.Range &&
+            (weapon.HasFlightProfile || _baseGrid is null || (spatial ? SpatialTerrainClear(muzzle, point) : TerrainGeometry.Clear(_baseGrid, muzzle, point, 0)));
     }
 
     private WorldPosition ContactWeaponPoint(WorldPosition point, WeaponDefinition weapon) =>
@@ -80,6 +82,11 @@ public sealed partial class SimulationWorld
         {
             Halt(index);
             orders.OrderPhase = OrderPhase.Engaging;
+        }
+        else if (!HasContactWeapon(index, contact, outsideMinimum: true))
+        {
+            Halt(index);
+            orders.OrderPhase = OrderPhase.Waiting;
         }
         else if (TypeOf(actor).Movable)
         {

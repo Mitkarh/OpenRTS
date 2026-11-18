@@ -53,16 +53,23 @@ public sealed partial class SimulationWorld
         }
         if (!toggling && !issuedOrder) RejectAction();
     }
-    private bool AbilityInRange(int index, UnitOrder order, WeaponDefinition weapon)
+    private bool AbilityInRange(int index, UnitOrder order, WeaponDefinition weapon, out bool tooClose)
     {
-        if (order.Target.Value != 0) return _indices.TryGetValue(order.Target, out int target) && IsOnMap(_entityHandles[target]) && InWeaponRange(index, target, weapon.Range, weapon);
+        tooClose = false;
+        if (order.Target.Value != 0)
+        {
+            if (!_indices.TryGetValue(order.Target, out int target) || !IsOnMap(_entityHandles[target])) return false;
+            tooClose = TargetBelowMinimum(index, target, weapon);
+            return !tooClose && InWeaponRange(index, target, weapon.Range, weapon);
+        }
         var e = _entityHandles[index];
         var closest = ObjectGeometry.ClosestPoint(TypeOf(e), e.Get<SpatialState>().Position, order.Position);
-        if (weapon.HasFlightProfile) return DistanceSquared(closest, order.Position) <= (long)weapon.Range * weapon.Range;
         var muzzle = WeaponPoint(closest, weapon, Airborne(e));
         bool relief = TracesCliffRelief(weapon);
-        return ProjectileDistanceSquared(muzzle, order.Position, relief) <= (long)weapon.Range * weapon.Range &&
-            (_baseGrid is null || (relief ? SpatialTerrainClear(muzzle, order.Position)
+        long distance = ProjectileDistanceSquared(muzzle, order.Position, relief && !weapon.HasFlightProfile);
+        tooClose = weapon.BelowMinimum(distance);
+        return !tooClose && distance <= (long)weapon.Range * weapon.Range &&
+            (weapon.HasFlightProfile || _baseGrid is null || (relief ? SpatialTerrainClear(muzzle, order.Position)
                 : TerrainGeometry.Clear(_baseGrid, closest, order.Position, 0)));
     }
     private void UpdateAbilityOrder(int i)
@@ -77,7 +84,8 @@ public sealed partial class SimulationWorld
         var aim = order.Target.Value != 0 ? _entityHandles[_indices[order.Target]].Get<SpatialState>().Position : order.Position;
         if (weapon.Effect == WeaponEffect.Repair && !PrepareAirWork(e, aim)) { eOrders.OrderPhase = OrderPhase.Approaching; return; }
         ePresentation.HasAim = true; ePresentation.AimEntity = order.Target; ePresentation.AimPoint = aim;
-        if (AbilityInRange(i, order, weapon)) { Halt(i); eOrders.OrderPhase = OrderPhase.Engaging; }
+        if (AbilityInRange(i, order, weapon, out bool tooClose)) { Halt(i); eOrders.OrderPhase = OrderPhase.Engaging; }
+        else if (tooClose) { Halt(i); eOrders.OrderPhase = OrderPhase.Waiting; }
         else if (_types[eIdentity.Type].Movable)
         { if (!eMotion.Moving || (Tick + eIdentity.Id.Value) % 4 == 0) SetTarget(i, aim); eOrders.OrderPhase = eMotion.Moving ? OrderPhase.Approaching : OrderPhase.Waiting; }
         else eOrders.OrderPhase = OrderPhase.Waiting;

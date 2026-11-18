@@ -44,13 +44,15 @@ public partial class Sandbox
                 { "road" => "бетон", "grass" => "трава", "mud" => "грязь", "water" => "вода", "forest" => "лес", "swamp" => "болото", _ => "горы" };
                 string phase = pose.Order.Phase switch { OpenRTS.Core.Orders.OrderPhase.Moving => "идёт", OpenRTS.Core.Orders.OrderPhase.Approaching => "сближается",
                     OpenRTS.Core.Orders.OrderPhase.Engaging => "бой", OpenRTS.Core.Orders.OrderPhase.Holding => "держит позицию", _ => "ожидает" };
-                string armor = type.Armor switch { ArmorKind.Living => "живой", ArmorKind.Mechanical => "техника", _ => "здание" };
+                string armor = type.Armor switch { ArmorKind.Living => "живой", ArmorKind.Light => "лёгкая броня", ArmorKind.Mechanical => "техника", _ => "здание" };
                 string movement = type.Movable ? $"скорость {type.Locomotor.Rules[terrain].Speed * 100.0 / 1024:0.#}%" : "неподвижный";
                 selection += $"\nHP {pose.Health}/{type.MaxHealth} · {armor} · {phase} · приказы в очереди {pose.Order.QueuedCount}\nГрунт: {ground} · {movement}";
                 if (_rampTerrain is not null) selection += $" · высота {pose.Current.Elevation / 1024f:0.00}";
             }
             if (type.TaskQueues.Count > 0) selection += $"\nПроизводство: {_displayTasks.Take(_displayTaskCount).Count(t => t.Producer == pose.Id)} задач · {type.TaskQueues.Count} очередей";
-            selection += "\n" + string.Join(" · ", type.Weapons.Select(m => $"{WeaponName(m.Weapon.Id)} ({m.Weapon.Range / 1024.0:0.#})"));
+            selection += "\n" + string.Join(" · ", type.Weapons.Select(m => m.Weapon.MinRange > 0
+                ? $"{WeaponName(m.Weapon.Id)} ({m.Weapon.MinRange / 1024.0:0.#}–{m.Weapon.Range / 1024.0:0.#})"
+                : $"{WeaponName(m.Weapon.Id)} ({m.Weapon.Range / 1024.0:0.#})"));
             if (_buildings && type.Footprint is { } fp) selection += $"\nFootprint {fp.Width}×{fp.Height} · O — дверь · C/F — визуальные клипы";
             if (pose.TerrainStranded) selection += "\nНет допустимого грунта: ожидает восстановления.";
             for (int i = 0; i < type.States.Count; i++) if ((pose.Presentation.States & (1u << i)) != 0)

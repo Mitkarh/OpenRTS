@@ -33,7 +33,7 @@ engineer:
       capture: { Label: Захват, Cursor: capture, Order: 1 }
       build: { Label: Помочь строить, Hotkey: P, Cursor: build, Order: 7 }
   Movement: { Locomotor: amphibious }
-  Health: { HP: 220, Armor: Mechanical }
+  Health: { HP: 220, Armor: Light }
   Armaments:
     Mounts:
       main: { Weapon: repair, Animation: repair }
@@ -56,10 +56,10 @@ construction-engineer:
 
 supply-truck:
   Inherits: ^unit
-  Supply: { Role: Truck, Capacity: 800 }
+  Supply: { Role: Truck, Capacity: 600 }
   Buildable: { Ticks: 250, Cost: 450 }
   Movement: { Locomotor: tracked }
-  Health: { HP: 280, Armor: Mechanical }
+  Health: { HP: 280, Armor: Light }
   Body: { Kind: Box, HalfSize: [320, 384] }
   Actions:
     Definitions:
@@ -92,7 +92,7 @@ apc-mg:
     Variants:
       rockets:
         {
-          Cost: 300,
+          Cost: 200,
           Ticks: 90,
           Support: true,
           ReplaceWeapons: true,
@@ -100,7 +100,7 @@ apc-mg:
         }
       cannon:
         {
-          Cost: 450,
+          Cost: 250,
           Ticks: 110,
           Support: true,
           ReplaceWeapons: true,
@@ -162,14 +162,15 @@ tank-mixed:
 stealth-truck:
   Inherits: tank
   -Armaments:
-  Health: { HP: 350, Armor: Mechanical }
+  Health: { HP: 350, Armor: Light }
   Sensors: { JamRange: 8192, StealthRange: 6144, DeployTicks: 75 }
   Presentation: { Model: stealth-truck, Name: Мобильный стелс-генератор }
 
 radar-buggy:
   Inherits: ^unit
   Armaments: { Mounts: { main: { Weapon: rifle, FireWhileMoving: true } } }
-  Health: { HP: 180, Armor: Mechanical }
+  Health: { HP: 180, Armor: Light }
+  Vision: { Radius: 10144 }
   Sensors:
     JamRange: 4096
     Detectors:
@@ -183,7 +184,7 @@ radar-buggy:
         {
           Channel: optical,
           Signature: visual,
-          Range: 5120,
+          Range: 8144,
           Display: Model,
           Counters: [stealth],
         },
@@ -192,6 +193,7 @@ radar-buggy:
 
 howitzer:
   Inherits: tank
+  Health: { HP: 280, Armor: Light }
   Armaments:
     Mounts:
       main: { Weapon: howitzer }
@@ -199,6 +201,7 @@ howitzer:
 
 mlrs:
   Inherits: tank
+  Health: { HP: 240, Armor: Light }
   Armaments:
     Mounts:
       main: { Weapon: salvo-rocket }
@@ -207,6 +210,7 @@ mlrs:
 
 tomahawk:
   Inherits: tank
+  Health: { HP: 180, Armor: Light }
   Armaments:
     Mounts:
       main: { Weapon: cruise-missile }
@@ -214,6 +218,7 @@ tomahawk:
 
 scud:
   Inherits: tank
+  Health: { HP: 180, Armor: Light }
   Armaments:
     Mounts:
       main: { Weapon: ballistic-missile }

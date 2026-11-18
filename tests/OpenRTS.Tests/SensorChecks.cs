@@ -252,18 +252,19 @@ internal static class SensorChecks
 
         test("Sensors: contact attack checks weapon threshold and fires without an entity lock", () =>
         {
-            (SensorDisplay Minimum, SensorDisplay Observed, bool Fires)[] cases =
+            (SensorDisplay Minimum, SensorDisplay Observed, int MinRange, bool Fires)[] cases =
             [
-                (SensorDisplay.Contact, SensorDisplay.Contact, true),
-                (SensorDisplay.Classified, SensorDisplay.Contact, false),
-                (SensorDisplay.Classified, SensorDisplay.Classified, true),
-                (SensorDisplay.Identified, SensorDisplay.Classified, false),
-                (SensorDisplay.Identified, SensorDisplay.Identified, true),
-                (SensorDisplay.Model, SensorDisplay.Identified, false)
+                (SensorDisplay.Contact, SensorDisplay.Contact, 0, true),
+                (SensorDisplay.Classified, SensorDisplay.Contact, 0, false),
+                (SensorDisplay.Classified, SensorDisplay.Classified, 0, true),
+                (SensorDisplay.Identified, SensorDisplay.Classified, 0, false),
+                (SensorDisplay.Identified, SensorDisplay.Identified, 0, true),
+                (SensorDisplay.Model, SensorDisplay.Identified, 0, false),
+                (SensorDisplay.Identified, SensorDisplay.Identified, 4096, false)
             ];
-            foreach (var (minimum, observed, fires) in cases)
+            foreach (var (minimum, observed, minRange, fires) in cases)
             {
-                var weapon = new WeaponDefinition(4096, 4096, 25, 40, windupTicks: 0, minimumContact: minimum);
+                var weapon = new WeaponDefinition(4096, 4096, 25, 40, windupTicks: 0, minimumContact: minimum, minRange: minRange);
                 using var world = SimulationWorld.CreateWithMechanics(new() { FogCellSize = 1024 },
                     [
                         new("gun", 100, ["idle", "move", "fire"], weapon: weapon, body: BodyShape.None, sensors: new(detectors: [new("radar", Radar, 8192, observed)])),
@@ -284,6 +285,12 @@ internal static class SensorChecks
                 world.Step([attack with { Tick = 2 }]);
                 var events = world.Events.ToArray();
                 Check(events.Any(e => e.Kind == WorldEventKind.WeaponFired) == fires, $"unexpected fire for {minimum}/{observed}");
+                if (minRange > 0)
+                {
+                    frames.TryPublish(world);
+                    using var held = frames.AcquireLatest(1)!;
+                    Check(held.Poses[0].Current.X == 1024, "The contact order moved closer inside MinRange.");
+                }
                 if (fires)
                 {
                     var shot = events.Single(e => e.Kind == WorldEventKind.WeaponFired);
