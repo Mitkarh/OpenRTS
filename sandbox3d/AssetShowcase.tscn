@@ -1,4 +1,4 @@
-[gd_scene load_steps=29 format=3]
+[gd_scene load_steps=36 format=3]
 
 [ext_resource type="PackedScene" path="res://assets/production-buildings/factory.glb" id="1"]
 [ext_resource type="PackedScene" path="res://assets/infrastructure/power-plant.glb" id="2"]
@@ -31,13 +31,24 @@
 [ext_resource type="PackedScene" path="res://assets/vehicles/StealthTruck.tscn" id="24"]
 [ext_resource type="PackedScene" path="res://assets/vehicles/ShieldTruck.tscn" id="25"]
 
+[ext_resource type="PackedScene" path="res://assets/vehicles/WheeledArtillery.tscn" id="26"]
+[ext_resource type="PackedScene" path="res://assets/vehicles/WheeledAirDefense.tscn" id="27"]
+
+[ext_resource type="PackedScene" path="res://assets/vehicles/MixedTank.tscn" id="28"]
+
+[ext_resource type="PackedScene" path="res://assets/infrastructure/mine.glb" id="29"]
+[ext_resource type="PackedScene" path="res://assets/infrastructure/mine-upgraded.glb" id="30"]
+
+[ext_resource type="PackedScene" path="res://assets/infrastructure/oil-derrick.glb" id="31"]
+[ext_resource type="PackedScene" path="res://assets/vehicles/RadarBuggy.tscn" id="32"]
+
 [sub_resource type="StandardMaterial3D" id="GroundMaterial"]
 albedo_color = Color(0.19, 0.23, 0.25, 1)
 roughness = 1.0
 
 [sub_resource type="PlaneMesh" id="GroundMesh"]
 material = SubResource("GroundMaterial")
-size = Vector2(46, 34)
+size = Vector2(53, 41)
 
 [sub_resource type="Environment" id="Lighting"]
 ambient_light_source = 2
@@ -52,7 +63,7 @@ bunker_turret_scene = ExtResource("16")
 environment = SubResource("Lighting")
 
 [node name="Ground" type="MeshInstance3D" parent="."]
-position = Vector3(1, 0, -5.2)
+position = Vector3(1, 0, -2.2)
 mesh = SubResource("GroundMesh")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
@@ -63,11 +74,11 @@ shadow_bias = 0.2
 directional_shadow_max_distance = 35.0
 
 [node name="Camera" type="Camera3D" parent="."]
-position = Vector3(1, 26, 13.3)
+position = Vector3(1, 30, 18.6)
 rotation_degrees = Vector3(-53.13, 0, 0)
 projection = 1
 current = true
-size = 27.5
+size = 34.0
 
 [node name="Factory" parent="." instance=ExtResource("1")]
 position = Vector3(-13.5, 0, -3.8)
@@ -314,3 +325,77 @@ position = Vector3(15, 0.3, 10.95)
 billboard = 1
 pixel_size = 0.014
 text = "Мобильный щит"
+
+[node name="WheeledArtillery" parent="." instance=ExtResource("26")]
+position = Vector3(-4.2, 0, 14.4)
+rotation_degrees = Vector3(0, 151, 0)
+scale = Vector3(1.28, 1.28, 1.28)
+
+[node name="WheeledArtilleryLabel" type="Label3D" parent="."]
+position = Vector3(-4.2, 0.3, 16.7)
+billboard = 1
+pixel_size = 0.014
+text = "Колёсная САУ"
+
+[node name="WheeledAirDefense" parent="." instance=ExtResource("27")]
+position = Vector3(3.3, 0, 14.4)
+rotation_degrees = Vector3(0, 151, 0)
+scale = Vector3(1.28, 1.28, 1.28)
+
+[node name="WheeledAirDefenseLabel" type="Label3D" parent="."]
+position = Vector3(3.3, 0.3, 16.7)
+billboard = 1
+pixel_size = 0.014
+text = "Мобильное ПВО"
+
+[node name="MixedTank" parent="." instance=ExtResource("28")]
+position = Vector3(10.8, 0, 14.4)
+rotation_degrees = Vector3(0, 148, 0)
+scale = Vector3(1.45, 1.45, 1.45)
+
+[node name="MixedTankLabel" type="Label3D" parent="."]
+position = Vector3(10.8, 0.3, 16.7)
+billboard = 1
+pixel_size = 0.014
+text = "Зенитно-противопехотный танк"
+
+[node name="RadarBuggy" parent="." instance=ExtResource("32")]
+position = Vector3(-11.7, 0, 14.4)
+rotation_degrees = Vector3(0, 151, 0)
+scale = Vector3(1.36, 1.36, 1.36)
+
+[node name="RadarBuggyLabel" type="Label3D" parent="."]
+position = Vector3(-11.7, 0.3, 16.7)
+billboard = 1
+pixel_size = 0.014
+text = "Багги · разведчик"
+
+[node name="Mine" parent="." instance=ExtResource("29")]
+position = Vector3(-17, 0, -18.3)
+rotation_degrees = Vector3(0, 16, 0)
+
+[node name="MineLabel" type="Label3D" parent="."]
+position = Vector3(-17, 0.3, -15.8)
+billboard = 1
+pixel_size = 0.014
+text = "Шахта"
+
+[node name="MineUpgraded" parent="." instance=ExtResource("30")]
+position = Vector3(-11.5, 0, -18.3)
+rotation_degrees = Vector3(0, 16, 0)
+
+[node name="MineUpgradedLabel" type="Label3D" parent="."]
+position = Vector3(-11.5, 0.3, -15.8)
+billboard = 1
+pixel_size = 0.014
+text = "Улучшенная шахта"
+
+[node name="OilDerrick" parent="." instance=ExtResource("31")]
+position = Vector3(-22.2, 0, -18.3)
+rotation_degrees = Vector3(0, 16, 0)
+
+[node name="OilDerrickLabel" type="Label3D" parent="."]
+position = Vector3(-22.2, 0.3, -15.8)
+billboard = 1
+pixel_size = 0.014
+text = "Нефтяная вышка"

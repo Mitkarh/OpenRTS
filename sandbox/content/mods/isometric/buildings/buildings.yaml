@@ -141,6 +141,7 @@ factory:
       tomahawk: { Unit: tomahawk, Cost: 2000, Ticks: 400 }
       scud: { Unit: scud, Cost: 2250, Ticks: 450 }
       shield-truck: { Unit: shield-truck }
+      mobile-aa: { Unit: mobile-aa }
       # repair: { Mount: repair, AutoCast: true }
   ActionPanel:
     Buttons:
@@ -155,6 +156,7 @@ factory:
       tomahawk: { Label: Установка крылатой ракеты, Order: 6 }
       scud: { Label: SCUD, Order: 8 }
       shield-truck: { Label: Генератор щита, Order: 9 }
+      mobile-aa: { Label: Мобильное ПВО, Order: 10 }
       # repair: { Label: Ремонт, Cursor: repair, Order: 4 }
   Footprint: { Rows: ["#####", "#####", "#####", ".+++.", ".+++."] }
   Armaments:

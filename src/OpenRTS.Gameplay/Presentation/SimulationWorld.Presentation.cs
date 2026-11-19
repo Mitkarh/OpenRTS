@@ -53,7 +53,8 @@ public sealed partial class SimulationWorld
                 if (entityPresentation.BodyAnimationOverride && !entityPresentation.BodyAnimation.IsActive(Tick)) entityPresentation.BodyAnimationOverride = false;
                 if (!entityPresentation.BodyAnimationOverride)
                 {
-                    int animation = (dx != 0 || dy != 0) && type.MoveAnimation >= 0 ? type.MoveAnimation : type.IdleAnimation;
+                    bool moved = dx != 0 || dy != 0 || _mechanics.SpatialMovement && spatial.Position.Elevation != spatial.Previous.Elevation;
+                    int animation = moved && type.MoveAnimation >= 0 ? type.MoveAnimation : type.IdleAnimation;
                     if (entityPresentation.BodyAnimation.Animation != animation || entityPresentation.BodyAnimation.DurationTicks != 0)
                         entityPresentation.BodyAnimation = new(animation, Tick, 0);
                 }

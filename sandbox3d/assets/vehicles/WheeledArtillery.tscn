@@ -1,0 +1,8 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/vehicles/wheeled-artillery-hull.glb" id="1"]
+[ext_resource type="PackedScene" path="res://assets/vehicles/wheeled-artillery-turret.glb" id="2"]
+
+[node name="WheeledArtillery" instance=ExtResource("1")]
+
+[node name="Turret" parent="HullShell/TurretSocket" instance=ExtResource("2")]

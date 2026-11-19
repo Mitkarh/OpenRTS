@@ -1,0 +1,241 @@
+[gd_scene load_steps=25 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-house-normal.glb" id="1"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-apartments-normal.glb" id="2"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-clinic-normal.glb" id="3"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-market-normal.glb" id="4"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-library-normal.glb" id="5"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-station-normal.glb" id="6"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-community-normal.glb" id="7"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-house-garrison.glb" id="8"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-apartments-garrison.glb" id="9"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-clinic-garrison.glb" id="10"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-market-garrison.glb" id="11"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-library-garrison.glb" id="12"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-station-garrison.glb" id="13"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-community-garrison.glb" id="14"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-house-damaged.glb" id="15"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-apartments-damaged.glb" id="16"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-clinic-damaged.glb" id="17"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-market-damaged.glb" id="18"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-library-damaged.glb" id="19"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-station-damaged.glb" id="20"]
+[ext_resource type="PackedScene" path="res://assets/civilian/civilian-community-damaged.glb" id="21"]
+
+[sub_resource type="StandardMaterial3D" id="Paving"]
+albedo_color = Color(0.14, 0.18, 0.22, 1)
+roughness = 1.0
+
+[sub_resource type="PlaneMesh" id="GroundMesh"]
+material = SubResource("Paving")
+size = Vector2(49, 29)
+
+[sub_resource type="Environment" id="Lighting"]
+ambient_light_source = 2
+ambient_light_color = Color(0.83, 0.9, 1, 1)
+ambient_light_energy = 0.53
+
+[node name="CivilianShowcase" type="Node3D"]
+
+[node name="Lighting" type="WorldEnvironment" parent="."]
+environment = SubResource("Lighting")
+
+[node name="Ground" type="MeshInstance3D" parent="."]
+mesh = SubResource("GroundMesh")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-60, 36, 0)
+light_energy = 0.79
+shadow_enabled = true
+
+[node name="Camera" type="Camera3D" parent="."]
+position = Vector3(3.51, 33.6, 24.96)
+rotation_degrees = Vector3(-53.13, 8, 0)
+projection = 1
+current = true
+size = 31.6
+
+
+[node name="Normal_House" parent="." instance=ExtResource("1")]
+position = Vector3(-18, 0, -8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Normal_Apartments" parent="." instance=ExtResource("2")]
+position = Vector3(-12, 0, -8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Normal_Clinic" parent="." instance=ExtResource("3")]
+position = Vector3(-6, 0, -8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Normal_Market" parent="." instance=ExtResource("4")]
+position = Vector3(0, 0, -8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Normal_Library" parent="." instance=ExtResource("5")]
+position = Vector3(6, 0, -8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Normal_Station" parent="." instance=ExtResource("6")]
+position = Vector3(12, 0, -8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Normal_Community" parent="." instance=ExtResource("7")]
+position = Vector3(18, 0, -8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="NormalLabel" type="Label3D" parent="."]
+position = Vector3(-22.15, 0.8, -8)
+billboard = 1
+pixel_size = 0.012
+font_size = 31
+text = "Обычные"
+
+
+[node name="Garrison_House" parent="." instance=ExtResource("8")]
+position = Vector3(-18, 0, 0)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Garrison_Apartments" parent="." instance=ExtResource("9")]
+position = Vector3(-12, 0, 0)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Garrison_Clinic" parent="." instance=ExtResource("10")]
+position = Vector3(-6, 0, 0)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Garrison_Market" parent="." instance=ExtResource("11")]
+position = Vector3(0, 0, 0)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Garrison_Library" parent="." instance=ExtResource("12")]
+position = Vector3(6, 0, 0)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Garrison_Station" parent="." instance=ExtResource("13")]
+position = Vector3(12, 0, 0)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Garrison_Community" parent="." instance=ExtResource("14")]
+position = Vector3(18, 0, 0)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="GarrisonLabel" type="Label3D" parent="."]
+position = Vector3(-22.15, 0.8, 0)
+billboard = 1
+pixel_size = 0.012
+font_size = 31
+text = "С гарнизоном"
+
+
+[node name="Damaged_House" parent="." instance=ExtResource("15")]
+position = Vector3(-18, 0, 8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Damaged_Apartments" parent="." instance=ExtResource("16")]
+position = Vector3(-12, 0, 8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Damaged_Clinic" parent="." instance=ExtResource("17")]
+position = Vector3(-6, 0, 8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Damaged_Market" parent="." instance=ExtResource("18")]
+position = Vector3(0, 0, 8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Damaged_Library" parent="." instance=ExtResource("19")]
+position = Vector3(6, 0, 8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Damaged_Station" parent="." instance=ExtResource("20")]
+position = Vector3(12, 0, 8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="Damaged_Community" parent="." instance=ExtResource("21")]
+position = Vector3(18, 0, 8)
+rotation_degrees = Vector3(0, 18, 0)
+
+
+[node name="DamagedLabel" type="Label3D" parent="."]
+position = Vector3(-22.15, 0.8, 8)
+billboard = 1
+pixel_size = 0.012
+font_size = 31
+text = "Повреждённые"
+
+
+[node name="HouseLabel" type="Label3D" parent="."]
+position = Vector3(-18, 0.7, 12)
+billboard = 1
+pixel_size = 0.012
+font_size = 31
+text = "Гражданский дом"
+
+
+[node name="ApartmentsLabel" type="Label3D" parent="."]
+position = Vector3(-12, 0.7, 12)
+billboard = 1
+pixel_size = 0.012
+font_size = 31
+text = "Жилой комплекс"
+
+
+[node name="ClinicLabel" type="Label3D" parent="."]
+position = Vector3(-6, 0.7, 12)
+billboard = 1
+pixel_size = 0.012
+font_size = 31
+text = "Клиника"
+
+
+[node name="MarketLabel" type="Label3D" parent="."]
+position = Vector3(0, 0.7, 12)
+billboard = 1
+pixel_size = 0.012
+font_size = 31
+text = "Магазин"
+
+
+[node name="LibraryLabel" type="Label3D" parent="."]
+position = Vector3(6, 0.7, 12)
+billboard = 1
+pixel_size = 0.012
+font_size = 31
+text = "Библиотека"
+
+
+[node name="StationLabel" type="Label3D" parent="."]
+position = Vector3(12, 0.7, 12)
+billboard = 1
+pixel_size = 0.012
+font_size = 31
+text = "Станция"
+
+
+[node name="CommunityLabel" type="Label3D" parent="."]
+position = Vector3(18, 0.7, 12)
+billboard = 1
+pixel_size = 0.012
+font_size = 31
+text = "Общественный центр"

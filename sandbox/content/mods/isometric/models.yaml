@@ -24,27 +24,63 @@ iso-tank:
       fire: { Sequence: stand, Parts: [turret], Recoil: 0, Flash: 0.38 }
 
 iso-tank-mixed:
-  Inherits: tank
+  Inherits: iso-tank
+  Model:
+    Parts:
+      turret:
+        Resource: res://resources/units/isometric/mixed-tank-turret.tres
+        Size: [2.67153, 2.67153]
+        Pivot: [0.86475, 0.86475]
+        MuzzleLocal: [0, 1.036, -1.039]
+        Layer: 2
+      rack:
+        Parent: body
+        Facing: Weapon
+        Mount: missiles
+        Resource: res://resources/units/isometric/mixed-tank-missiles.tres
+        Size: [2.54015, 2.54015]
+        Pivot: [0.93534, 0.93534]
+        MuzzleLocal: [0.53, 1.385, -0.433]
+        Facings: 32
+        Layer: 3
+      radar:
+        Parent: turret
+        Resource: res://resources/units/isometric/mixed-tank-radar.tres
+        Size: [2.18978, 2.21168]
+        Pivot: [0.92500, 0.92574]
+        Offset: [0, 0.293]
+        Facings: 32
+        Layer: 4
+        Spin: 124
+    Animations:
+      idle: { Sequence: stand, Parts: [body, turret, rack, radar] }
+      fire: { Sequence: stand, Parts: [turret], Flash: 0.27 }
+      missiles: { Sequence: stand, Parts: [rack], Flash: 0.34 }
+
+iso-radar-buggy:
+  Inherits: radar-buggy
   Model:
     Parts:
       body:
-        Resource: res://resources/units/isometric/medium-tank-hull.tres
-        Size: [3.43796, 3.43796]
-        Pivot: [0.59554, 0.59554]
+        Resource: res://resources/units/isometric/radar-buggy-hull.tres
+        Size: [4.64234, 4.64234]
+        Pivot: [0.69340, 0.69340]
         Facings: 32
       turret:
         Parent: body
-        Resource: res://resources/buildings/isometric/bunker-mixed-turret.tres
-        Size: [3.41606, 3.43796]
-        Pivot: [0.76603, 0.76752]
-        Offset: [0, 0]
-        Muzzle: [0.32, 0.31]
-        Facings: 16
-        Layer: 3
+        Facing: Weapon
+        Mount: main
+        Resource: res://resources/units/isometric/radar-buggy-turret.tres
+        Size: [2.54015, 2.54015]
+        Pivot: [0.93103, 0.93103]
+        Offset: [0, -0.035]
+        Facings: 32
+        Layer: 1
+        MuzzleLocal: [0, 1.532, -0.614]
     Animations:
+      idle: { Sequence: stand, Parts: [body, turret] }
       move: { Sequence: travel, Parts: [body], Bob: 0 }
-      fire: { Sequence: stand, Parts: [turret], Recoil: 0, Flash: 0.38 }
-      missiles: { Sequence: stand, Parts: [turret], Recoil: 0, Flash: 0.38 }
+      fire: { Sequence: stand, Parts: [turret], Flash: 0.2 }
 
 ^iso-apc-hull:
   Model:
@@ -284,6 +320,71 @@ iso-ballistic-carrier:
       idle: { Sequence: stand, Parts: [body, cab, deck] }
       fire: { Sequence: stand, Parts: [deck] }
 
+^iso-wheeled-artillery-hull:
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/units/isometric/wheeled-artillery-hull.tres
+        Size: [4.51095, 4.51095]
+        Pivot: [0.60680, 0.60680]
+        Facings: 32
+      cab:
+        Parent: body
+        Resource: res://resources/units/isometric/wheeled-artillery-cab.tres
+        Size: [3.45985, 3.48175]
+        Pivot: [0.68987, 0.69182]
+        Facings: 32
+        Layer: 2
+    Animations:
+      move: { Sequence: travel, Parts: [body], Bob: 0 }
+
+iso-wheeled-howitzer:
+  Inherits: howitzer-carrier
+  Inherits@hull: ^iso-wheeled-artillery-hull
+  Model:
+    Parts:
+      turret:
+        Resource: res://resources/units/isometric/wheeled-artillery-turret.tres
+        Size: [5.18978, 5.16788]
+        Pivot: [0.76793, 0.77119]
+        Offset: [0, 0.52]
+        Facings: 32
+        Layer: 3
+        -Muzzle:
+        MuzzleLocal: [0, 1.401, -2.313]
+    Animations:
+      idle: { Sequence: stand, Parts: [body, cab, turret] }
+      fire: { Sequence: stand, Parts: [turret], Recoil: 0, Flash: 0.25 }
+
+iso-mobile-aa:
+  Inherits: ^sprite
+  Inherits@hull: ^iso-wheeled-artillery-hull
+  Model:
+    Parts:
+      turret:
+        Parent: body
+        Facing: Weapon
+        Mount: main
+        Resource: res://resources/units/isometric/wheeled-artillery-air-defense.tres
+        Size: [2.93431, 2.93431]
+        Pivot: [0.94030, 0.94030]
+        Offset: [0, 0.52]
+        Facings: 32
+        Layer: 3
+        MuzzleLocal: [0.368, 1.548, -0.665]
+      radar:
+        Parent: turret
+        Resource: res://resources/units/isometric/wheeled-artillery-radar.tres
+        Size: [2.54015, 2.54015]
+        Pivot: [0.93103, 0.93103]
+        Offset: [0, 0.304]
+        Facings: 32
+        Layer: 4
+        Spin: 132
+    Animations:
+      idle: { Sequence: stand, Parts: [body, cab, turret, radar] }
+      fire: { Sequence: stand, Parts: [turret], Flash: 0.28 }
+
 iso-power-plant:
   Inherits: power-plant
   Model:
@@ -445,6 +546,34 @@ iso-supply-center:
       produce: { Sequence: stand, Parts: [body], Flash: 0.12 }
       door: { Sequence: door, Parts: [body] }
 
+iso-mine:
+  Inherits: mine
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/mine.tres
+        Size: [4.97080, 4.97080]
+        Pivot: [0.56388, 0.56388]
+        Facings: 4
+      owned-mine:
+        Resource: res://resources/buildings/isometric/mine-upgraded.tres
+        Size: [5.86861, 5.86861]
+        Pivot: [0.63060, 0.63060]
+        Facings: 4
+    Animations:
+      construct:
+        Parts: [body, owned-mine]
+
+iso-oil-derrick:
+  Inherits: oil-derrick
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/oil-derrick.tres
+        Size: [5.29927, 5.32117]
+        Pivot: [0.68595, 0.68313]
+        Facings: 4
+
 iso-barracks:
   Inherits: barracks
   Model:
@@ -485,3 +614,195 @@ iso-factory:
     Animations:
       idle: { Sequence: stand, Parts: [body, heavy, ruins, workfx] }
       door: { Sequence: door, Parts: [body, heavy] }
+
+^iso-civilian:
+  Inherits: civilian-apartments
+  Model:
+    Parts:
+      normal: { Facings: 4 }
+      garrison: { Facings: 4 }
+      damaged: { Facings: 4 }
+      damaged-garrison: { Facings: 4 }
+      nearly: { Facings: 4 }
+
+iso-civilian-house:
+  Inherits: ^iso-civilian
+  Model:
+    Parts:
+      normal:
+        Resource: res://resources/buildings/isometric/civilian-house-normal.tres
+        Size: [4.22628, 4.22628]
+        Pivot: [0.59845, 0.59845]
+      garrison:
+        Resource: res://resources/buildings/isometric/civilian-house-garrison.tres
+        Size: [4.22628, 4.22628]
+        Pivot: [0.59845, 0.59845]
+      damaged:
+        Resource: res://resources/buildings/isometric/civilian-house-damaged.tres
+        Size: [4.22628, 4.22628]
+        Pivot: [0.59845, 0.59845]
+      damaged-garrison:
+        Resource: res://resources/buildings/isometric/civilian-house-damaged-garrison.tres
+        Size: [4.22628, 4.22628]
+        Pivot: [0.59845, 0.59845]
+      nearly:
+        Resource: res://resources/buildings/isometric/civilian-house-nearly.tres
+        Size: [4.22628, 4.22628]
+        Pivot: [0.59845, 0.59845]
+      ruins: { Size: [3.3, 3.3] }
+
+iso-civilian-apartments:
+  Inherits: ^iso-civilian
+  Model:
+    Parts:
+      normal:
+        Resource: res://resources/buildings/isometric/civilian-apartments-normal.tres
+        Size: [5.21168, 5.23358]
+        Pivot: [0.67437, 0.67573]
+      garrison:
+        Resource: res://resources/buildings/isometric/civilian-apartments-garrison.tres
+        Size: [5.21168, 5.23358]
+        Pivot: [0.67437, 0.67573]
+      damaged:
+        Resource: res://resources/buildings/isometric/civilian-apartments-damaged.tres
+        Size: [5.21168, 5.23358]
+        Pivot: [0.67437, 0.67573]
+      damaged-garrison:
+        Resource: res://resources/buildings/isometric/civilian-apartments-damaged-garrison.tres
+        Size: [5.21168, 5.23358]
+        Pivot: [0.67437, 0.67573]
+      nearly:
+        Resource: res://resources/buildings/isometric/civilian-apartments-nearly.tres
+        Size: [5.21168, 5.23358]
+        Pivot: [0.67437, 0.67573]
+      ruins: { Size: [3.3, 3.3] }
+
+iso-civilian-clinic:
+  Inherits: ^iso-civilian
+  Model:
+    Parts:
+      normal:
+        Resource: res://resources/buildings/isometric/civilian-clinic-normal.tres
+        Size: [3.48175, 3.45985]
+        Pivot: [0.65723, 0.66139]
+      garrison:
+        Resource: res://resources/buildings/isometric/civilian-clinic-garrison.tres
+        Size: [3.48175, 3.45985]
+        Pivot: [0.65723, 0.66139]
+      damaged:
+        Resource: res://resources/buildings/isometric/civilian-clinic-damaged.tres
+        Size: [3.48175, 3.45985]
+        Pivot: [0.65723, 0.66139]
+      damaged-garrison:
+        Resource: res://resources/buildings/isometric/civilian-clinic-damaged-garrison.tres
+        Size: [3.48175, 3.45985]
+        Pivot: [0.65723, 0.66139]
+      nearly:
+        Resource: res://resources/buildings/isometric/civilian-clinic-nearly.tres
+        Size: [3.48175, 3.45985]
+        Pivot: [0.65723, 0.66139]
+      ruins: { Size: [2.3, 2.3] }
+
+iso-civilian-market:
+  Inherits: ^iso-civilian
+  Model:
+    Parts:
+      normal:
+        Resource: res://resources/buildings/isometric/civilian-market-normal.tres
+        Size: [5.38686, 5.36496]
+        Pivot: [0.59146, 0.58980]
+      garrison:
+        Resource: res://resources/buildings/isometric/civilian-market-garrison.tres
+        Size: [5.38686, 5.36496]
+        Pivot: [0.59146, 0.58980]
+      damaged:
+        Resource: res://resources/buildings/isometric/civilian-market-damaged.tres
+        Size: [5.38686, 5.36496]
+        Pivot: [0.59146, 0.58980]
+      damaged-garrison:
+        Resource: res://resources/buildings/isometric/civilian-market-damaged-garrison.tres
+        Size: [5.38686, 5.36496]
+        Pivot: [0.59146, 0.58980]
+      nearly:
+        Resource: res://resources/buildings/isometric/civilian-market-nearly.tres
+        Size: [5.38686, 5.36496]
+        Pivot: [0.59146, 0.58980]
+      ruins: { Size: [4.3, 2.3] }
+
+iso-civilian-library:
+  Inherits: ^iso-civilian
+  Model:
+    Parts:
+      normal:
+        Resource: res://resources/buildings/isometric/civilian-library-normal.tres
+        Size: [4.44526, 4.44526]
+        Pivot: [0.61823, 0.61823]
+      garrison:
+        Resource: res://resources/buildings/isometric/civilian-library-garrison.tres
+        Size: [4.44526, 4.44526]
+        Pivot: [0.61823, 0.61823]
+      damaged:
+        Resource: res://resources/buildings/isometric/civilian-library-damaged.tres
+        Size: [4.44526, 4.44526]
+        Pivot: [0.61823, 0.61823]
+      damaged-garrison:
+        Resource: res://resources/buildings/isometric/civilian-library-damaged-garrison.tres
+        Size: [4.44526, 4.44526]
+        Pivot: [0.61823, 0.61823]
+      nearly:
+        Resource: res://resources/buildings/isometric/civilian-library-nearly.tres
+        Size: [4.44526, 4.44526]
+        Pivot: [0.61823, 0.61823]
+      ruins: { Size: [3.3, 3.3] }
+
+iso-civilian-station:
+  Inherits: ^iso-civilian
+  Model:
+    Parts:
+      normal:
+        Resource: res://resources/buildings/isometric/civilian-station-normal.tres
+        Size: [6.06569, 6.06569]
+        Pivot: [0.55415, 0.55415]
+      garrison:
+        Resource: res://resources/buildings/isometric/civilian-station-garrison.tres
+        Size: [6.06569, 6.06569]
+        Pivot: [0.55415, 0.55415]
+      damaged:
+        Resource: res://resources/buildings/isometric/civilian-station-damaged.tres
+        Size: [6.06569, 6.06569]
+        Pivot: [0.55415, 0.55415]
+      damaged-garrison:
+        Resource: res://resources/buildings/isometric/civilian-station-damaged-garrison.tres
+        Size: [6.06569, 6.06569]
+        Pivot: [0.55415, 0.55415]
+      nearly:
+        Resource: res://resources/buildings/isometric/civilian-station-nearly.tres
+        Size: [6.06569, 6.06569]
+        Pivot: [0.55415, 0.55415]
+      ruins: { Size: [5.3, 2.3] }
+
+iso-civilian-community:
+  Inherits: ^iso-civilian
+  Model:
+    Parts:
+      normal:
+        Resource: res://resources/buildings/isometric/civilian-community-normal.tres
+        Size: [5.73723, 5.73723]
+        Pivot: [0.61641, 0.61641]
+      garrison:
+        Resource: res://resources/buildings/isometric/civilian-community-garrison.tres
+        Size: [5.73723, 5.73723]
+        Pivot: [0.61641, 0.61641]
+      damaged:
+        Resource: res://resources/buildings/isometric/civilian-community-damaged.tres
+        Size: [5.73723, 5.73723]
+        Pivot: [0.61641, 0.61641]
+      damaged-garrison:
+        Resource: res://resources/buildings/isometric/civilian-community-damaged-garrison.tres
+        Size: [5.73723, 5.73723]
+        Pivot: [0.61641, 0.61641]
+      nearly:
+        Resource: res://resources/buildings/isometric/civilian-community-nearly.tres
+        Size: [5.73723, 5.73723]
+        Pivot: [0.61641, 0.61641]
+      ruins: { Size: [4.3, 4.3] }

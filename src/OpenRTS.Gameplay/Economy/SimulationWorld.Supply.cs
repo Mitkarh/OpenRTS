@@ -131,16 +131,22 @@ public sealed partial class SimulationWorld
         return best;
     }
 
-    private long ActorDistanceSquared(Entity actor, Entity station) =>
-        ObjectGeometry.DistanceSquared(TypeOf(actor), actor.Get<SpatialState>().Position,
-            TypeOf(station), station.Get<SpatialState>().Position, out _, out _);
+    private long ActorDistanceSquared(Entity actor, Entity station)
+    {
+        long planar = ObjectGeometry.DistanceSquared(TypeOf(actor), actor.Get<SpatialState>().Position,
+            TypeOf(station), station.Get<SpatialState>().Position, out var from, out var to);
+        long dz = _mechanics.SpatialMovement ? (long)from.Elevation - to.Elevation : 0;
+        return planar + dz * dz;
+    }
 
     private IEnumerable<WorldPosition> SupplyExits(Entity actor, Entity station)
     {
         var type = TypeOf(station);
-        return ConstructionGeometry.Exits(type.Footprint?.HalfWidth ?? type.Body.HalfWidth,
-            type.Footprint?.HalfHeight ?? type.Body.HalfHeight, station.Get<SpatialState>().Position,
+        var site = station.Get<SpatialState>().Position;
+        var exits = ConstructionGeometry.Exits(type.Footprint?.HalfWidth ?? type.Body.HalfWidth,
+            type.Footprint?.HalfHeight ?? type.Body.HalfHeight, site,
             actor.Get<SpatialState>().Position, TypeOf(actor).Body, Width, Depth);
+        return _mechanics.SpatialMovement ? exits.Select(point => point with { Elevation = site.Elevation }) : exits;
     }
 
     private bool DepletedSupply(EntityId id) => id != default &&

@@ -18,6 +18,12 @@ extends Node3D
 @onready var scud_missile: Node3D = $Scud.find_child("ReadyMissile", true, false)
 @onready var cruise_rest: Vector3 = cruise_missile.position
 @onready var scud_rest: Vector3 = scud_missile.position
+@onready var artillery_turret: Node3D = $WheeledArtillery.find_child("TurretSocket", true, false)
+@onready var air_defense_turret: Node3D = $WheeledAirDefense.find_child("TurretSocket", true, false)
+@onready var air_defense_radar: Node3D = $WheeledAirDefense.find_child("RadarHead", true, false)
+@onready var mixed_gun: Node3D = $MixedTank.find_child("GunTurret", true, false)
+@onready var mixed_missiles: Node3D = $MixedTank.find_child("MissileRack", true, false)
+@onready var mixed_radar: Node3D = $MixedTank.find_child("RadarHead", true, false)
 
 var elapsed: float = 0.0
 
@@ -40,6 +46,12 @@ func _process(delta: float) -> void:
     mobile_emitter.rotate_y(-deg_to_rad(140.0) * delta)
     demo_launch(cruise_missile, cruise_rest, 0.76, 18.0, elapsed)
     demo_launch(scud_missile, scud_rest, 0.94, 82.0, elapsed - 1.5)
+    artillery_turret.rotation.y = sin(elapsed * 0.65) * 0.66
+    air_defense_turret.rotation.y = sin(elapsed * 0.73) * 0.53
+    air_defense_radar.rotation.y = -elapsed * 2.3 - air_defense_turret.rotation.y
+    mixed_gun.rotation.y = sin(elapsed * 0.87) * 0.68
+    mixed_missiles.rotation.y = sin(elapsed * 0.62 + 0.8) * 0.68
+    mixed_radar.rotation.y = -elapsed * 2.16 - mixed_gun.rotation.y
 
 func demo_launch(missile: Node3D, rest: Vector3, half_length: float, degrees: float, time: float) -> void:
     var cycle := fposmod(time, 10.0)

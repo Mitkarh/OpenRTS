@@ -1,0 +1,15 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="PackedScene" path="res://assets/vehicles/medium-tank-hull.glb" id="1"]
+[ext_resource type="PackedScene" path="res://assets/vehicles/mixed-tank-turret.glb" id="2"]
+[ext_resource type="PackedScene" path="res://assets/vehicles/mixed-tank-missiles.glb" id="3"]
+[ext_resource type="PackedScene" path="res://assets/vehicles/mixed-tank-radar.glb" id="4"]
+
+[node name="MixedTank" instance=ExtResource("1")]
+
+[node name="GunTurret" parent="HullShell/TurretSocket" instance=ExtResource("2")]
+
+[node name="MissileRack" parent="HullShell/TurretSocket" instance=ExtResource("3")]
+
+[node name="RadarHead" parent="HullShell/TurretSocket/GunTurret" instance=ExtResource("4")]
+position = Vector3(0, 0, 0.293)

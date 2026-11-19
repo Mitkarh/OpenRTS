@@ -5,12 +5,14 @@ Presentation:
     infantry-rifle: iso-infantry-rifle
     tank: iso-tank
     tank-mixed: iso-tank-mixed
+    radar-buggy: iso-radar-buggy
     apc-upgradable: iso-apc-upgradable
     apc-missiles: iso-apc-missiles
     engineer: iso-engineer
     supply-truck: iso-supply-truck
     salvo-carrier: iso-salvo-carrier
     cruise-carrier: iso-cruise-carrier
+    howitzer-carrier: iso-wheeled-howitzer
     ballistic-carrier: iso-ballistic-carrier
     stealth-truck: iso-stealth-truck
     power-plant: iso-power-plant
@@ -22,5 +24,14 @@ Presentation:
     stealth-generator: iso-stealth-generator
     shield-generator: iso-shield-generator
     supply-center: iso-supply-center
+    mine: iso-mine
+    oil-derrick: iso-oil-derrick
     barracks: iso-barracks
     upgradable-factory: iso-factory
+    civilian-house: iso-civilian-house
+    civilian-apartments: iso-civilian-apartments
+    civilian-clinic: iso-civilian-clinic
+    civilian-market: iso-civilian-market
+    civilian-library: iso-civilian-library
+    civilian-station: iso-civilian-station
+    civilian-community: iso-civilian-community

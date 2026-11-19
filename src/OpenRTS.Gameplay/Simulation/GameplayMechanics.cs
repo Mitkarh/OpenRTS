@@ -34,6 +34,8 @@ public sealed class GameplayRegistration<T> where T : class
 
 public sealed class GameplayMechanics
 {
+    /// <summary>Use signed elevation for direct movement, spatial weapon range, docking and production exits in worlds without a navigation grid.</summary>
+    public bool SpatialMovement { get; init; }
     public ConstructionPaymentPolicy ConstructionPayment { get; init; } = ConstructionPaymentPolicy.Blueprint;
     /// <summary>Null disables fog; positive size enables circular vision on an independent grid.</summary>
     public int? FogCellSize { get; init; }
@@ -93,6 +95,7 @@ public sealed partial class SimulationWorld
         writer.Write((int)_mechanics.ConstructionPayment);
         WriteTransformations(writer);
         writer.Write(28); // Includes named target categories, spatial weapons and flight state.
+        if (_mechanics.SpatialMovement) writer.Write(36);
         if (_capture is not null && ReferenceEquals(_mechanics.Capture, GameplayMechanics.BuiltInCapture))
         {
             writer.Write(24);

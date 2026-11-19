@@ -15,6 +15,7 @@ Terrain: [content/terrain.yaml]
 Weapons:
   - content/weapons/weapons.yaml
   - content/weapons/indirect-fire.yaml
+  - content/mods/isometric/weapons.yaml
 Models:
   - content/models/models.yaml
   - content/models/buildings-models.yaml

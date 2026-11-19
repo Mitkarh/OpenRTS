@@ -9,13 +9,18 @@
 | Роль | Ресурс в `sandbox3d/assets` | Происхождение |
 | --- | --- | --- |
 | Электростанция, радар, кран, вертолётная площадка | `infrastructure/*.glb` | Модели OpenRTS по концептам из соседнего репозитория `Assets/buildings/base-infrastructure-concepts`. Исходники Blender и рецепты в `Assets/buildings/infrastructure`. |
+| Шахта | `infrastructure/mine.glb`, `infrastructure/mine-upgraded.glb` | Общая площадка 3×4, открытый копёр у нейтральной шахты и высокая надстройка с погрузчиком после улучшения. Исходник Blender и рецепт в `GameAssets/buildings/infrastructure/mine`. |
+| Нефтяная вышка | `infrastructure/oil-derrick.glb` | Решётчатая мачта с площадками обслуживания, нефтехранилище и насосный блок на основании 3×3. Исходник Blender и рецепт в `GameAssets/buildings/infrastructure/oil-derrick`. |
 | Аэродром | `infrastructure/airfield.glb` | Модель OpenRTS с компоновкой по референсу USA Airfield из C&C Generals. Исходник Blender в `Assets/buildings/infrastructure/airfield`. |
 | Бункер | `infrastructure/bunker.glb` | Шестиугольный корпус OpenRTS с одним узлом `TurretMount`. Исходник Blender в `Assets/buildings/infrastructure/bunker`. |
 | Стелс-генератор и генератор щита | `infrastructure/stealth-generator.glb`, `infrastructure/shield-generator.glb` | Модели OpenRTS по концептам инфраструктуры. Исходники Blender в `Assets/buildings/infrastructure`. |
 | Нефтепереработка | `kenney/refinery.glb` | `building-c` из [Kenney City Kit (Industrial) 2.0](https://kenney.nl/assets/city-kit-industrial). GLB использует общий `Textures/colormap.png`. |
 | Средний танк | `vehicles/MediumTank.tscn` | Корпус и башня OpenRTS в отдельных GLB. Исходник Blender и рецепт в соседнем репозитории `Assets/vehicles/medium-tank`. |
+| Зенитно-противопехотный танк | `vehicles/MixedTank.tscn` | Шасси среднего танка и новая башня с четырьмя стволами, отдельным ракетным блоком и радаром. Исходник Blender, рецепт и предпросмотр в `GameAssets/vehicles/mixed-tank`. |
 | Гусеничный БТР | `vehicles/TrackedAPC.tscn` | Корпус и башня OpenRTS в отдельных GLB. Исходник Blender и рецепт в соседнем репозитории `Assets/vehicles/tracked-apc`. |
+| Багги-разведчик MRAP | `vehicles/RadarBuggy.tscn` | Шасси 4×4 с кормовым радаром и отдельный пулемётный модуль. Исходник Blender и рецепт в `GameAssets/vehicles/radar-buggy`. |
 | Грузовик 6×6 | `vehicles/EngineeringTruck.tscn`, `SupplyTruckEmpty.tscn`, `SupplyTruckLoaded.tscn`, `SalvoTruck.tscn`, `CruiseTruck.tscn` | Общее шасси с анимацией колёс и пять сменных модулей. Сборки доступны в `AssetShowcase.tscn`. Исходник Blender и рецепт в соседнем репозитории `Assets/vehicles/military-truck`. |
+| Колёсная САУ и мобильное ПВО | `vehicles/WheeledArtillery.tscn`, `vehicles/WheeledAirDefense.tscn` | Оригинальное шасси 6×6, две поворотные башни и отдельная головка радара. Исходник Blender и рецепт в `Assets/vehicles/wheeled-artillery`. |
 | Инженерная машина | `quaternius/engineer.glb` | `Tank4.glb` из того же зеркала. В Blender 5.3 удалён меш `Tank_Gun`, применён масштаб оставшегося `Tank_Turret` и переэкспортированы четыре клипа гусениц. [Исходник Blender](sources/sandbox3d-engineer.blend) · [Папка оригинальных .blend](https://drive.google.com/drive/folders/1MsH24X-roZs9c_UILBbchk2Ue5cMeE9A). |
 | Пехотинец | `quaternius/Infantry.tscn` | Манекен и 46 клипов из [Universal Animation Library Standard](https://store.godotengine.org/asset/quaternius/universal-animation-library/). [Пистолет Quaternius](https://poly.pizza/m/J3i9KDQ3kt) закреплён на `DEF-hand.R`. При запуске сцена проигрывает `Pistol_Idle`. |
 
@@ -32,13 +37,27 @@
 | `Tank4.glb` | `dd99da632fd89cae38aa6bc4af4179364bb592f87fac3e2abac4c60af55f2f1a` |
 | `pistol.glb` | `4622ab2909aa0f4e88b74a13f52f9e28183a6ff5fca5896fc7e98d44008f2148` |
 
+В [сцене гражданского квартала](../../sandbox3d/CivilianShowcase.tscn) показаны семь зданий в обычном, гарнизонном и повреждённом состояниях. Откройте сцену в Godot и запустите её клавишей F6. Исходники Blender и рецепт находятся в `GameAssets/buildings/civilian`.
+
 ## 2D-полигон
 
+У `radar-buggy` по 32 изометрических ракурса корпуса и пулемётной турели. Колёса имеют две фазы движения. Турель использует направление оружейного канала `main`, а эффект выстрела привязан к дульной точке. [Атлас корпуса](../../sandbox/assets/units/isometric/radar-buggy-hull.png) · [Атлас турели](../../sandbox/assets/units/isometric/radar-buggy-turret.png)
+
 У среднего танка в изометрии по 32 ракурса корпуса и башни, две фазы гусениц в движении и командные панели. Поле `MuzzleLocal` задаёт точку вспышки в единицах сцены относительно опорной точки. Она поворачивается вместе с направлением текущего кадра башни. [Корпус](../../sandbox/assets/units/isometric/medium-tank-hull.png) · [Башня](../../sandbox/assets/units/isometric/medium-tank-turret.png)
+
+У `tank-mixed` корпус среднего танка и три отдельных атласа по 32 ракурса. Пушечный блок и ракетная надстройка ориентируются по своим оружейным каналам. Каждому каналу соответствует собственная точка выстрела. Радар вращается вокруг крепления на пушечной башне. Модели содержат 4 040, 1 824 и 540 треугольников соответственно. Проверка геометрии пройдена с допустимыми плоскими многоугольниками и скрытыми стыками деталей. [Изометрические модели](../../sandbox/content/mods/isometric/models.yaml)
 
 Гусеничный БТР использует корпус с двумя фазами гусениц, общую точку крепления и три взаимозаменяемые башни. Корпус и каждый модуль имеют по 32 направления. Переднее крепление поворачивается вместе с корпусом, башня следует направлению наведения. [Атлас корпуса](../../sandbox/assets/units/isometric/tracked-apc-hull.png) · [Пулемётная башня](../../sandbox/assets/units/isometric/tracked-apc-turret.png) · [Ракетная башня](../../sandbox/assets/units/isometric/tracked-apc-missiles.png) · [Пушечная башня](../../sandbox/assets/units/isometric/tracked-apc-cannon.png)
 
 Модульный грузовик использует общее шасси для строителя, снабжения, MLRS и Tomahawk. У всех деталей 32 направления, у шасси две фазы движения колёс. Кабина и палуба имеют отдельные спрайты для перекрытия задних модулей. Кузов переключается по состоянию `loaded`. Поворот крана следует за стройплощадкой или ремонтом, установки вращаются по направлению оружейного крепления. `FarLayer` задаёт слой детали, когда её точка крепления находится за корпусом относительно камеры. Для готовой ракеты Tomahawk `MuzzleLocal` задаёт опору хвоста на направляющей. [Изометрические модели](../../sandbox/content/mods/isometric/models.yaml)
+
+Колёсная САУ и мобильное ПВО используют одно шасси, поворотные оружейные модули и отдельный радар ПВО. У корпуса, кабины, обеих башен и радара по 32 направления. Точка радара следует за поворотом ракетной установки, сам радар вращается вокруг неё независимо. В изометрическом моде обе машины доступны в очереди завода. [Изометрические модели](../../sandbox/content/mods/isometric/models.yaml)
+
+У шахты две изометрические модели по четыре четверть-оборота. Состояние `owned` заменяет открытый копёр улучшенной шахтой с высокой надстройкой, конвейером и цветом владельца. Обе версии используют одну опорную точку в центре площадки 3×4. [Обычная шахта](../../sandbox/assets/buildings/isometric/mine.png) · [Улучшенная шахта](../../sandbox/assets/buildings/isometric/mine-upgraded.png)
+
+Нефтяная вышка использует четыре ракурса с опорой на центр площадки 3×3. Панели на оголовке, резервуаре и насосном блоке принимают цвет владельца. [Атлас вышки](../../sandbox/assets/buildings/isometric/oil-derrick.png)
+
+Гражданские здания в изометрии имеют четыре ракурса и пять состояний корпуса. Гарнизон отображается мешками и полосами цвета владельца. При повреждении пропадает часть верхнего угла здания, при критическом повреждении обрушение захватывает ещё один этаж. Все состояния сохраняют общую опорную точку и размеры участка. [Модели квартала](../../sandbox/content/mods/isometric/models.yaml)
 
 Изометрические электростанция, радар, кран, вертолётная площадка и аэродром имеют по четыре ракурса корпуса. Кран и радар используют общее основание. Антенна и стрела крана используют отдельные атласы по 16 направлений. Радар вращается во времени симуляции. Для крана адаптер берёт направление из цели приказа строительства или из ремонтного крепления и переключает кадры подъёма крюка. [Определения моделей](../../sandbox/content/mods/isometric/models.yaml)
 

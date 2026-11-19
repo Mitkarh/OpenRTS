@@ -11,3 +11,6 @@ ballistic-missile:
     -ProjectileTexture:
     ProjectileModel: res://assets/effects/indirect-fire/military-truck-ballistic-missile.glb
     Size: 0.94
+
+anti-air-missile:
+  Inherits: missile

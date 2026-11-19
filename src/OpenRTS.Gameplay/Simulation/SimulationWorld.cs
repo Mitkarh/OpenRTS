@@ -87,6 +87,8 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
             throw new ArgumentException("Unit definitions require a construction mechanic.", nameof(mechanics));
         if (mechanics.GridPathfinder is not null && navigationGrid is null)
             throw new ArgumentException("A registered grid pathfinder requires a navigation grid.", nameof(navigationGrid));
+        if (mechanics.SpatialMovement && navigationGrid is not null)
+            throw new ArgumentException("Spatial movement requires a world without a navigation grid.", nameof(navigationGrid));
         _economy = new(players, StorageGate, IsConstructing);
         bool hasFog = mechanics.FogCellSize.HasValue && mechanics.FogMode != OpenRTS.Core.Visibility.FogMode.Visible;
         bool hasSensors = _types.Any(t => t.Sensors is not null);
@@ -574,7 +576,7 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
         entityNavigation.WaitTicks = entityNavigation.PathLength = entityNavigation.PathCursor = 0;
         entityNavigation.YieldFor = default; entityNavigation.YieldDeadline = 0; entityNavigation.LocalTarget = default;
         entityNavigation.Route = null;
-        entityMotion.Target = GroundPosition(position, entitySpatial.Position.Elevation);
+        entityMotion.Target = _mechanics.SpatialMovement ? position : GroundPosition(position, entitySpatial.Position.Elevation);
         if (_navigation is not null)
         {
             entityNavigation.GoalCell = _navigation.Grid.CellAt(position);
@@ -658,6 +660,23 @@ public sealed partial class SimulationWorld : Simulation<WorldCommand, WorldEven
             if (Math.Abs(dx) >= Math.Abs(dy)) stepX = Math.Sign(dx); else stepY = Math.Sign(dy);
         }
         return new(checked(position.X + stepX), checked(position.Y + stepY), position.Elevation);
+    }
+
+    private static WorldPosition SpatialStep(WorldPosition a, WorldPosition b, int speed)
+    {
+        long dx = (long)b.X - a.X, dy = (long)b.Y - a.Y, dz = (long)b.Elevation - a.Elevation;
+        long squared = dx * dx + dy * dy + dz * dz;
+        if (squared <= (long)speed * speed) return b;
+        long length = (long)SquareRoot((ulong)squared);
+        if (length * length < squared) length++;
+        int x = (int)(dx * speed / length), y = (int)(dy * speed / length), z = (int)(dz * speed / length);
+        if (x == 0 && y == 0 && z == 0)
+        {
+            if (Math.Abs(dx) >= Math.Abs(dy) && Math.Abs(dx) >= Math.Abs(dz)) x = Math.Sign(dx);
+            else if (Math.Abs(dy) >= Math.Abs(dz)) y = Math.Sign(dy);
+            else z = Math.Sign(dz);
+        }
+        return new(a.X + x, a.Y + y, a.Elevation + z);
     }
 
     private void ValidateType(int type)

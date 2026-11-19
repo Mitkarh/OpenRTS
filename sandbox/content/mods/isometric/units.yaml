@@ -7,3 +7,15 @@ shield-truck:
     Model: iso-shield-truck
     Name: Мобильный генератор щита
     Animations: [idle, move]
+
+
+mobile-aa:
+  Inherits: ^unit
+  Movement: { Locomotor: tracked }
+  Vision: { Radius: 8192 }
+  Health: { HP: 280, Armor: Light }
+  Buildable: { Ticks: 325, Cost: 950 }
+  Armaments:
+    Mounts:
+      main: { Weapon: anti-air-missile, FireWhileMoving: true }
+  Presentation: { Model: iso-mobile-aa, Name: Мобильное ПВО }

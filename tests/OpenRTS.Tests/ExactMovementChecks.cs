@@ -18,6 +18,40 @@ internal static class ExactMovementChecks
     }
     public static void Run(Action<string, Action> test)
     {
+        test("Spatial direct movement reaches signed elevation and survives snapshot restore", () =>
+        {
+            UnitDefinition[] types = [new("ship", 100)];
+            var start = new WorldPosition(1024, 2048, 1024);
+            var goal = new WorldPosition(4096, 3072, -2048);
+            SimulationWorld Create()
+            {
+                var world = SimulationWorld.CreateWithMechanics(new GameplayMechanics { SpatialMovement = true },
+                    types, 8192, 8192, speedPerTick: 256);
+                world.AddInitialUnit(0, start);
+                return world;
+            }
+            using var spatial = Create();
+            using var planar = new SimulationWorld(types, 8192, 8192, speedPerTick: 256);
+            planar.AddInitialUnit(0, start);
+            NavigationChecks.Check(spatial.Report() != planar.Report(), "Movement mode was omitted from the rules hash");
+
+            WorldCommand[] move = [new(1, 0, 1, CommandKind.Move, new(1), goal)];
+            spatial.Step(move);
+            planar.Step(move);
+            using var restored = SimulationWorld.RestoreSnapshot(spatial.CaptureSnapshot(), Create);
+            while (spatial.MovingCount > 0 && spatial.Tick < 64)
+            {
+                var p = Poses(spatial)[0].Current;
+                spatial.Step();
+                restored.Step();
+                var q = Poses(spatial)[0].Current;
+                var (x, y, z) = (q.X - p.X, q.Y - p.Y, q.Elevation - p.Elevation);
+                NavigationChecks.Check(x * x + y * y + z * z <= 256 * 256, "Spatial speed exceeded the tick budget");
+            }
+            while (planar.MovingCount > 0 && planar.Tick < 64) planar.Step();
+            NavigationChecks.Check(Poses(spatial)[0].Current == goal && restored.Report() == spatial.Report(), "Signed destination or restored trajectory was lost");
+            NavigationChecks.Check(Poses(planar)[0].Current == goal with { Elevation = start.Elevation }, "Default direct movement changed altitude");
+        });
         test("Terrain sample scale is validated and survives immutable revisions", () =>
         {
             NavigationChecks.Reject<ArgumentOutOfRangeException>(() => new NavigationGrid(2, 2, cellSize: 0));

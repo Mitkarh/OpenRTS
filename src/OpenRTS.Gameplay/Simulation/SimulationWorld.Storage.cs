@@ -63,14 +63,16 @@ public sealed partial class SimulationWorld
                 ref var state = ref motion.Value;
                 if (!state.Moving) continue;
                 int factor = definition.Value.Spatial!.Locomotor.Rules[0].Speed;
-                var next = spatial.Value.Position;
-                if (factor == 1024) next = StepTowards(next, state.Target);
-                else
+                int speed = SpeedPerTick;
+                if (factor != 1024)
                 {
                     int budget = SpeedPerTick * factor + state.MovementRemainder;
                     state.MovementRemainder = budget % 1024;
-                    if (budget >= 1024) next = StepTowards(next, state.Target, budget / 1024);
+                    speed = budget / 1024;
                 }
+                var next = spatial.Value.Position;
+                if (speed > 0)
+                    next = _mechanics.SpatialMovement ? SpatialStep(next, state.Target, speed) : StepTowards(next, state.Target, speed);
                 if (_construction?.SiteMovementClear(spatial.Value.Position, next, definition.Value.Spatial.Body) != false) spatial.Value.Position = next;
                 state.Moving = spatial.Value.Position != state.Target;
             }

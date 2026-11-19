@@ -91,7 +91,8 @@ public sealed partial class SimulationWorld
         ref var other = ref _entityHandles[target];
         horizontalSquared = ObjectGeometry.DistanceSquared(TypeOf(source), sourcePosition ?? source.Get<SpatialState>().Position,
             TypeOf(other), other.Get<SpatialState>().Position, out from, out to);
-        spatial = !weapon.HasFlightProfile && (TracesCliffRelief(weapon) || (IsAircraft(source) || IsAircraft(other)) &&
+        spatial = !weapon.HasFlightProfile && (_mechanics.SpatialMovement && weapon.SpatialTrajectory ||
+            TracesCliffRelief(weapon) || (IsAircraft(source) || IsAircraft(other)) &&
             !(weapon.Effect == WeaponEffect.Repair && TypeOf(source).Flight is { Mode: FlightMode.Hover }));
         long dz = spatial ? (long)from.Elevation - to.Elevation : 0;
         return horizontalSquared + dz * dz;

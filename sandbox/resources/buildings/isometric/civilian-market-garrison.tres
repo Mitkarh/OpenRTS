@@ -1,0 +1,35 @@
+[gd_resource type="SpriteFrames" load_steps=7 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/buildings/isometric/civilian-market.png" id="1"]
+
+[sub_resource type="AtlasTexture" id="frame_0"]
+atlas = ExtResource("1")
+region = Rect2(246, 0, 246, 245)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="frame_1"]
+atlas = ExtResource("1")
+region = Rect2(246, 245, 246, 245)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="frame_2"]
+atlas = ExtResource("1")
+region = Rect2(246, 490, 246, 245)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="frame_3"]
+atlas = ExtResource("1")
+region = Rect2(246, 735, 246, 245)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="icon"]
+atlas = ExtResource("1")
+region = Rect2(1230, 0, 256, 256)
+filter_clip = true
+
+[resource]
+animations = [{"frames": [{"duration": 1.0, "texture": SubResource("frame_0")}], "loop": true, "name": &"stand-0", "speed": 10.0},
+{"frames": [{"duration": 1.0, "texture": SubResource("frame_1")}], "loop": true, "name": &"stand-1", "speed": 10.0},
+{"frames": [{"duration": 1.0, "texture": SubResource("frame_2")}], "loop": true, "name": &"stand-2", "speed": 10.0},
+{"frames": [{"duration": 1.0, "texture": SubResource("frame_3")}], "loop": true, "name": &"stand-3", "speed": 10.0},
+{"frames": [{"duration": 1.0, "texture": SubResource("icon")}], "loop": false, "name": &"icon", "speed": 1.0}]

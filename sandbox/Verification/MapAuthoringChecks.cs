@@ -161,9 +161,17 @@ public partial class MapAuthoringChecks : Node
                     var launch = shot.Departure;
                     float body = SpriteWorldView.Angle(launch.BodyFacing, launch.BodyFacing, 1);
                     float aim = SpriteWorldView.Angle(launch.MountFacing, launch.MountFacing, 1);
-                    var offset = new Vector2(0, 0.18f).Rotated(body) + new Vector2(0, (0.10f - 0.71f) * 1.65f).Rotated(aim);
+                    if (isometric)
+                    {
+                        const float step = MathF.Tau / 32;
+                        body = MathF.Floor(Mathf.PosMod(body, MathF.Tau) / step + 0.5f) * step;
+                        aim = MathF.Floor(Mathf.PosMod(aim, MathF.Tau) / step + 0.5f) * step;
+                    }
+                    var offset = new Vector2(0, isometric ? 0.52f : 0.18f).Rotated(body) +
+                        new Vector2(0, isometric ? -2.313f : (0.10f - 0.71f) * 1.65f).Rotated(aim);
                     var expected = new Vector3(launch.Origin.X / 1024f + offset.X,
-                        launch.Origin.Elevation / 1024f + SpriteWorldView.OverlayHeight, launch.Origin.Y / 1024f + offset.Y);
+                        launch.Origin.Elevation / 1024f + SpriteWorldView.OverlayHeight + (isometric ? 1.401f : 0),
+                        launch.Origin.Y / 1024f + offset.Y);
                     bool flashAtMuzzle = Enumerable.Range(0, flashes.VisibleInstanceCount)
                         .Any(i => Instance(flashes, i).Position.DistanceTo(expected) < 0.001f);
                     Check(shotPosition.DistanceTo(expected) < 0.001f && flashAtMuzzle,

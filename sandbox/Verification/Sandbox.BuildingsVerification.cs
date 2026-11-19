@@ -26,44 +26,11 @@ public partial class Sandbox
             Check((snapped.X - fp.HalfWidth) % 1024 == 0 && (snapped.Y - fp.HalfHeight) % 1024 == 0, "Placement anchor not aligned");
             HandleBuildingKey(Key.B); Check(_placing, "Placement mode missing"); HandleBuildingKey(Key.Escape); Check(!_placing, "Placement cancel missing");
             _sprites!.Apply(poses, 1, tick, rate, weapons);
-            foreach (var (id, texture) in new[] { ("civilian-house", "civilian-house-states.png"), ("civilian-apartments", "civilian-apartments-states.png"), ("civilian-clinic", "city-clinic.png"), ("civilian-market", "city-market.png"), ("civilian-library", "city-library.png"), ("civilian-station", "city-station.png"), ("civilian-community", "city-community.png") })
-            {
-            var house = poses.Single(p => _catalog!.Units[p.UnitType].Id == id);
-            uint garrison = _catalog!.Units[house.UnitType].StateMask("garrisoned");
-            foreach (var (health, state, expected) in new[] { (1000, 0u, 0), (1000, garrison, 1), (500, 0u, 2), (500, garrison, 3), (250, garrison, 4) })
-            {
-                _sprites.Apply([house with { Health = health, Presentation = house.Presentation with { States = state } }], 1, tick, rate);
-                var visible = _sprites.Node.GetChildren().OfType<MultiMeshInstance3D>().Where(n => n.Multimesh.VisibleInstanceCount > 0 &&
-                    n.Multimesh.Mesh.SurfaceGetMaterial(0) is ShaderMaterial m && m.GetShaderParameter("sprite_texture").AsGodotObject() is Texture2D t && t.ResourcePath.EndsWith(id == "civilian-apartments" && expected is 1 or 3 ? "civilian-apartments-team-trim.png" : texture, StringComparison.Ordinal)).ToArray();
-                Check(visible.Length == 1 && Math.Abs(((ShaderMaterial)visible[0].Multimesh.Mesh.SurfaceGetMaterial(0)).GetShaderParameter("uv_rect").AsVector4().X - expected / 5f) < 0.002f, "Civilian house state selected the wrong sprite");
-            }
-            }
-            foreach (var (id, batch) in new[] { ("civilian-house", "ownership-flag"), ("civilian-apartments", "civilian-apartments-team-trim") })
-            {
-                var house = poses.Single(p => _catalog!.Units[p.UnitType].Id == id);
-                uint garrison = _catalog!.Units[house.UnitType].StateMask("garrisoned");
-                var blue = house with { Presentation = house.Presentation with { Owner = 1, States = garrison } };
-                var red = blue with { Id = new(1000), Presentation = blue.Presentation with { Owner = 2 } };
-                _sprites.Apply([blue, red], 1, tick, rate);
-                var marker = _sprites.Node.GetChildren().OfType<MultiMeshInstance3D>().Where(n => n.Multimesh.VisibleInstanceCount > 0 && n.Multimesh.Mesh.SurfaceGetMaterial(0) is ShaderMaterial mat && mat.GetShaderParameter("sprite_texture").AsGodotObject() is Texture2D tex && tex.ResourcePath.EndsWith(batch + ".png", StringComparison.Ordinal)).Select(n => n.Multimesh).Single();
-                var markerColors = marker.Buffer;
-                Check(marker.VisibleInstanceCount == 2 && markerColors[16] < markerColors[18] && markerColors[36] > markerColors[38], "Ownership marker did not use each player's color");
-                _sprites.Apply([blue with { Presentation = blue.Presentation with { States = 0 } }], 1, tick, rate);
-                Check(marker.VisibleInstanceCount == 0, "Ownership marker appeared without a garrison");
-            }
-            foreach (string name in new[] { "clinic", "market", "library", "station", "community" })
-            {
-                using var art = Image.LoadFromFile(ProjectSettings.GlobalizePath($"res://assets/buildings/city-{name}.png"));
-                foreach (int cell in new[] { 1, 3 })
-                {
-                    int pixels = 0, left = (int)Math.Round(cell * art.GetWidth() / 5.0), right = (int)Math.Round((cell + 1) * art.GetWidth() / 5.0);
-                    for (int y = 85; y < 645; y += 2) for (int x = left; x < right; x += 2)
-                    { var color = art.GetPixel(x, y); if (color.A > 0.5f && color.R > 0.7f && color.B > 0.7f && color.G < 0.35f) pixels++; }
-                    Check(pixels > 20, $"Missing team-color trim: {name}, state {cell}");
-                }
-            }
-            _sprites.Apply(poses, 1, tick, rate, weapons);
             var overrides = _manifest.Settings.Presentation.ModelOverrides;
+            if (overrides.TryGetValue("civilian-house", out var civilianModel) && civilianModel == "iso-civilian-house")
+                CheckCivilianIsometric();
+            else CheckCivilianTopDown();
+            _sprites.Apply(poses, 1, tick, rate, weapons);
             bool directionalRadar = overrides.TryGetValue("headquarters", out var radarModel) && radarModel == "iso-radar";
             bool directionalPower = overrides.TryGetValue("power-plant", out var powerModel) && powerModel == "iso-power-plant";
             if (directionalRadar)
@@ -113,6 +80,16 @@ public partial class Sandbox
                 truckModel == "iso-supply-truck" ? CheckMilitaryTruck() : [];
             var specialistPreview = overrides.TryGetValue("ballistic-carrier", out var ballisticModel) &&
                 ballisticModel == "iso-ballistic-carrier" ? CheckSpecialistTrucks() : [];
+            if (overrides.TryGetValue("howitzer-carrier", out var howitzerModel) && howitzerModel == "iso-wheeled-howitzer")
+                CheckWheeledArtillery();
+            if (overrides.TryGetValue("tank-mixed", out var mixedModel) && mixedModel == "iso-tank-mixed")
+                CheckMixedTank();
+            if (overrides.TryGetValue("radar-buggy", out var buggyModel) && buggyModel == "iso-radar-buggy")
+                CheckRadarBuggy();
+            if (overrides.TryGetValue("mine", out var mineModel) && mineModel == "iso-mine")
+                CheckMine();
+            if (overrides.TryGetValue("oil-derrick", out var oilModel) && oilModel == "iso-oil-derrick")
+                CheckOilDerrick();
             var supplyOverlap = directionalPower && _manifest.Settings.Presentation.Camera == OpenRTS.Content.GameCamera.Isometric &&
                 overrides.TryGetValue("supply-center", out var supplyModel) && supplyModel == "iso-supply-center" ? CheckSupplyOcclusion() : [];
             var layerA = poses.Single(p => p.Id.Value == 17); var layerB = poses.Single(p => p.Id.Value == 18) with { Previous = layerA.Current, Current = layerA.Current };
@@ -585,6 +562,253 @@ public partial class Sandbox
                 Check(SpriteFrame("military-truck-scud", "units") != frame, "SCUD deck must turn with the chassis.");
                 _sprites.Apply(poses, 1, tick, rate, weapons);
                 return [stealthTruck, shieldTruck, scud with { WeaponCount = 1 }, cruise with { WeaponOffset = 1, WeaponCount = 1 }];
+            }
+
+            void CheckWheeledArtillery()
+            {
+                const string hull = "wheeled-artillery-hull", howitzer = "wheeled-artillery-turret";
+                const string launcher = "wheeled-artillery-air-defense", radar = "wheeled-artillery-radar";
+                var units = _catalog!.Units.ToList();
+                int artilleryType = units.FindIndex(u => u.Id == "howitzer");
+                int antiAirType = units.FindIndex(u => u.Id == "mobile-aa");
+                var weapon = units[antiAirType].Weapons.Single().Weapon;
+                Check(weapon.CanTarget(new TargetCategories(["air"])) && !weapon.CanTarget(TargetCategories.Ground),
+                    "The mobile air-defense weapon must target aircraft only.");
+                var north = FacingDirection.North;
+                var east = FacingDirection.FromQuarterTurns(1);
+                var point = new WorldPosition(32 * 1024, 36 * 1024);
+                EntityPose Vehicle(int type) => new(new(242), type, point, point,
+                    new(1, north, north, east, east, new(units[type].IdleAnimation, 0, 0), AnimationPlayback.None, 0));
+
+                var artillery = Vehicle(artilleryType);
+                _sprites.Apply([artillery], 1, 0, rate);
+                var chassisFrame = SpriteFrame(hull, "units");
+                Check(SpriteFrame(howitzer, "units").Y == 0.5f && _sprites.SpriteCount == 3,
+                    "Wheeled artillery did not show an independent turret on the shared chassis.");
+                CheckAnchor(hull, artillery, "body", "units");
+                var aa = Vehicle(antiAirType);
+                _sprites.Apply([aa], 1, 0, rate);
+                var missileFrame = SpriteFrame(launcher, "units");
+                var radarFrame = SpriteFrame(radar, "units");
+                var antenna = SpriteScreenPivot(radar, aa, "radar", "units");
+                var expected = _camera!.UnprojectPosition(new Vector3(32 - 0.304f, 0, 36 + 0.52f));
+                Check(antenna.DistanceTo(expected) < 0.05f && SpriteFrame(hull, "units") == chassisFrame,
+                    "The radar socket must rotate with the launcher while both variants share one hull.");
+                _sprites.Apply([aa], 1, rate / 2, rate);
+                Check(SpriteFrame(radar, "units") != radarFrame && SpriteFrame(launcher, "units") == missileFrame &&
+                    antenna.DistanceTo(SpriteScreenPivot(radar, aa, "radar", "units")) < 0.05f,
+                    "The radar must spin without changing the missile turret facing or moving its socket.");
+                _sprites.Apply(poses, 1, tick, rate, weapons);
+            }
+
+            void CheckMixedTank()
+            {
+                var units = _catalog!.Units.ToList();
+                int type = units.FindIndex(u => u.Id == "tank-mixed");
+                var definition = units[type];
+                var north = FacingDirection.North;
+                var east = FacingDirection.FromQuarterTurns(1);
+                var point = new WorldPosition(32 * 1024, 36 * 1024);
+                var tank = new EntityPose(new(243), type, point, point,
+                    new(1, north, north, north, north, new(definition.IdleAnimation, 0, 0), AnimationPlayback.None, 0),
+                    WeaponCount: definition.Weapons.Count);
+                WeaponPose[] mounts = definition.Weapons.Select((mount, i) =>
+                {
+                    var angle = mount.Id == "main" ? east : north;
+                    return new WeaponPose(tank.Id, i, angle, angle, AnimationPlayback.None, 0, 0, default);
+                }).ToArray();
+                const string turret = "mixed-tank-turret", rack = "mixed-tank-missiles", radar = "mixed-tank-radar";
+                _sprites.Apply([tank], 1, 0, rate, mounts);
+                Check(_sprites.SpriteCount == 4 && SpriteFrame(turret, "units").Y == 0.5f &&
+                    SpriteFrame(rack, "units").Y == 0 && SpriteFrame("medium-tank-hull", "units").Y == 0,
+                    "The mixed tank must use the standard hull and aim guns and missiles independently.");
+                var radarFrame = SpriteFrame(radar, "units");
+                var radarPoint = _camera!.UnprojectPosition(new Vector3(32 - .293f, 0, 36));
+                _sprites.Apply([tank], 1, rate / 2, rate, mounts);
+                Check(SpriteFrame(radar, "units") != radarFrame &&
+                    radarPoint.DistanceTo(SpriteScreenPivot(radar, tank, "radar", "units")) < 0.05f,
+                    "The mixed tank radar must spin around a socket attached to the gun turret.");
+
+                var styles = OpenRTS.Content.EffectCatalog.Load(_manifest.Effects).Weapons;
+                foreach (var mount in mounts)
+                {
+                    bool cannon = definition.Weapons[mount.Mount].Id == "main";
+                    var expected = cannon ? new Vector3(33.039f, 1.036f, 36) : new Vector3(32.53f, 1.385f, 35.567f);
+                    var launch = _combatEffects!.LaunchVisual(type, mount.Mount,
+                        new(1, tank.Id, tank.Current, north, mount.Facing), styles[definition.Weapons[mount.Mount].Weapon.Id], Vector3.Forward);
+                    Check(launch is { } firing &&
+                        _camera.UnprojectPosition(_combatEffects.Node.ToGlobal(firing.Center)).DistanceTo(_camera.UnprojectPosition(expected)) < 0.05f,
+                        "A mixed-tank shot did not start at the visual anchor of its own weapon mount.");
+                }
+                _sprites.Apply(poses, 1, tick, rate, weapons);
+            }
+
+            void CheckRadarBuggy()
+            {
+                int type = _catalog!.Units.ToList().FindIndex(u => u.Id == "radar-buggy");
+                var unit = _catalog.Units[type];
+                var north = FacingDirection.North;
+                var east = FacingDirection.FromQuarterTurns(1);
+                var point = new WorldPosition(32 * 1024, 36 * 1024);
+                var buggy = new EntityPose(new(248), type, point, point,
+                    new(1, north, north, north, north, new(unit.IdleAnimation, 0, 0), AnimationPlayback.None, 0), WeaponCount: 1);
+                const string hull = "radar-buggy-hull", turret = "radar-buggy-turret";
+                var aim = new WeaponPose(buggy.Id, 0, east, east, AnimationPlayback.None, 0, 0, default);
+                _sprites.Apply([buggy], 1, 0, rate, [aim]);
+                var idleFrame = SpriteFrame(hull, "units");
+                var aimFrame = SpriteFrame(turret, "units");
+                Check(_sprites.SpriteCount == 2 && idleFrame.Y == 0 && aimFrame.Y == 0.5f,
+                    "The radar buggy's turret must aim independently of the hull.");
+                var mountPoint = _camera!.UnprojectPosition(new Vector3(32, 0, 36 - .035f));
+                Check(mountPoint.DistanceTo(SpriteScreenPivot(turret, buggy, "turret", "units")) < 0.05f,
+                    "The radar buggy turret must pivot at its hull socket.");
+
+                var moving = buggy with { Presentation = buggy.Presentation with { Body = new(unit.MoveAnimation, 0, 4) } };
+                _sprites.Apply([moving], 1, 2, rate, [aim]);
+                Check(SpriteFrame(hull, "units").X != idleFrame.X && SpriteFrame(turret, "units") == aimFrame,
+                    "The radar buggy must animate its wheels while keeping the turret on target.");
+                var styles = OpenRTS.Content.EffectCatalog.Load(_manifest.Effects).Weapons;
+                var launch = _combatEffects!.LaunchVisual(type, 0, new(1, buggy.Id, point, north, east),
+                    styles[unit.Weapons[0].Weapon.Id], Vector3.Forward);
+                var muzzle = new Vector3(32 + .614f, 1.532f, 36 - .035f);
+                Check(launch is { } firing &&
+                    _camera.UnprojectPosition(_combatEffects.Node.ToGlobal(firing.Center)).DistanceTo(_camera.UnprojectPosition(muzzle)) < 0.05f,
+                    "The radar buggy's shot must start at the rotated muzzle.");
+                _sprites.Apply(poses, 1, tick, rate, weapons);
+            }
+
+            void CheckMine()
+            {
+                var units = _catalog!.Units.ToList();
+                int mineType = units.FindIndex(u => u.Id == "mine");
+                int builderType = units.FindIndex(u => u.Id == "construction-engineer");
+                using var world = new SimulationWorld(units, 64 * 1024, 64 * 1024, players: [new(1, "Blue", 10000)]);
+                var at = new WorldPosition(32 * 1024 + 512, 36 * 1024);
+                var mine = world.AddInitialUnit(mineType, at);
+                var builder = world.AddInitialUnit(builderType, at with { Y = at.Y + 3 * 1024 }, 1);
+                var actors = new EntityPose[world.Count];
+                world.CopyPoses(actors);
+                var neutral = actors.Single(p => p.Id == mine);
+                _sprites.Apply([neutral], 1, 0, rate, preview: new(mine, 1, mineType, neutral.Current, false, "owned"));
+                Check(_sprites.SpriteCount == 2 && IsometricBatch("mine-upgraded").Multimesh.VisibleInstanceCount == 1,
+                    "The upgrade preview must show the upgraded mine over the neutral mine.");
+                CheckAnchor("mine-upgraded", neutral, "owned-mine");
+                world.Step([new(1, 0, 1, CommandKind.StartUpgrade, builder, TargetEntity: mine, Action: "owned")]);
+                for (int i = 0; i < 430; i++) world.Step();
+                world.CopyPoses(actors);
+                var upgraded = actors.Single(p => p.Id == mine);
+                Check(upgraded.Presentation.Owner == 1 && upgraded.Upgrade.Completed == "owned" && upgraded.Current == neutral.Current,
+                    "The neutral mine did not complete its upgrade at the same footprint anchor.");
+
+                foreach (var (pose, file, part) in new[] { (neutral, "mine", "body"), (upgraded, "mine-upgraded", "owned-mine") })
+                    for (int turn = 0; turn < 4; turn++)
+                    {
+                        var facing = FacingDirection.FromQuarterTurns(turn);
+                        var rotated = pose with { QuarterTurns = turn, Presentation = pose.Presentation with
+                            { BodyFacing = facing, PreviousBodyFacing = facing } };
+                        _sprites.Apply([rotated], 1, 0, rate);
+                        Check(_sprites.SpriteCount == 1 && Mathf.IsEqualApprox(SpriteFrame(file).Y, turn / 4f),
+                            "A mine variant must replace the other sprite and retain all four quarter turns.");
+                        CheckAnchor(file, rotated, part);
+                    }
+                _sprites.Apply(poses, 1, tick, rate, weapons);
+            }
+
+            void CheckOilDerrick()
+            {
+                var oil = poses.Single(p => _catalog!.Units[p.UnitType].Id == "oil-derrick");
+                var art = oil with { Presentation = oil.Presentation with { States = 0 } };
+                for (int turn = 0; turn < 4; turn++)
+                {
+                    var facing = FacingDirection.FromQuarterTurns(turn);
+                    var rotated = art with { QuarterTurns = turn, Presentation = art.Presentation with
+                        { BodyFacing = facing, PreviousBodyFacing = facing } };
+                    _sprites.Apply([rotated], 1, 0, rate);
+                    Check(_sprites.SpriteCount == 1 && Mathf.IsEqualApprox(SpriteFrame("oil-derrick").Y, turn / 4f),
+                        "The oil derrick did not select the corresponding directional sprite.");
+                    CheckAnchor("oil-derrick", rotated, "body");
+                }
+
+                var blue = art with { Presentation = art.Presentation with { Owner = 1 } };
+                var red = blue with { Id = new(244), Presentation = blue.Presentation with { Owner = 2 } };
+                _sprites.Apply([blue, red], 1, 0, rate);
+                var batch = IsometricBatch("oil-derrick").Multimesh;
+                var colors = batch.Buffer;
+                Check(batch.VisibleInstanceCount == 2 && colors[16] < colors[18] && colors[36] > colors[38],
+                    "The oil derrick must use its owner's team color.");
+                _sprites.Apply(poses, 1, tick, rate, weapons);
+            }
+
+            void CheckCivilianTopDown()
+            {
+                foreach (var (id, texture) in new[] { ("civilian-house", "civilian-house-states.png"), ("civilian-apartments", "civilian-apartments-states.png"), ("civilian-clinic", "city-clinic.png"), ("civilian-market", "city-market.png"), ("civilian-library", "city-library.png"), ("civilian-station", "city-station.png"), ("civilian-community", "city-community.png") })
+                {
+                    var house = poses.Single(p => _catalog!.Units[p.UnitType].Id == id);
+                    uint garrison = _catalog!.Units[house.UnitType].StateMask("garrisoned");
+                    foreach (var (health, state, expected) in new[] { (1000, 0u, 0), (1000, garrison, 1), (500, 0u, 2), (500, garrison, 3), (250, garrison, 4) })
+                    {
+                        _sprites.Apply([house with { Health = health, Presentation = house.Presentation with { States = state } }], 1, tick, rate);
+                        var visible = _sprites.Node.GetChildren().OfType<MultiMeshInstance3D>().Where(n => n.Multimesh.VisibleInstanceCount > 0 &&
+                            n.Multimesh.Mesh.SurfaceGetMaterial(0) is ShaderMaterial m && m.GetShaderParameter("sprite_texture").AsGodotObject() is Texture2D t && t.ResourcePath.EndsWith(id == "civilian-apartments" && expected is 1 or 3 ? "civilian-apartments-team-trim.png" : texture, StringComparison.Ordinal)).ToArray();
+                        Check(visible.Length == 1 && Math.Abs(((ShaderMaterial)visible[0].Multimesh.Mesh.SurfaceGetMaterial(0)).GetShaderParameter("uv_rect").AsVector4().X - expected / 5f) < 0.002f, "Civilian house state selected the wrong sprite");
+                    }
+                }
+                foreach (var (id, batch) in new[] { ("civilian-house", "ownership-flag"), ("civilian-apartments", "civilian-apartments-team-trim") })
+                {
+                    var house = poses.Single(p => _catalog!.Units[p.UnitType].Id == id);
+                    uint garrison = _catalog!.Units[house.UnitType].StateMask("garrisoned");
+                    var blue = house with { Presentation = house.Presentation with { Owner = 1, States = garrison } };
+                    var red = blue with { Id = new(1000), Presentation = blue.Presentation with { Owner = 2 } };
+                    _sprites.Apply([blue, red], 1, tick, rate);
+                    var marker = _sprites.Node.GetChildren().OfType<MultiMeshInstance3D>().Where(n => n.Multimesh.VisibleInstanceCount > 0 && n.Multimesh.Mesh.SurfaceGetMaterial(0) is ShaderMaterial mat && mat.GetShaderParameter("sprite_texture").AsGodotObject() is Texture2D tex && tex.ResourcePath.EndsWith(batch + ".png", StringComparison.Ordinal)).Select(n => n.Multimesh).Single();
+                    var markerColors = marker.Buffer;
+                    Check(marker.VisibleInstanceCount == 2 && markerColors[16] < markerColors[18] && markerColors[36] > markerColors[38], "Ownership marker did not use each player's color");
+                    _sprites.Apply([blue with { Presentation = blue.Presentation with { States = 0 } }], 1, tick, rate);
+                    Check(marker.VisibleInstanceCount == 0, "Ownership marker appeared without a garrison");
+                }
+                foreach (string name in new[] { "clinic", "market", "library", "station", "community" })
+                {
+                    using var art = Image.LoadFromFile(ProjectSettings.GlobalizePath($"res://assets/buildings/city-{name}.png"));
+                    foreach (int cell in new[] { 1, 3 })
+                    {
+                        int pixels = 0, left = (int)Math.Round(cell * art.GetWidth() / 5.0), right = (int)Math.Round((cell + 1) * art.GetWidth() / 5.0);
+                        for (int y = 85; y < 645; y += 2) for (int x = left; x < right; x += 2)
+                        { var color = art.GetPixel(x, y); if (color.A > 0.5f && color.R > 0.7f && color.B > 0.7f && color.G < 0.35f) pixels++; }
+                        Check(pixels > 20, $"Missing team-color trim: {name}, state {cell}");
+                    }
+                }
+            }
+
+            void CheckCivilianIsometric()
+            {
+                foreach (string name in new[] { "house", "apartments", "clinic", "market", "library", "station", "community" })
+                {
+                    string id = "civilian-" + name;
+                    var building = poses.Single(p => _catalog!.Units[p.UnitType].Id == id);
+                    uint occupied = _catalog!.Units[building.UnitType].StateMask("garrisoned");
+                    foreach (var (hp, state, part, column) in new[] {
+                        (1000, 0u, "normal", 0), (1000, occupied, "garrison", 1),
+                        (500, 0u, "damaged", 2), (500, occupied, "damaged-garrison", 3), (250, occupied, "nearly", 4) })
+                        for (int turn = 0; turn < 4; turn++)
+                        {
+                            var facing = FacingDirection.FromQuarterTurns(turn);
+                            var rotated = building with { Health = hp, QuarterTurns = turn, Presentation = building.Presentation with
+                                { States = state, BodyFacing = facing, PreviousBodyFacing = facing } };
+                            _sprites.Apply([rotated], 1, 0, rate);
+                            var frame = SpriteFrame(id);
+                            Check(_sprites.SpriteCount == 1 && Mathf.IsEqualApprox(frame.X, column * frame.Z) &&
+                                Mathf.IsEqualApprox(frame.Y, turn / 4f), $"{id}.{part} selected the wrong state or direction.");
+                            CheckAnchor(id, rotated, part);
+                        }
+
+                    var blue = building with { Health = 1000, Presentation = building.Presentation with { Owner = 1, States = occupied } };
+                    var red = blue with { Id = new(1000), Presentation = blue.Presentation with { Owner = 2 } };
+                    _sprites.Apply([blue, red], 1, 0, rate);
+                    var instance = IsometricBatch(id).Multimesh;
+                    var colors = instance.Buffer;
+                    Check(instance.VisibleInstanceCount == 2 && colors[16] < colors[18] && colors[36] > colors[38],
+                        $"{id} did not use the garrison owner's color.");
+                }
             }
 
             void CheckDoor(EntityPose pose, string file, uint state, int rows, int firstRow = 0)
