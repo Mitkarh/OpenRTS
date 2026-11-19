@@ -561,3 +561,12 @@ helipad:
         Resource: res://resources/buildings/helipad.tres
         Size: [4.4, 4.4]
       ruins: { Size: [4.0, 4.0] }
+
+shield-generator:
+  Inherits: ^building-model
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/shield-generator.tres
+        Size: [4.5, 4.5]
+      ruins: { Size: [4.0, 4.0] }

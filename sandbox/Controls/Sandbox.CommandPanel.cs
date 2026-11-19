@@ -31,8 +31,14 @@ public partial class Sandbox
         var model = _catalog!.Presentations[type].Model;
         if (model is not null && _modelCatalog!.Models.TryGetValue(model, out var definition))
         {
-            var frames = GD.Load<SpriteFrames>(definition.Parts.First(p => p.Parent < 0).Resource);
-            icon = frames?.GetFrameTexture("stand", 0);
+            var part = definition.Parts.First(p => p.Parent < 0);
+            var frames = GD.Load<SpriteFrames>(part.Resource);
+            if (frames is not null)
+            {
+                string sequence = frames.HasAnimation("icon") ? "icon" : definition.Animations["idle"].Sequence;
+                if (part.Facings > 1 && !frames.HasAnimation(sequence)) sequence += "-0";
+                icon = frames.GetFrameTexture(sequence, 0);
+            }
             if (_terminal is not null && icon is not null && DisplayServer.GetName() != "headless")
                 icon = TerminalIcon(icon);
         }

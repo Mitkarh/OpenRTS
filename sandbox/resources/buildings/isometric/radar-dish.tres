@@ -1,0 +1,142 @@
+[gd_resource type="SpriteFrames" load_steps=19 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/buildings/isometric/radar-dish.png" id="1"]
+
+[sub_resource type="AtlasTexture" id="open_0"]
+atlas = ExtResource("1")
+region = Rect2(0, 0, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_1"]
+atlas = ExtResource("1")
+region = Rect2(0, 250, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_2"]
+atlas = ExtResource("1")
+region = Rect2(0, 500, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_3"]
+atlas = ExtResource("1")
+region = Rect2(0, 750, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_4"]
+atlas = ExtResource("1")
+region = Rect2(0, 1000, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_5"]
+atlas = ExtResource("1")
+region = Rect2(0, 1250, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_6"]
+atlas = ExtResource("1")
+region = Rect2(0, 1500, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_7"]
+atlas = ExtResource("1")
+region = Rect2(0, 1750, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_8"]
+atlas = ExtResource("1")
+region = Rect2(0, 2000, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_9"]
+atlas = ExtResource("1")
+region = Rect2(0, 2250, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_10"]
+atlas = ExtResource("1")
+region = Rect2(0, 2500, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_11"]
+atlas = ExtResource("1")
+region = Rect2(0, 2750, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_12"]
+atlas = ExtResource("1")
+region = Rect2(0, 3000, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_13"]
+atlas = ExtResource("1")
+region = Rect2(0, 3250, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_14"]
+atlas = ExtResource("1")
+region = Rect2(0, 3500, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_15"]
+atlas = ExtResource("1")
+region = Rect2(0, 3750, 250, 250)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="icon"]
+atlas = ExtResource("1")
+region = Rect2(250, 0, 256, 256)
+filter_clip = true
+
+[resource]
+animations = [{
+"frames": [{"duration": 1.0, "texture": SubResource("icon")}],
+"loop": false, "name": &"icon", "speed": 1.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_0")}],
+"loop": true, "name": &"stand-0", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_1")}],
+"loop": true, "name": &"stand-1", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_2")}],
+"loop": true, "name": &"stand-2", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_3")}],
+"loop": true, "name": &"stand-3", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_4")}],
+"loop": true, "name": &"stand-4", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_5")}],
+"loop": true, "name": &"stand-5", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_6")}],
+"loop": true, "name": &"stand-6", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_7")}],
+"loop": true, "name": &"stand-7", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_8")}],
+"loop": true, "name": &"stand-8", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_9")}],
+"loop": true, "name": &"stand-9", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_10")}],
+"loop": true, "name": &"stand-10", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_11")}],
+"loop": true, "name": &"stand-11", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_12")}],
+"loop": true, "name": &"stand-12", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_13")}],
+"loop": true, "name": &"stand-13", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_14")}],
+"loop": true, "name": &"stand-14", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_15")}],
+"loop": true, "name": &"stand-15", "speed": 10.0
+}]

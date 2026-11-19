@@ -70,6 +70,8 @@ internal static class ConfigurationChecks
                 "SensorRanges: {Radar: {Color: invalid}}",
                 "SensorRanges: {Radar: {Color: ''}}",
                 "SensorRanges: {Radar: {Owner: Own}}",
+                "Presentation: {Renderer: Canvas2D}",
+                "Presentation: {Camera: Invalid}",
                 "Match: {Maps: [{Path: a.yaml}]}",
                 "Match: {Maps: [{Path: a.yaml, Title: A}]}",
                 "Match: {DefaultMap: a.yaml, Maps: [{Path: a.yaml, Title: A}, {Path: a.yaml, Title: B}]}"
@@ -114,6 +116,21 @@ internal static class ConfigurationChecks
             Check(world.Report().StateHash != original.Report().StateHash, "World settings are absent from state hash");
             var fixedMatch = MapScenario.Load(catalog, files.Read, "content/maps/fixture.yaml", defaultStartSetPath: "unused.yaml");
             Check(fixedMatch.UnitCount > 0, "Default starting set was forced on a fixed map");
+        });
+        test("Configuration: isometric mod replaces models without changing gameplay", () =>
+        {
+            var standard = GameManifest.Load("sandbox/game.yaml");
+            var isometric = GameManifest.Load("sandbox/isometric-game.yaml");
+            Check(standard.Settings.Presentation is { Renderer: GameRenderer.Godot3D, Camera: GameCamera.Default } &&
+                isometric.Settings.Presentation is { Renderer: GameRenderer.Godot3D, Camera: GameCamera.Isometric }, "Presentation profile was ignored");
+            var units = isometric.LoadUnits();
+            Check(units.Summary == standard.LoadUnits().Summary, "Presentation changed the unit catalog fingerprint");
+            var models = isometric.LoadModels();
+            models.ValidateUnits(units);
+            Check(isometric.Settings.Presentation.ModelOverrides.Count == 3, "Expected mod overrides for infantry, vehicle and building");
+            foreach (var (id, replacement) in isometric.Settings.Presentation.ModelOverrides)
+                Check(ReferenceEquals(models.Models[id].Parts, models.Models[replacement].Parts), "Model override was ignored: " + id);
+            Check(!standard.LoadModels().Models.ContainsKey("iso-tank"), "Mod definitions leaked into the standard profile");
         });
     }
 

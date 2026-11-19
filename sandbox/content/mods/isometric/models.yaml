@@ -1,0 +1,200 @@
+# The isometric definitions inherit the existing resources until alternate art is available.
+iso-infantry-rifle:
+  Inherits: infantry-rifle
+
+iso-tank:
+  Inherits: tank
+
+iso-power-plant:
+  Inherits: power-plant
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/power-plant.tres
+        Size: [4.88321, 4.88321]
+        Pivot: [0.64126, 0.64126]
+        Facings: 4
+
+iso-radar:
+  Inherits: headquarters
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/radar.tres
+        Size: [5.51825, 5.51825]
+        Pivot: [0.60714, 0.60714]
+        Facings: 4
+      radar:
+        Resource: res://resources/buildings/isometric/radar-dish.tres
+        Size: [5.47445, 5.47445]
+        Pivot: [0.968, 0.968]
+        Offset: [0, 0]
+        Facings: 16
+
+iso-crane:
+  Inherits: crane
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/radar.tres
+        Size: [5.51825, 5.51825]
+        Pivot: [0.60714, 0.60714]
+        Facings: 4
+      arm:
+        Parent: body
+        Resource: res://resources/buildings/isometric/crane-arm.tres
+        Size: [5.34307, 5.34307]
+        Pivot: [0.96721, 0.96721]
+        Facing: Weapon
+        Mount: repair
+        AimAtConstruction: true
+        Facings: 16
+        Layer: 3
+        HiddenWhen: [destroyed]
+    Animations:
+      idle: { Sequence: stand, Parts: [body, ruins, workfx, arm] }
+      produce: { Sequence: work, Parts: [arm], Flash: 0.08 }
+
+iso-helipad:
+  Inherits: helipad
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/helipad.tres
+        Size: [5.01460, 5.01460]
+        Pivot: [0.55022, 0.55022]
+        Facings: 4
+
+iso-airfield:
+  Inherits: airfield
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/airfield.tres
+        Size: [13.18248, 13.18248]
+        Pivot: [0.60631, 0.60631]
+        Facings: 4
+
+iso-bunker:
+  Inherits: bunker-upgradable
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/bunker.tres
+        Size: [3.32847, 3.32847]
+        Pivot: [0.60526, 0.60526]
+        Facings: 4
+        HiddenWhen: [destroyed]
+      ruins: { Size: [2.35, 2.15] }
+      -expanded:
+      cannon:
+        Parent: body
+        Resource: res://resources/buildings/isometric/bunker-cannon-turret.tres
+        Size: [2.47445, 2.47445]
+        Pivot: [0.92920, 0.92920]
+        Muzzle: [0.40, 0.40]
+        Facings: 16
+        Layer: 3
+      -machinegun:
+      missiles:
+        Parent: body
+        Resource: res://resources/buildings/isometric/bunker-mixed-turret.tres
+        Size: [2.32117, 2.29927]
+        Pivot: [0.92453, 0.92381]
+        Offset: [0, 0]
+        Muzzle: [0.32, 0.31]
+        Facings: 16
+        Layer: 3
+    Animations:
+      idle: { Sequence: stand, Parts: [body, ruins, workfx, cannon, missiles] }
+      construct: { Sequence: stand, Parts: [body, cannon, missiles], ScaleFrom: 0.86, OpacityFrom: 0.28 }
+      fire: { Sequence: stand, Parts: [cannon, missiles], Flash: 0.32 }
+
+iso-stealth-generator:
+  Inherits: ^building-model
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/stealth-generator.tres
+        Size: [5.21168, 5.23358]
+        Pivot: [0.58403, 0.58577]
+        Facings: 4
+      rotor:
+        Parent: body
+        Resource: res://resources/buildings/isometric/stealth-emitter.tres
+        Size: [3.45985, 3.48175]
+        Pivot: [0.95253, 0.95283]
+        Facings: 16
+        Spin: 140
+        EmitterSpin: true
+        Layer: 3
+        HiddenWhen: [destroyed]
+      ruins: { Size: [4.0, 4.0] }
+    Animations:
+      idle: { Sequence: stand, Parts: [body, rotor, ruins, workfx] }
+
+iso-shield-generator:
+  Inherits: shield-generator
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/shield-generator.tres
+        Size: [5.49635, 5.49635]
+        Pivot: [0.60558, 0.60558]
+        Facings: 4
+
+iso-supply-center:
+  Inherits: supply-center
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/supply-center.tres
+        Size: [7.33577, 7.35766]
+        Pivot: [0.64478, 0.64583]
+        Facings: 4
+      -door:
+      -workfx:
+    Animations:
+      idle: { Sequence: stand, Parts: [body, ruins] }
+      produce: { Sequence: stand, Parts: [body], Flash: 0.12 }
+      door: { Sequence: door, Parts: [body] }
+
+iso-barracks:
+  Inherits: barracks
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/barracks.tres
+        Size: [6.13139, 6.10949]
+        Pivot: [0.64286, 0.64158]
+        Facings: 4
+      -door:
+      workfx: { Offset: [0, 0.65], Size: [0.65, 0.65] }
+    Animations:
+      idle: { Sequence: stand, Parts: [body, ruins, workfx] }
+      door: { Sequence: door, Parts: [body] }
+
+iso-factory:
+  Inherits: upgradable-factory
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/buildings/isometric/factory.tres
+        Size: [9.10949, 9.08759]
+        Pivot: [0.70433, 0.70361]
+        Facings: 4
+        HiddenWhen: [destroyed, heavy]
+      heavy:
+        Resource: res://resources/buildings/isometric/factory-heavy.tres
+        Size: [9.10949, 9.08759]
+        Pivot: [0.70433, 0.70361]
+        Offset: [0, 0]
+        Layer: 0
+        Facings: 4
+        DrawLayer: Surface
+      -door:
+      ruins: { Size: [5, 3], Offset: [0, -1] }
+      workfx: { Offset: [0, 0.75], Size: [0.8, 0.8] }
+    Animations:
+      idle: { Sequence: stand, Parts: [body, heavy, ruins, workfx] }
+      door: { Sequence: door, Parts: [body, heavy] }

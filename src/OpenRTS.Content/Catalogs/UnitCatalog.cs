@@ -296,12 +296,14 @@ public sealed partial class UnitCatalog
         public bool KeepsParking { get; set; }
         public int[]? RunwayStart { get; set; }
         public int[]? RunwayEnd { get; set; }
+        public bool ReverseLanding { get; set; }
         public AirbaseDefinition Compile()
         {
             if (Slots.Any(p => p.Length != 2) || RunwayStart is { Length: not 2 } || RunwayEnd is { Length: not 2 })
                 throw new ArgumentException("Airbase positions require [X, Y].");
             return new(Slots.Select(p => new WorldPosition(p[0], p[1])), Accepts, ReloadTicks, RepairPerTick,
-                RunwayStart is null ? null : new(RunwayStart[0], RunwayStart[1]), RunwayEnd is null ? null : new(RunwayEnd[0], RunwayEnd[1]), KeepsParking);
+                RunwayStart is null ? null : new(RunwayStart[0], RunwayStart[1]),
+                RunwayEnd is null ? null : new(RunwayEnd[0], RunwayEnd[1]), KeepsParking, ReverseLanding);
         }
     }
     private sealed class MovementOptions { public string Locomotor { get; set; } = ""; public bool Enabled { get; set; } = true; }

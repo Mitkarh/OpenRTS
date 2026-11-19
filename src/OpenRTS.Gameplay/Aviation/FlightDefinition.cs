@@ -57,27 +57,32 @@ public sealed record AirbaseDefinition
     public WorldPosition? RunwayStart { get; }
     public WorldPosition? RunwayEnd { get; }
     public bool KeepsParking { get; }
+    public bool ReverseLanding { get; }
     public AirbaseDefinition(IEnumerable<WorldPosition> slots, IEnumerable<string>? accepts = null, int reloadTicks = 15,
-        int repairPerTick = 2, WorldPosition? runwayStart = null, WorldPosition? runwayEnd = null, bool keepsParking = false)
+        int repairPerTick = 2, WorldPosition? runwayStart = null, WorldPosition? runwayEnd = null,
+        bool keepsParking = false, bool reverseLanding = false)
     {
         var points = slots.ToArray(); var types = (accepts ?? ["aircraft"]).Order(StringComparer.Ordinal).ToArray();
         if (points.Length is < 1 or > 16 || points.Distinct().Count() != points.Length ||
             points.Any(p => Math.Abs((long)p.X) > 8192 || Math.Abs((long)p.Y) > 8192 || p.Elevation != 0) ||
             types.Length == 0 || types.Any(string.IsNullOrWhiteSpace) || types.Distinct(StringComparer.Ordinal).Count() != types.Length ||
             reloadTicks is < 1 or > 100000 || repairPerTick is < 0 or > 10000 ||
-            runwayStart.HasValue != runwayEnd.HasValue || runwayStart.HasValue &&
+             runwayStart.HasValue != runwayEnd.HasValue || reverseLanding && !runwayStart.HasValue || runwayStart.HasValue &&
             (runwayStart == runwayEnd || runwayStart.Value.Elevation != 0 || runwayEnd!.Value.Elevation != 0 ||
              Math.Abs((long)runwayStart.Value.X) > 8192 || Math.Abs((long)runwayStart.Value.Y) > 8192 ||
              Math.Abs((long)runwayEnd.Value.X) > 8192 || Math.Abs((long)runwayEnd.Value.Y) > 8192))
             throw new ArgumentException("Invalid airbase slots, services or runway.");
         Slots = Array.AsReadOnly(points); Accepts = Array.AsReadOnly(types); ReloadTicks = reloadTicks;
         RepairPerTick = repairPerTick; RunwayStart = runwayStart; RunwayEnd = runwayEnd; KeepsParking = keepsParking;
+        ReverseLanding = reverseLanding;
     }
     internal void Write(BinaryWriter w)
     {
         w.Write(Slots.Count); foreach (var p in Slots) { w.Write(p.X); w.Write(p.Y); }
         w.Write(Accepts.Count); foreach (var a in Accepts) w.Write(a);
-        w.Write(ReloadTicks); w.Write(RepairPerTick); w.Write(KeepsParking); w.Write(RunwayStart.HasValue);
+        w.Write(ReloadTicks); w.Write(RepairPerTick); w.Write(KeepsParking);
+        // The runway marker keeps the original fingerprint bytes for both existing modes.
+        w.Write((byte)(ReverseLanding ? 2 : RunwayStart.HasValue ? 1 : 0));
         if (RunwayStart is { } start) { w.Write(start.X); w.Write(start.Y); w.Write(RunwayEnd!.Value.X); w.Write(RunwayEnd.Value.Y); }
     }
 }

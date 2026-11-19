@@ -258,10 +258,22 @@ public partial class Sandbox : Node3D
 
     private void BuildBattleScene(UnitCatalog catalog)
     {
+        switch (_manifest.Settings.Presentation.Renderer)
+        {
+            case GameRenderer.Godot3D:
+                BuildGodot3DBattleScene(catalog);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported renderer: {_manifest.Settings.Presentation.Renderer}.");
+        }
+    }
+
+    private void BuildGodot3DBattleScene(UnitCatalog catalog)
+    {
         _catalog = catalog;
         if (_showcase)
         {
-            _modelCatalog = ModelCatalog.Load(_manifest.Models);
+            _modelCatalog = _manifest.LoadModels();
             _sprites = new(catalog, _modelCatalog, TeamColor);
             _combatEffects = new(catalog, EffectCatalog.Load(_manifest.Effects), _modelCatalog);
             AddChild(_combatEffects.Node);
@@ -654,6 +666,11 @@ public partial class Sandbox : Node3D
             speed = _edgeSpeed;
         }
         var direction = new Vector3(x, 0, z);
+        if (_manifest.Settings.Presentation.Camera == GameCamera.Isometric)
+        {
+            var right = _camera.Basis.X;
+            direction = right * x + right.Cross(Vector3.Up) * z;
+        }
         if (direction != Vector3.Zero) MoveCamera(direction.Normalized() * _camera.Size * (float)delta * speed);
     }
 
@@ -715,13 +732,24 @@ public partial class Sandbox : Node3D
             Current = true
         };
         AddChild(camera);
-        camera.RotationDegrees = _rampTerrain is not null ? new(-53, -18, 0) : new(-90, 0, 0);
-        if (_rampTerrain is not null)
+        bool isometric = _manifest.Settings.Presentation.Camera == GameCamera.Isometric;
+        if (isometric)
         {
+            camera.RotationDegrees = new(-35.26439f, 45, 0);
+            camera.Position = center + camera.Basis.Z * side;
+            _sprites?.AlignDepthWithCamera(camera);
+        }
+        else if (_rampTerrain is not null)
+        {
+            camera.RotationDegrees = new(-53, -18, 0);
             camera.Position = center + new Vector3(0, 1, 4.1f) + camera.Basis.Z * side;
+        }
+        else camera.RotationDegrees = new(-90, 0, 0);
+        if (_showcase && (isometric || _rampTerrain is not null))
+        {
             // Move the existing overlay lift along the view ray so height does not shift its screen position.
             var offset = (camera.Basis.Z / camera.Basis.Z.Y - Vector3.Up) * SpriteWorldView.OverlayHeight;
-            _selectionRing!.Position = offset;
+            if (!isometric) _selectionRing!.Position = offset;
             _combatEffects!.Node.Position = offset;
         }
         _camera = camera;

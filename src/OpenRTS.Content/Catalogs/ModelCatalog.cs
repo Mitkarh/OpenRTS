@@ -9,7 +9,8 @@ public enum ModelDrawLayer { Surface, World, Foreground }
 public sealed record ModelPart(string Id, int Parent, string Resource, ModelFacing Facing,
     double Width, double Height, double PivotX, double PivotY, double OffsetX, double OffsetY, int Layer, string? Mount = null, ReadOnlyCollection<string>? VisibleWhen = null, ReadOnlyCollection<string>? HiddenWhen = null,
     double Spin = 0, string? SpinWhen = null, string? LoopWhen = null, string? LoopAnimation = null, int Facings = 0,
-    ModelDrawLayer? DrawLayer = null, bool EmitterSpin = false, double SpriteRotation = 0, (double X, double Y)? Muzzle = null);
+    ModelDrawLayer? DrawLayer = null, bool EmitterSpin = false, double SpriteRotation = 0, (double X, double Y)? Muzzle = null,
+    bool AimAtConstruction = false);
 public sealed record ModelAnimation(string Sequence, ReadOnlyCollection<string> Parts, double Bob, double Recoil, double Flash, double ScaleFrom = 1, double OpacityFrom = 1, double SlideX = 0, double SlideY = 0, ModelFacing? Facing = null);
 public sealed record ModelState(double Red, double Green, double Blue, double Scale, double Opacity, double Pulse = 0);
 public sealed record ModelDefinition(string Id, ReadOnlyCollection<ModelPart> Parts,
@@ -21,7 +22,9 @@ public sealed class ModelCatalog
 {
     public ReadOnlyDictionary<string, ModelDefinition> Models { get; }
     private ModelCatalog(Dictionary<string, ModelDefinition> models) => Models = new(models);
-    public static ModelCatalog Load(IEnumerable<ContentSource> sources)
+    public static ModelCatalog Load(IEnumerable<ContentSource> sources) => Load(sources, null);
+
+    internal static ModelCatalog Load(IEnumerable<ContentSource> sources, IReadOnlyDictionary<string, string>? overrides)
     {
         var definitions = DefinitionSet.Load(sources);
         var registry = new TraitRegistry<string>().Register<ModelOptions>("Model", (_, _, options) => options, required: true);
@@ -55,7 +58,7 @@ public sealed class ModelCatalog
                         if (part.Mount is null || ordered.Any(other => other.Mount == part.Mount && other.Muzzle.HasValue))
                             throw node.Error(id + ".Model.Parts." + name + ".Muzzle", "Each muzzle must name a distinct Mount.");
                     }
-                    ordered.Add(new(name, parent, part.Resource, part.Facing, part.Size[0], part.Size[1], part.Pivot[0], part.Pivot[1], part.Offset[0], part.Offset[1], part.Layer, part.Mount, Array.AsReadOnly(part.VisibleWhen), Array.AsReadOnly(part.HiddenWhen), part.Spin, part.SpinWhen, part.LoopWhen, part.LoopAnimation, part.Facings, part.DrawLayer, part.EmitterSpin, part.SpriteRotation, part.Muzzle is { } point ? (point[0], point[1]) : null));
+                    ordered.Add(new(name, parent, part.Resource, part.Facing, part.Size[0], part.Size[1], part.Pivot[0], part.Pivot[1], part.Offset[0], part.Offset[1], part.Layer, part.Mount, Array.AsReadOnly(part.VisibleWhen), Array.AsReadOnly(part.HiddenWhen), part.Spin, part.SpinWhen, part.LoopWhen, part.LoopAnimation, part.Facings, part.DrawLayer, part.EmitterSpin, part.SpriteRotation, part.Muzzle is { } point ? (point[0], point[1]) : null, part.AimAtConstruction));
                     pending.RemoveAt(i--); progress = true;
                 }
                 if (!progress) throw node.Error(id + ".Model.Parts", "Part parent cycle.");
@@ -82,7 +85,15 @@ public sealed class ModelCatalog
                 if (value.Length != 2 || value.Any(v => v < min || v > max)) throw node.Error(id + ".Model.Parts." + name, $"Requires two values in {min}..{max}.");
             }
         }
-        return new(models);
+        if (overrides is null || overrides.Count == 0) return new(models);
+        var selected = new Dictionary<string, ModelDefinition>(models, StringComparer.Ordinal);
+        foreach (var (id, alternative) in overrides)
+        {
+            if (!models.ContainsKey(id) || !models.TryGetValue(alternative, out var model))
+                throw new ArgumentException($"Presentation.ModelOverrides.{id}: both '{id}' and '{alternative}' must name declared models.");
+            selected[id] = model with { Id = id };
+        }
+        return new(selected);
     }
 
     public void ValidateUnits(UnitCatalog units)
@@ -127,6 +138,7 @@ public sealed class ModelCatalog
         [Range(-720.0, 720.0)] public double Spin { get; set; }
         public string? SpinWhen { get; set; }
         public bool EmitterSpin { get; set; }
+        public bool AimAtConstruction { get; set; }
         public string? LoopWhen { get; set; }
         public string? LoopAnimation { get; set; }
         public ModelFacing Facing { get; set; }

@@ -33,7 +33,7 @@ internal static class MapTerrainEditorChecks
         bool loaderFailed = false;
         try
         {
-            var models = ModelCatalog.Load(GameManifest.Load(ProjectSettings.GlobalizePath(root.ContentManifest)).Models);
+            var models = GameManifest.Load(ProjectSettings.GlobalizePath(root.ContentManifest)).LoadModels();
             _ = new OpenRTS.Godot.Rendering.SpriteWorldView(catalog, models, framesFor: _ => throw new ArgumentException("Missing test frames"));
         }
         catch (ArgumentException) { loaderFailed = true; }

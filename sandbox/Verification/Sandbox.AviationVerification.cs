@@ -17,6 +17,8 @@ public partial class Sandbox
             _verificationDone = true;
             VerifyAirWorkVisuals();
             VerifyAirTransportInput();
+            if (_manifest.Settings.Presentation.ModelOverrides.GetValueOrDefault("airfield") == "iso-airfield")
+                VerifyIsometricAirfield();
             var poses = frame.Poses.ToArray();
             var report = _session!.Completion.GetAwaiter().GetResult();
             if (frame.Tick != report.Tick || !poses.Any(p => _catalog!.Units[p.UnitType].Airbase is not null) ||
@@ -44,6 +46,92 @@ public partial class Sandbox
             GD.Print("OPENRTS_SIMULATION:" + JsonSerializer.Serialize(report)); GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
+    }
+
+    private void VerifyIsometricAirfield()
+    {
+        var units = _catalog!.Units.ToList();
+        int fieldType = units.FindIndex(t => t.Id == "airfield");
+        int fighterType = units.FindIndex(t => t.Id == "fighter");
+        var airbase = units[fieldType].Airbase!;
+        const int size = 64;
+        byte grass = _catalog.Locomotion!.TerrainIndex("grass");
+        using var world = new SimulationWorld(units, size * 1024, size * 1024,
+            navigationGrid: new(size, size, terrain: Enumerable.Repeat(grass, size * size)));
+        var origin = new WorldPosition(32 * 1024, 32 * 1024);
+        var field = world.AddInitialUnit(fieldType, origin, 1);
+        WorldPosition At(WorldPosition offset) => new(origin.X + offset.X, origin.Y + offset.Y);
+
+        // These offsets are the centers of the painted stands and runway in the Blender model.
+        WorldPosition[] stands = [new(-2624, -2432), new(-576, -2432), new(1600, -1152), new(1600, 1024)];
+        var runwayStart = At(new(-1664, -1536));
+        var runwayEnd = At(new(-1664, 4608));
+        if (!airbase.Slots.SequenceEqual(stands) || At(airbase.RunwayStart!.Value) != runwayStart ||
+            At(airbase.RunwayEnd!.Value) != runwayEnd)
+            throw new InvalidOperationException("Airfield parking or runway is out of sync with the model.");
+        var fighters = stands.Select(at => world.AddInitialUnit(fighterType, At(at), 1)).ToArray();
+        var poses = new EntityPose[world.Count];
+        world.Step([new(1, 0, 1, CommandKind.MoveSelected, Recipients: new(fighters), Position: new(49152, 49152))]);
+        var departed = new bool[fighters.Length];
+        var observedRun = new bool[fighters.Length];
+        for (int tick = 0; tick < 360 && departed.Any(value => !value); tick++)
+        {
+            world.Step();
+            world.CopyPoses(poses);
+            if (poses.Count(p => p.Flight.Phase is FlightPhase.Taxiing or FlightPhase.RunwayTakeoff) > 1)
+                throw new InvalidOperationException("Two fighters reserved the same runway.");
+            for (int i = 0; i < fighters.Length; i++)
+            {
+                var fighter = poses.Single(p => p.Id == fighters[i]);
+                if (fighter.Flight.Phase == FlightPhase.RunwayTakeoff)
+                {
+                    if ((!observedRun[i] && fighter.Current != runwayStart) ||
+                        fighter.Current.X != runwayStart.X || fighter.Flight.Airbase != field)
+                        throw new InvalidOperationException($"Fighter from stand {i + 1} missed the runway.");
+                    observedRun[i] = true;
+                }
+                if (observedRun[i] && !departed[i] && fighter.Flight.Phase == FlightPhase.Flying)
+                {
+                    if (fighter.Current.X != runwayEnd.X || fighter.Current.Y != runwayEnd.Y || fighter.Current.Elevation <= 0)
+                        throw new InvalidOperationException($"Fighter from stand {i + 1} did not depart through the open end.");
+                    departed[i] = true;
+                }
+            }
+        }
+        if (departed.Any(value => !value))
+            throw new InvalidOperationException("A fighter failed to depart from its airfield stand.");
+
+        world.Step(fighters.Select((fighter, i) =>
+            new WorldCommand(world.Tick + 1, 0, i + 1, CommandKind.ReturnToBase, fighter)).ToArray());
+        var returned = new bool[fighters.Length];
+        var observedLanding = new bool[fighters.Length];
+        var landingY = new int[fighters.Length];
+        for (int tick = 0; tick < 900 && returned.Any(value => !value); tick++)
+        {
+            world.Step();
+            world.CopyPoses(poses);
+            if (poses.Count(p => p.Flight.Phase is FlightPhase.RunwayLanding or FlightPhase.Taxiing) > 1)
+                throw new InvalidOperationException("Two fighters used the same runway on return.");
+            for (int i = 0; i < fighters.Length; i++)
+            {
+                var fighter = poses.Single(p => p.Id == fighters[i]);
+                if (fighter.Flight.Phase == FlightPhase.RunwayLanding)
+                {
+                    if ((!observedLanding[i] && fighter.Current.Y <= runwayEnd.Y) ||
+                        (observedLanding[i] && fighter.Current.Y >= landingY[i]) ||
+                        fighter.Current.X != runwayStart.X || fighter.Flight.Airbase != field)
+                        throw new InvalidOperationException($"Fighter from stand {i + 1} did not approach from the open end.");
+                    observedLanding[i] = true;
+                    landingY[i] = fighter.Current.Y;
+                }
+                returned[i] |= observedLanding[i] && fighter.Current == At(stands[i]) &&
+                    fighter.Flight.Phase is FlightPhase.Landed or FlightPhase.Servicing;
+            }
+        }
+        if (returned.Any(value => !value))
+            throw new InvalidOperationException("A fighter failed to return to its airfield stand. " +
+                string.Join(", ", poses.Where(p => p.Id != field).Select(p => $"{p.Id}: {p.Flight.Phase} at {p.Current}")));
+        GD.Print("OPENRTS_ISOMETRIC_AIRFIELD:PASS four departures and four open-end landings");
     }
 
     private void VerifyAirWorkVisuals()

@@ -28,6 +28,7 @@
       site-helipad: { Unit: helipad, OnSite: true }
       site-radar: { Unit: headquarters, OnSite: true }
       site-stealth: { Unit: stealth-generator, OnSite: true }
+      site-shield: { Unit: shield-generator, OnSite: true }
   ActionPanel:
     Buttons:
       site-power: { Label: Электростанция, Hotkey: E, Order: 2 }
@@ -39,6 +40,7 @@
       site-helipad: { Label: Вертолётная площадка, Order: 11 }
       site-radar: { Label: HQ · Радар, Order: 12 }
       site-stealth: { Label: Стелс-генератор, Order: 13 }
+      site-shield: { Label: Генератор щита, Order: 14 }
 
 crane:
   Inherits: ^building
@@ -274,3 +276,11 @@ stealth-generator:
   Sensors: { JamRange: 12288, StealthRange: 8192, DeployTicks: 50 }
   Footprint: { Rows: ["####", "####", "####", "####"] }
   Presentation: { Model: stealth-generator, Name: Стелс-генератор }
+
+shield-generator:
+  Inherits: ^building
+  Vision: { Radius: 0 }
+  Buildable: { Ticks: 225, Cost: 1100 }
+  Economy: { Energy: 0 }
+  Footprint: { Rows: ["####", "####", "####", "####"] }
+  Presentation: { Model: shield-generator, Name: Генератор щита }

@@ -70,7 +70,7 @@ public partial class OpenRtsEditorPlugin
         ClearPreview();
         _previewCatalog = catalog;
         var manifest = GameManifest.Load(ProjectFile(root.ContentManifest, ".yaml"));
-        _previewModels = ModelCatalog.Load(manifest.Models);
+        _previewModels = manifest.LoadModels();
         _previewContent = root.ContentManifest;
         _previewRoot = root;
         _gizmos.Catalog = catalog;

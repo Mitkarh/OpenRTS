@@ -9,11 +9,22 @@ public static class AviationScenario
 {
     public const string Map = "content/maps/aviation.yaml";
     public const int Ticks = 1200;
-    public static MapMatch Load(UnitCatalog catalog, Func<string, ContentSource> read) =>
-        GameMap.Load(read(Map), catalog).Prepare(new Dictionary<string, PlayerDefinition>(StringComparer.Ordinal)
+    public static MapMatch Load(UnitCatalog catalog, Func<string, ContentSource> read)
+    {
+        var source = MapSource.FromM1(read(Map), catalog);
+        var field = source.Objects.Single(obj => obj.Id == "airfield");
+        var fighter = source.Objects.Single(obj => obj.Id == "fighter");
+        var stand = catalog.Units.Single(unit => unit.Id == field.Type).Airbase!.Slots[0];
+        var parking = new WorldPosition(field.Position.X + stand.X, field.Position.Y + stand.Y);
+        if (fighter.Position != parking)
+            source = new(source.Id, source.IsSkirmish, source.Width, source.Height, source.Terrain, source.Visual,
+                source.Slots, source.Objects.Select(obj => obj == fighter ? obj with { Position = parking } : obj).ToArray(),
+                source.CellSize, source.Origin, source.Surface);
+        return MapCompiler.Compile(source, catalog).Map.Prepare(new Dictionary<string, PlayerDefinition>(StringComparer.Ordinal)
         {
             ["blue"] = new(1, "Синий", 12000), ["red"] = new(2, "Красный", 12000)
         });
+    }
     public static WorldCommand[] Commands =>
     [
         new(1, 0, 1, CommandKind.Move, new(4), new(48 * 1024, 20 * 1024)),

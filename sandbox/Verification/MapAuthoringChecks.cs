@@ -96,7 +96,7 @@ public partial class MapAuthoringChecks : Node
         var players = new Dictionary<string, PlayerDefinition> { ["blue"] = new(1, "Blue"), ["red"] = new(2, "Red") };
         using var world = map.Prepare(players).CreateWorld();
         var effects = EffectCatalog.Load(manifest.Effects);
-        var view = new CombatEffectsView(catalog, effects, ModelCatalog.Load(manifest.Models));
+        var view = new CombatEffectsView(catalog, effects, manifest.LoadModels());
         AddChild(view.Node);
         var rounds = new ProjectilePose[128];
         var actors = new EntityPose[world.Count];

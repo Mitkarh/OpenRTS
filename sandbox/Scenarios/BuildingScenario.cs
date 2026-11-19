@@ -9,7 +9,7 @@ namespace OpenRTS.Samples;
 public static class BuildingScenario
 {
     public const int Width = 80, Height = 56, UnitCount = 28, VerificationTicks = 24;
-    public static readonly string[] Placeable = ["power-plant", "barracks", "factory", "headquarters", "supply-center", "mine", "oil-derrick", "nature-trees", "nature-rocks", "nature-cliff", "nature-debris", "bunker-cannon", "bunker-mixed", "civilian-house", "civilian-apartments", "civilian-clinic", "civilian-market", "civilian-library", "civilian-station", "civilian-community"];
+    public static readonly string[] Placeable = ["power-plant", "barracks", "factory", "headquarters", "supply-center", "mine", "oil-derrick", "nature-trees", "nature-rocks", "nature-cliff", "nature-debris", "bunker", "bunker-cannon", "bunker-mixed", "civilian-house", "civilian-apartments", "civilian-clinic", "civilian-market", "civilian-library", "civilian-station", "civilian-community", "crane", "helipad", "airfield", "stealth-generator", "shield-generator"];
     public static string TerrainAt(int x, int y)
     {
         if (x >= 62 && y >= 37 && y < 51) return "water";
@@ -30,7 +30,9 @@ public static class BuildingScenario
                 world.AddInitialUnit(type, new(twiceX * 512, twiceY * 512), owner, states);
             }
             Add("power-plant", 65, 24, working: true); Add("barracks", 84, 25);
-            Add("factory", 107, 24, working: true); Add("headquarters", 132, 25, working: true);
+            var factory = catalog.Units.Single(unit => unit.Id == "factory");
+            Add("factory", 107, 24 + factory.Footprint!.HalfHeight % 1024 / 512, working: true);
+            Add("headquarters", 132, 25, working: true);
             Add("supply-center", 29, 52, working: true); Add("mine", 53, 52, working: true); Add("oil-derrick", 77, 53, working: true);
             Add("nature-trees", 103, 56, 0); Add("nature-rocks", 120, 56, 0); Add("nature-cliff", 137, 57, 0); Add("nature-debris", 151, 56, 0);
             Add("light-infantry", 16, 64); Add("medium-apc", 22, 64); Add("large-tank", 30, 64); Add("box-vehicle", 38, 64); Add("construction-engineer", 46, 64);

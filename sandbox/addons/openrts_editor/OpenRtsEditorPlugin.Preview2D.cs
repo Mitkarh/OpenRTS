@@ -125,7 +125,7 @@ public partial class OpenRtsEditorPlugin
             {
                 var manifest = GameManifest.Load(ProjectFile(root.ContentManifest, ".yaml"));
                 _catalog2D = manifest.LoadUnits();
-                _models2D = ModelCatalog.Load(manifest.Models);
+                _models2D = manifest.LoadModels();
                 _manifest2D = manifest;
                 FillPreviewStartSets(manifest);
             }

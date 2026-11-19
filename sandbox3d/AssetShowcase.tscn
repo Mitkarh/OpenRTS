@@ -1,13 +1,26 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=22 format=3]
 
-[ext_resource type="PackedScene" path="res://assets/kenney/factory.glb" id="1"]
-[ext_resource type="PackedScene" path="res://assets/kenney/power-plant.glb" id="2"]
-[ext_resource type="PackedScene" path="res://assets/kenney/barracks.glb" id="3"]
+[ext_resource type="PackedScene" path="res://assets/production-buildings/factory.glb" id="1"]
+[ext_resource type="PackedScene" path="res://assets/infrastructure/power-plant.glb" id="2"]
+[ext_resource type="PackedScene" path="res://assets/production-buildings/barracks.glb" id="3"]
 [ext_resource type="PackedScene" path="res://assets/kenney/refinery.glb" id="4"]
 [ext_resource type="PackedScene" path="res://assets/quaternius/tank.glb" id="5"]
 [ext_resource type="PackedScene" path="res://assets/quaternius/apc.glb" id="6"]
 [ext_resource type="PackedScene" path="res://assets/quaternius/engineer.glb" id="7"]
 [ext_resource type="PackedScene" path="res://assets/quaternius/Infantry.tscn" id="8"]
+
+[ext_resource type="PackedScene" path="res://assets/supply-center/supply-center.glb" id="9"]
+
+[ext_resource type="PackedScene" path="res://assets/infrastructure/radar.glb" id="10"]
+[ext_resource type="PackedScene" path="res://assets/infrastructure/construction-crane.glb" id="11"]
+[ext_resource type="PackedScene" path="res://assets/infrastructure/helipad.glb" id="12"]
+[ext_resource type="Script" path="res://ShowcaseBuildingMotion.gd" id="13"]
+
+[ext_resource type="PackedScene" path="res://assets/infrastructure/airfield.glb" id="14"]
+[ext_resource type="PackedScene" path="res://assets/infrastructure/bunker.glb" id="15"]
+[ext_resource type="PackedScene" path="res://assets/infrastructure/bunker-cannon-turret.glb" id="16"]
+[ext_resource type="PackedScene" path="res://assets/infrastructure/stealth-generator.glb" id="17"]
+[ext_resource type="PackedScene" path="res://assets/infrastructure/shield-generator.glb" id="18"]
 
 [sub_resource type="StandardMaterial3D" id="GroundMaterial"]
 albedo_color = Color(0.19, 0.23, 0.25, 1)
@@ -15,7 +28,7 @@ roughness = 1.0
 
 [sub_resource type="PlaneMesh" id="GroundMesh"]
 material = SubResource("GroundMaterial")
-size = Vector2(28, 16)
+size = Vector2(46, 30)
 
 [sub_resource type="Environment" id="Lighting"]
 ambient_light_source = 2
@@ -23,11 +36,14 @@ ambient_light_color = Color(0.8, 0.88, 1, 1)
 ambient_light_energy = 0.42
 
 [node name="AssetShowcase" type="Node3D"]
+script = ExtResource("13")
+bunker_turret_scene = ExtResource("16")
 
 [node name="Environment" type="WorldEnvironment" parent="."]
 environment = SubResource("Lighting")
 
 [node name="Ground" type="MeshInstance3D" parent="."]
+position = Vector3(1, 0, -5.2)
 mesh = SubResource("GroundMesh")
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
@@ -38,31 +54,32 @@ shadow_bias = 0.2
 directional_shadow_max_distance = 35.0
 
 [node name="Camera" type="Camera3D" parent="."]
-position = Vector3(0, 20, 15)
+position = Vector3(1, 26, 13.3)
 rotation_degrees = Vector3(-53.13, 0, 0)
 projection = 1
 current = true
-size = 18.0
+size = 27.5
 
 [node name="Factory" parent="." instance=ExtResource("1")]
-position = Vector3(-10.5, 0, -3.8)
-rotation_degrees = Vector3(0, 18, 0)
-scale = Vector3(2.3, 2.3, 2.3)
+position = Vector3(-13.5, 0, -3.8)
+rotation_degrees = Vector3(0, -31, 0)
 
 [node name="PowerPlant" parent="." instance=ExtResource("2")]
-position = Vector3(-3.5, 0, -3.8)
-rotation_degrees = Vector3(0, 18, 0)
-scale = Vector3(2.3, 2.3, 2.3)
+position = Vector3(-6.75, 0, -3.8)
+rotation_degrees = Vector3(0, -27, 0)
 
 [node name="Barracks" parent="." instance=ExtResource("3")]
-position = Vector3(3.5, 0, -3.8)
+position = Vector3(6.75, 0, -3.8)
+rotation_degrees = Vector3(0, -31, 0)
+
+[node name="Refinery" parent="." instance=ExtResource("4")]
+position = Vector3(13.5, 0, -3.8)
 rotation_degrees = Vector3(0, 18, 0)
 scale = Vector3(2.3, 2.3, 2.3)
 
-[node name="Refinery" parent="." instance=ExtResource("4")]
-position = Vector3(10.5, 0, -3.8)
-rotation_degrees = Vector3(0, 18, 0)
-scale = Vector3(2.3, 2.3, 2.3)
+[node name="SupplyCenter" parent="." instance=ExtResource("9")]
+position = Vector3(0, 0, -3.8)
+rotation_degrees = Vector3(0, -23, 0)
 
 [node name="Tank" parent="." instance=ExtResource("5")]
 position = Vector3(-10.5, 0, 3.6)
@@ -85,28 +102,34 @@ rotation_degrees = Vector3(0, -35, 0)
 scale = Vector3(1.65, 1.65, 1.65)
 
 [node name="FactoryLabel" type="Label3D" parent="."]
-position = Vector3(-10.5, 0.3, -0.45)
+position = Vector3(-13.5, 0.3, -0.45)
 billboard = 1
 pixel_size = 0.014
 text = "Завод"
 
 [node name="PowerPlantLabel" type="Label3D" parent="."]
-position = Vector3(-3.5, 0.3, -0.45)
+position = Vector3(-6.75, 0.3, -0.45)
 billboard = 1
 pixel_size = 0.014
 text = "Электростанция"
 
 [node name="BarracksLabel" type="Label3D" parent="."]
-position = Vector3(3.5, 0.3, -0.45)
+position = Vector3(6.75, 0.3, -0.45)
 billboard = 1
 pixel_size = 0.014
 text = "Казармы"
 
 [node name="RefineryLabel" type="Label3D" parent="."]
-position = Vector3(10.5, 0.3, -0.45)
+position = Vector3(13.5, 0.3, -0.45)
 billboard = 1
 pixel_size = 0.014
 text = "Нефтепереработка"
+
+[node name="SupplyCenterLabel" type="Label3D" parent="."]
+position = Vector3(0, 0.3, -0.25)
+billboard = 1
+pixel_size = 0.014
+text = "Центр снабжения"
 
 [node name="TankLabel" type="Label3D" parent="."]
 position = Vector3(-10.5, 0.3, 7.25)
@@ -131,3 +154,77 @@ position = Vector3(10.5, 0.3, 7.25)
 billboard = 1
 pixel_size = 0.014
 text = "Пехота"
+
+[node name="Radar" parent="." instance=ExtResource("10")]
+position = Vector3(-8, 0, -12)
+rotation_degrees = Vector3(0, -24, 0)
+
+[node name="RadarLabel" type="Label3D" parent="."]
+position = Vector3(-8, 0.3, -9.6)
+billboard = 1
+pixel_size = 0.014
+text = "Радар"
+
+[node name="ConstructionCrane" parent="." instance=ExtResource("11")]
+position = Vector3(0, 0, -12)
+rotation_degrees = Vector3(0, -24, 0)
+
+[node name="ConstructionCraneLabel" type="Label3D" parent="."]
+position = Vector3(0, 0.3, -9.6)
+billboard = 1
+pixel_size = 0.014
+text = "Кран"
+
+[node name="Helipad" parent="." instance=ExtResource("12")]
+position = Vector3(8, 0, -12)
+rotation_degrees = Vector3(0, -24, 0)
+
+[node name="HelipadLabel" type="Label3D" parent="."]
+position = Vector3(8, 0.3, -9.6)
+billboard = 1
+pixel_size = 0.014
+text = "Вертолётная площадка"
+
+[node name="Airfield" parent="." instance=ExtResource("14")]
+position = Vector3(17, 0, -13)
+rotation_degrees = Vector3(0, -16, 0)
+
+[node name="AirfieldLabel" type="Label3D" parent="."]
+position = Vector3(17.5, 0.3, -6.45)
+billboard = 1
+pixel_size = 0.014
+text = "Аэродром"
+
+[node name="Bunker" parent="." instance=ExtResource("15")]
+position = Vector3(-17.4, 0, -12)
+rotation_degrees = Vector3(0, -25, 0)
+
+[node name="BunkerArmed" parent="." instance=ExtResource("15")]
+position = Vector3(-13.7, 0, -12)
+rotation_degrees = Vector3(0, -25, 0)
+
+[node name="BunkerLabel" type="Label3D" parent="."]
+position = Vector3(-15.55, 0.3, -10.2)
+billboard = 1
+pixel_size = 0.014
+text = "Бункер"
+
+[node name="StealthGenerator" parent="." instance=ExtResource("17")]
+position = Vector3(-5.2, 0, -17.7)
+rotation_degrees = Vector3(0, 15, 0)
+
+[node name="StealthGeneratorLabel" type="Label3D" parent="."]
+position = Vector3(-5.2, 0.3, -15.25)
+billboard = 1
+pixel_size = 0.014
+text = "Стелс-генератор"
+
+[node name="ShieldGenerator" parent="." instance=ExtResource("18")]
+position = Vector3(2.6, 0, -17.7)
+rotation_degrees = Vector3(0, -16, 0)
+
+[node name="ShieldGeneratorLabel" type="Label3D" parent="."]
+position = Vector3(2.6, 0.3, -15.25)
+billboard = 1
+pixel_size = 0.014
+text = "Генератор щита"

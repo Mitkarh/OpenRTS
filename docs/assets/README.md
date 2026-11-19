@@ -2,16 +2,22 @@
 
 ## 3D-полигон
 
-В [AssetShowcase.tscn](../../sandbox3d/AssetShowcase.tscn) собраны четыре здания и четыре юнита. Для просмотра можно открыть сцену через `./tools/dev.sh editor3d res://AssetShowcase.tscn` и запустить её клавишей F6. Размеры и повороты экземпляров в витрине заданы для сравнения силуэтов.
+В [AssetShowcase.tscn](../../sandbox3d/AssetShowcase.tscn) собраны двенадцать типов зданий и четыре юнита. Для просмотра можно открыть сцену через `./tools/dev.sh editor3d res://AssetShowcase.tscn` и запустить её клавишей F6. Размеры и повороты экземпляров в витрине заданы для сравнения силуэтов.
+
+Центр снабжения, бараки и завод изготовлены в Blender по приложенным концептам. Редактируемые сцены, предпросмотр и скрипты сборки находятся в соседнем репозитории в `Assets/buildings/supply-center` и `Assets/buildings/production-buildings`. [Центр снабжения](../../sandbox3d/assets/supply-center/supply-center.glb) · [Бараки](../../sandbox3d/assets/production-buildings/barracks.glb) · [Завод](../../sandbox3d/assets/production-buildings/factory.glb)
 
 | Роль | Ресурс в `sandbox3d/assets` | Происхождение |
 | --- | --- | --- |
-| Завод, электростанция, казармы, нефтепереработка | `kenney/factory.glb`, `power-plant.glb`, `barracks.glb`, `refinery.glb` | `building-m`, `building-e`, `building-b`, `building-c` из [Kenney City Kit (Industrial) 2.0](https://kenney.nl/assets/city-kit-industrial). Названия файлов адаптированы для полигона. GLB используют общий `Textures/colormap.png`. |
+| Электростанция, радар, кран, вертолётная площадка | `infrastructure/*.glb` | Модели OpenRTS по концептам из соседнего репозитория `Assets/buildings/base-infrastructure-concepts`. Исходники Blender и рецепты в `Assets/buildings/infrastructure`. |
+| Аэродром | `infrastructure/airfield.glb` | Модель OpenRTS с компоновкой по референсу USA Airfield из C&C Generals. Исходник Blender в `Assets/buildings/infrastructure/airfield`. |
+| Бункер | `infrastructure/bunker.glb` | Шестиугольный корпус OpenRTS с одним узлом `TurretMount`. Исходник Blender в `Assets/buildings/infrastructure/bunker`. |
+| Стелс-генератор и генератор щита | `infrastructure/stealth-generator.glb`, `infrastructure/shield-generator.glb` | Модели OpenRTS по концептам инфраструктуры. Исходники Blender в `Assets/buildings/infrastructure`. |
+| Нефтепереработка | `kenney/refinery.glb` | `building-c` из [Kenney City Kit (Industrial) 2.0](https://kenney.nl/assets/city-kit-industrial). GLB использует общий `Textures/colormap.png`. |
 | Танк и гусеничный БТР | `quaternius/tank.glb`, `apc.glb` | `Tank2.glb` и `Tank3.glb` из [Animated Tanks Pack](https://quaternius.com/packs/animatedtanks.html). Взяты из [публичного зеркала GLB](https://github.com/trebeljahr/quaternius-showcase/tree/main/public/glb/tank_pack). |
 | Инженерная машина | `quaternius/engineer.glb` | `Tank4.glb` из того же зеркала. В Blender 5.3 удалён меш `Tank_Gun`, применён масштаб оставшегося `Tank_Turret` и переэкспортированы четыре клипа гусениц. [Исходник Blender](sources/sandbox3d-engineer.blend) · [Папка оригинальных .blend](https://drive.google.com/drive/folders/1MsH24X-roZs9c_UILBbchk2Ue5cMeE9A). |
 | Пехотинец | `quaternius/Infantry.tscn` | Манекен и 46 клипов из [Universal Animation Library Standard](https://store.godotengine.org/asset/quaternius/universal-animation-library/). [Пистолет Quaternius](https://poly.pizza/m/J3i9KDQ3kt) закреплён на `DEF-hand.R`. При запуске сцена проигрывает `Pistol_Idle`. |
 
-Модели распространяются по CC0-1.0. Уведомления авторов лежат рядом с GLB в [каталоге Kenney](../../sandbox3d/assets/kenney/LICENSE.txt) и [каталоге Quaternius](../../sandbox3d/assets/quaternius/LICENSE.txt). Для инженерной машины проверена геометрия с однотонными материалами. В исходном кузове и гусеницах есть раздельные вершины на швах и скрытые пары граней, UV-развёрток нет.
+Модели Kenney и Quaternius распространяются по CC0-1.0. Уведомления авторов лежат рядом с GLB в [каталоге Kenney](../../sandbox3d/assets/kenney/LICENSE.txt) и [каталоге Quaternius](../../sandbox3d/assets/quaternius/LICENSE.txt). Для инженерной машины проверена геометрия с однотонными материалами. В исходном кузове и гусеницах есть раздельные вершины на швах и скрытые пары граней, UV-развёрток нет.
 
 ### SHA-256 исходников
 
@@ -25,6 +31,14 @@
 | `pistol.glb` | `4622ab2909aa0f4e88b74a13f52f9e28183a6ff5fca5896fc7e98d44008f2148` |
 
 ## 2D-полигон
+
+Изометрические электростанция, радар, кран, вертолётная площадка и аэродром имеют по четыре ракурса корпуса. Кран и радар используют общее основание. Антенна и стрела крана используют отдельные атласы по 16 направлений. Радар вращается во времени симуляции. Для крана адаптер берёт направление из цели приказа строительства или из ремонтного крепления и переключает кадры подъёма крюка. [Определения моделей](../../sandbox/content/mods/isometric/models.yaml)
+
+Изометрический бункер имеет четыре ракурса корпуса. Пушечное и комбинированное улучшения устанавливают один поворотный модуль в центре крыши. У каждого модуля 16 направлений. [Атлас корпуса](../../sandbox/assets/buildings/isometric/bunker.png)
+
+У обоих генераторов четыре ракурса. Излучатель стелс-генератора использует отдельный атлас на 16 направлений и ускоряется по мере развёртывания. Генератор щита размещается как пассивное здание 4 × 4. [Атлас стелс-генератора](../../sandbox/assets/buildings/isometric/stealth-generator.png) · [Атлас генератора щита](../../sandbox/assets/buildings/isometric/shield-generator.png)
+
+В изометрическом моде центр снабжения, бараки и завод используют по четыре поворота и кадры ворот, отрендеренные из моделей Blender. Завод имеет отдельный набор кадров после тяжёлого улучшения. Розовые панели перекрашиваются шейдером по владельцу. Графика подключается через `ModelOverrides` при запуске `./tools/dev.sh run --mod=res://isometric-game.yaml`. [Атлас центра снабжения](../../sandbox/assets/buildings/supply-center.png) · [Атлас бараков](../../sandbox/assets/buildings/isometric/barracks.png) · [Атлас завода](../../sandbox/assets/buildings/isometric/factory.png) · [Определения моделей](../../sandbox/content/mods/isometric/models.yaml)
 
 Корпуса, башни и боеприпасы полигона непрямого огня подготовлены из оригинальных атласов ImageGen. [Промпты и SHA-256](indirect-fire-art.json).
 

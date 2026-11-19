@@ -1,0 +1,287 @@
+^building:
+  Sensors: { Signatures: [visual, radar.ground] }
+  Vision: { Radius: 7168 }
+  Buildable:
+    { Ticks: 125, Cost: 500, Kind: PlaceBuilding, PlacementRadius: 102400 }
+  Health: { HP: 1000, Armor: Building }
+  Capturable: {}
+  Economy: { Energy: -20 }
+  Movement: { Enabled: false, Locomotor: tracked }
+  Presentation:
+    Animations: [idle, construct, produce, door]
+    States: [damaged, working, destroyed, lowpower, constructing]
+  Footprint:
+    Types:
+      "#": { Traverse: false, CanStop: false }
+      "+": { Traverse: true, CanStop: false, Terrain: road, Targetable: false }
+      "=": { Traverse: true, CanStop: true, Terrain: road, Targetable: false }
+
+^structure-recipes:
+  Actions:
+    Definitions:
+      site-power: { Unit: power-plant, OnSite: true }
+      site-barracks: { Unit: barracks, OnSite: true }
+      site-factory: { Unit: factory, OnSite: true }
+      site-bunker: { Unit: bunker, OnSite: true }
+      site-supply: { Unit: supply-center, OnSite: true }
+      site-airfield: { Unit: airfield, OnSite: true }
+      site-helipad: { Unit: helipad, OnSite: true }
+      site-radar: { Unit: headquarters, OnSite: true }
+      site-stealth: { Unit: stealth-generator, OnSite: true }
+      site-shield: { Unit: shield-generator, OnSite: true }
+  ActionPanel:
+    Buttons:
+      site-power: { Label: Электростанция, Hotkey: E, Order: 2 }
+      site-barracks: { Label: Бараки, Hotkey: R, Order: 3 }
+      site-factory: { Label: Завод, Hotkey: T, Order: 4 }
+      site-bunker: { Label: Бункер, Hotkey: U, Order: 6 }
+      site-supply: { Label: Центр снабжения, Hotkey: I, Order: 7 }
+      site-airfield: { Label: Аэродром, Order: 10 }
+      site-helipad: { Label: Вертолётная площадка, Order: 11 }
+      site-radar: { Label: HQ · Радар, Order: 12 }
+      site-stealth: { Label: Стелс-генератор, Order: 13 }
+      site-shield: { Label: Генератор щита, Order: 14 }
+
+crane:
+  Inherits: ^building
+  Inherits@recipes: ^structure-recipes
+  Builder: { Range: 12288 }
+  Buildable: { Ticks: 150, Cost: 700 }
+  Actions:
+    Definitions:
+      build: { Build: true, AutoCast: true }
+      repair: { Mount: repair, AutoCast: true }
+  ActionPanel:
+    Buttons:
+      build: { Label: Помочь строить, Cursor: build, Order: 0 }
+      repair: { Label: Ремонт, Cursor: repair, Order: 1 }
+  Armaments:
+    Mounts:
+      repair: { Weapon: crane-repair, Animation: produce }
+  Footprint: { Rows: ["####", "####", "####"] }
+  Presentation: { Model: crane, Name: Кран }
+
+supply-center:
+  Inherits: ^building
+  Buildable: { Ticks: 175, Cost: 800 }
+  Economy: { Energy: 0 }
+  Supply: { Role: Depot }
+  TaskQueues:
+    Queues:
+      vehicles:
+        {
+          Capacity: 5,
+          Payment: Upfront,
+          WorkingState: working,
+          ExitAnimation: door,
+          Exit: [1536, 2560],
+        }
+  Actions:
+    Definitions:
+      engineer: { Unit: construction-engineer, Queue: vehicles }
+      truck: { Unit: supply-truck, Queue: vehicles }
+  ActionPanel:
+    Buttons:
+      engineer: { Label: Инженер }
+      truck: { Label: Грузовик снабжения, Order: 1 }
+  Footprint: { Rows: ["#####", "###==", "###==", "###++"] }
+  Presentation: { Model: supply-center, Name: Центр снабжения }
+
+power-plant:
+  Inherits: ^building
+  Economy: { Energy: 50 }
+  Footprint: { Rows: ["###", "###"] }
+  Presentation: { Model: power-plant, Name: Электростанция }
+
+barracks:
+  Inherits: ^building
+  TaskQueues:
+    Queues:
+      infantry:
+        {
+          Capacity: 20,
+          Payment: Upfront,
+          WorkingState: working,
+          ExitAnimation: door,
+          Exit: [0, 1024],
+        }
+  Actions:
+    Definitions:
+      rifleman: { Unit: rifleman }
+      sniper: { Unit: sniper }
+      rocketeer: { Unit: rocketeer }
+  ActionPanel:
+    Buttons:
+      rifleman: { Label: Автоматчик }
+      sniper: { Label: Снайпер }
+      rocketeer: { Label: Ракетчик }
+  Footprint: { Rows: ["####", "#++#", "#++#"] }
+  Presentation: { Model: barracks, Name: Бараки }
+
+factory:
+  Inherits: ^building
+  TaskQueues:
+    Queues:
+      vehicles:
+        Capacity: 12
+        Payment: Progressive
+        WorkingState: working
+        ExitAnimation: door
+        Exit: [0, 3328]
+  Actions:
+    Definitions:
+      apc: { Unit: apc-mg, Cost: 500, Ticks: 250 }
+      engineer: { Unit: construction-engineer }
+      tank: { Unit: tank, Cost: 800, Ticks: 350 }
+      stealth-truck: { Unit: stealth-truck, Cost: 1500, Ticks: 450 }
+      radar-buggy: { Unit: radar-buggy, Cost: 300, Ticks: 150 }
+      mixed-tank: { Unit: tank-mixed, Cost: 850, Ticks: 350 }
+      howitzer: { Unit: howitzer, Cost: 1200, Ticks: 250 }
+      mlrs: { Unit: mlrs, Cost: 1500, Ticks: 300 }
+      tomahawk: { Unit: tomahawk, Cost: 2000, Ticks: 400 }
+      # repair: { Mount: repair, AutoCast: true }
+  ActionPanel:
+    Buttons:
+      apc: { Label: БТР, Order: 0 }
+      engineer: { Label: Инженер, Order: 1 }
+      tank: { Label: Танк, Order: 2 }
+      stealth-truck: { Label: Стелс-генератор, Order: 6 }
+      radar-buggy: { Label: Разведчик, Order: 7 }
+      mixed-tank: { Label: Мобильный радар, Order: 3 }
+      howitzer: { Label: Самоходная гаубица, Order: 4 }
+      mlrs: { Label: Реактивная установка залпового огня, Order: 5 }
+      tomahawk: { Label: Установка крылатой ракеты, Order: 6 }
+      # repair: { Label: Ремонт, Cursor: repair, Order: 4 }
+  Footprint: { Rows: ["#####", "#####", "#####", ".+++.", ".+++."] }
+  Armaments:
+    Mounts:
+      repair: { Weapon: factory-repair, Animation: produce }
+  Upgrades:
+    Variants:
+      heavy:
+        Cost: 600
+        Ticks: 175
+        Products: [tank, mixed-tank, howitzer, mlrs, tomahawk]
+  Presentation:
+    Model: upgradable-factory
+    Name: Завод Техники
+    States: [damaged, working, destroyed, lowpower, constructing, heavy]
+
+headquarters:
+  Inherits: ^building
+  Sensors:
+    Signatures: [visual, radar.ground]
+    Detectors:
+      [
+        { Channel: radar, Signature: radar.ground, Range: 32768 },
+        {
+          Channel: optical,
+          Signature: visual,
+          Range: 4096,
+          Display: Model,
+          Counters: [stealth],
+        },
+        {
+          Channel: radar,
+          Signature: radar.ground,
+          Range: 16384,
+          Display: Classified,
+        },
+      ]
+  Footprint: { Rows: ["####", "####", "####"] }
+  Presentation: { Model: headquarters, Name: HQ · Радар }
+
+helipad:
+  Inherits: ^building
+  Health: { HP: 900 }
+  Buildable: { Ticks: 425, Cost: 800 }
+  Economy: { Energy: -10 }
+  Footprint: { Rows: ["####", "####", "####", "####"] }
+  Airbase:
+    Slots: [[0, 0]]
+    Accepts: [rotorcraft]
+    ReloadTicks: 10
+    RepairPerTick: 2
+  TaskQueues:
+    Queues:
+      rotorcraft: { Capacity: 8, Payment: Upfront, WorkingState: working }
+  Actions:
+    Definitions:
+      tiltrotor: { Unit: tiltrotor }
+      engineer-air: { Unit: engineering-tiltrotor }
+      supply-air: { Unit: supply-tiltrotor }
+      heavy-transport: { Unit: heavy-air-transport }
+  ActionPanel:
+    Buttons:
+      tiltrotor:
+        { Label: Конвертоплан, Icon: "res://assets/units/tiltrotor.png" }
+      engineer-air:
+        {
+          Label: Воздушный инженер,
+          Icon: "res://assets/units/engineering-tiltrotor.png",
+        }
+      supply-air:
+        {
+          Label: Воздушное снабжение,
+          Icon: "res://assets/units/supply-tiltrotor.png",
+        }
+      heavy-transport:
+        {
+          Label: Тяжёлый транспорт,
+          Icon: "res://assets/units/heavy-air-transport.png",
+        }
+  Presentation: { Model: helipad, Name: Вертолётная площадка }
+
+airfield:
+  Inherits: ^building
+  Health: { HP: 1800 }
+  Buildable: { Ticks: 200, Cost: 1800 }
+  Economy: { Energy: -20 }
+  Footprint:
+    Rows:
+      [
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+        "########",
+      ]
+  Airbase:
+    Slots: [[-2624, -2432], [-576, -2432], [1600, -1152], [1600, 1024]]
+    Accepts: [fighter]
+    RunwayStart: [-1664, -1536]
+    RunwayEnd: [-1664, 4608]
+    ReverseLanding: true
+    KeepsParking: true
+    ReloadTicks: 12
+    RepairPerTick: 2
+  TaskQueues:
+    Queues:
+      aircraft: { Capacity: 8, Payment: Upfront, WorkingState: working }
+  Actions:
+    Definitions:
+      fighter: { Unit: fighter }
+  ActionPanel:
+    Buttons:
+      fighter: { Label: Истребитель, Icon: "res://assets/units/fighter.png" }
+  Presentation: { Model: airfield, Name: Аэродром · 4 самолёта }
+
+stealth-generator:
+  Inherits: ^building
+  Buildable: { Ticks: 425, Cost: 1800 }
+  Sensors: { JamRange: 12288, StealthRange: 8192, DeployTicks: 50 }
+  Footprint: { Rows: ["####", "####", "####", "####"] }
+  Presentation: { Model: stealth-generator, Name: Стелс-генератор }
+
+shield-generator:
+  Inherits: ^building
+  Vision: { Radius: 0 }
+  Buildable: { Ticks: 225, Cost: 1100 }
+  Economy: { Energy: 0 }
+  Footprint: { Rows: ["####", "####", "####", "####"] }
+  Presentation: { Model: shield-generator, Name: Генератор щита }

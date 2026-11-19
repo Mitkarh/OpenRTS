@@ -14,7 +14,7 @@ public partial class MapPreviewCapture : Node3D
             root = GD.Load<PackedScene>("res://examples/maps/TerrainAuthoringMap.tscn").Instantiate<OpenRtsMap>(); AddChild(root);
             var manifest = GameManifest.Load(ProjectSettings.GlobalizePath(root.ContentManifest)); var catalog = manifest.LoadUnits();
             var source = MapSceneExtractor.Extract(root); var identity = MapCompiler.Compile(source, catalog).GameplayFingerprint;
-            preview = new(root, catalog, ModelCatalog.Load(manifest.Models)); preview.Apply(root, source);
+            preview = new(root, catalog, manifest.LoadModels()); preview.Apply(root, source);
             var mesh = new ImmediateMesh();
             mesh.SurfaceBegin(Mesh.PrimitiveType.Lines, new StandardMaterial3D
                 { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded, VertexColorUseAsAlbedo = true, NoDepthTest = true,

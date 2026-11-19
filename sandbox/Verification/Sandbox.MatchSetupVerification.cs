@@ -1,5 +1,6 @@
 using System;
 using Godot;
+using OpenRTS.Content;
 using OpenRTS.Core;
 
 public partial class Sandbox
@@ -57,13 +58,16 @@ public partial class Sandbox
         }
         CheckSkirmish(frame.Poses.Length == 26 && (PlayerFog ? !Controls(3) : Controls(3)), "Third side or alternate starting set is missing.");
         var poses = frame.Poses.ToArray();
+        var craneOffset = _setupSets["infantry"].Units.Single(unit => unit.Type == "crane").Offset;
         for (uint owner = 1; owner <= 3; owner++)
         {
             int slot = owner switch { 1 => 1, 2 => 0, _ => 2 };
+            var anchor = map.StartPosition(map.Slots[slot]);
             var team = poses.Where(p => p.Presentation.Owner == owner).ToArray();
             CheckSkirmish(team.Length == 3 && team.Any(p => _catalog!.Units[p.UnitType].Id == "crane" &&
-                p.Current.X == map.StartPosition(map.Slots[slot]).X &&
-                Math.Abs(p.Current.Y - map.StartPosition(map.Slots[slot]).Y) == 512) && team.Any(p => _catalog!.Units[p.UnitType].Id == "rocketeer"),
+                (p.Current == new WorldPosition(anchor.X + craneOffset.X, anchor.Y + craneOffset.Y) ||
+                 p.Current == new WorldPosition(anchor.X - craneOffset.X, anchor.Y - craneOffset.Y))) &&
+                team.Any(p => _catalog!.Units[p.UnitType].Id == "rocketeer"),
                 "The chosen starting position or mode was ignored.");
         }
         CheckSkirmish(poses.Any(p => p.Presentation.Owner == 0 && _catalog!.Units[p.UnitType].Id == "civilian-station"),
@@ -75,6 +79,22 @@ public partial class Sandbox
         CheckSkirmish(focus is { } center && Mathf.IsEqualApprox(center.X, selected.Current.X / (float)WorldPosition.UnitsPerCell) &&
             Mathf.IsEqualApprox(center.Z, selected.Current.Y / (float)WorldPosition.UnitsPerCell),
             "The camera did not focus the first player's chosen start.");
+        if (_manifest.Settings.Presentation.Camera == GameCamera.Isometric)
+        {
+            var camera = _camera!;
+            var ground = new Vector3(_mapWidth / 2, 0, _mapDepth / 2);
+            var pixel = camera.UnprojectPosition(ground);
+            var east = camera.UnprojectPosition(ground + Vector3.Right) - pixel;
+            var south = camera.UnprojectPosition(ground + Vector3.Back) - pixel;
+            CheckSkirmish(Math.Abs(east.X + south.X) < 0.01f && Math.Abs(east.Y - south.Y) < 0.01f &&
+                east.X * south.X < 0 && east.Y * south.Y > 0,
+                $"The configured isometric camera did not project a diamond grid. East {east}, south {south}, angles {camera.RotationDegrees}.");
+            CheckSkirmish(GroundPoint(pixel) is { } picked && picked.DistanceTo(ground) < 0.001f,
+                "The isometric camera did not pick the projected world position.");
+            foreach (var (id, alternative) in _manifest.Settings.Presentation.ModelOverrides)
+                CheckSkirmish(ReferenceEquals(_modelCatalog!.Models[id].Parts, _modelCatalog.Models[alternative].Parts),
+                    "The match did not load the model override for " + id);
+        }
         GD.Print("OPENRTS_MATCH_SETUP:PASS maps, mode, player count, start exchange and scene launch");
         _verificationDone = true;
         GetTree().Quit();

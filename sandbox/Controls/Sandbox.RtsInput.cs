@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using OpenRTS.Content;
 using OpenRTS.Core;
 using OpenRTS.Core.Orders;
 using OpenRTS.Core.Visibility;
@@ -27,8 +28,11 @@ public partial class Sandbox
 
     private void CreateSelectionRing()
     {
+        var material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/selection.gdshader") };
+        if (_manifest.Settings.Presentation.Camera == GameCamera.Isometric)
+            material.RenderPriority = -1; // Blended sprites must cover the ring even when they don't write depth.
         _selectionRing = new() { Name = "Selection", Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseColors = true, Mesh = new PlaneMesh { Size = new(2, 2), Material = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/selection.gdshader") } } } };
+            UseColors = true, Mesh = new PlaneMesh { Size = new(2, 2), Material = material } } };
         AddChild(_selectionRing);
         var layer = new CanvasLayer { Layer = 20 }; AddChild(layer);
         _rtsOverlay = new(); layer.AddChild(_rtsOverlay);
@@ -553,6 +557,7 @@ public partial class Sandbox
     private void UpdateSelection(float alpha)
     {
         if (_selectionRing is null) return;
+        bool isometric = _manifest.Settings.Presentation.Camera == GameCamera.Isometric;
         int count = _selection.Count;
         if (_ringBuffer.Length / 16 < count)
         { Array.Resize(ref _ringBuffer, Math.Max(16, Math.Max(count, _ringBuffer.Length / 8)) * 16); _selectionRing.Multimesh.InstanceCount = _ringBuffer.Length / 16; }
@@ -561,11 +566,38 @@ public partial class Sandbox
         {
             var p = _displayPoses[i]; int at = ring++ * 16;
             var type = _catalog!.Units[p.UnitType].WithRotation(p.QuarterTurns);
-            _ringBuffer[at] = ((type.Footprint?.HalfWidth ?? type.Body.HalfWidth) / 1024f + 0.2f) / 0.88f;
-            _ringBuffer[at + 10] = ((type.Footprint?.HalfHeight ?? type.Body.HalfHeight) / 1024f + 0.2f) / 0.88f; _ringBuffer[at + 5] = 1;
+            float halfWidth = (type.Footprint?.HalfWidth ?? type.Body.HalfWidth) / 1024f;
+            float halfHeight = (type.Footprint?.HalfHeight ?? type.Body.HalfHeight) / 1024f;
             var position = _sprites!.DisplayPosition(p, alpha);
+            if (isometric)
+            {
+                if (type.Footprint is not null)
+                {
+                    // Fit the footprint's corners inside the ellipse so its front arc clears the building.
+                    halfWidth *= MathF.Sqrt(2);
+                    halfHeight *= MathF.Sqrt(2);
+                }
+                else if (_catalog.Presentations[p.UnitType].Model is { } model)
+                {
+                    foreach (var part in _modelCatalog!.Models[model].Parts)
+                    {
+                        if (part.Parent >= 0) continue;
+                        float radius = (float)Math.Max(part.Width, part.Height) / 2;
+                        halfWidth = Math.Max(halfWidth, radius);
+                        halfHeight = Math.Max(halfHeight, radius);
+                    }
+                }
+                if (p.Flight.Airborne)
+                {
+                    position.Z = Mathf.Lerp(p.Previous.Y, p.Current.Y, alpha) / 1024f;
+                    position.Y = (_displayGrid?.SurfaceElevationAt(p.Current) ?? 0) / 1024f;
+                }
+            }
+            _ringBuffer[at] = (halfWidth + 0.2f) / 0.88f;
+            _ringBuffer[at + 10] = (halfHeight + 0.2f) / 0.88f;
+            _ringBuffer[at + 5] = 1;
             _ringBuffer[at + 3] = position.X;
-            _ringBuffer[at + 7] = SpriteWorldView.OverlayHeight + position.Y;
+            _ringBuffer[at + 7] = position.Y + (isometric ? SpriteWorldView.GroundMarkerHeight : SpriteWorldView.OverlayHeight);
             _ringBuffer[at + 11] = position.Z;
             var color = p.Presentation.Owner switch
             {

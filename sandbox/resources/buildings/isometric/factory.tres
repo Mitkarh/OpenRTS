@@ -1,0 +1,98 @@
+[gd_resource type="SpriteFrames" load_steps=15 format=3]
+
+[ext_resource type="Texture2D" path="res://assets/buildings/isometric/factory.png" id="1"]
+
+[sub_resource type="AtlasTexture" id="open_0"]
+atlas = ExtResource("1")
+region = Rect2(0, 0, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="half_0"]
+atlas = ExtResource("1")
+region = Rect2(416, 0, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="raised_0"]
+atlas = ExtResource("1")
+region = Rect2(832, 0, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_1"]
+atlas = ExtResource("1")
+region = Rect2(0, 415, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="half_1"]
+atlas = ExtResource("1")
+region = Rect2(416, 415, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="raised_1"]
+atlas = ExtResource("1")
+region = Rect2(832, 415, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_2"]
+atlas = ExtResource("1")
+region = Rect2(0, 830, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="half_2"]
+atlas = ExtResource("1")
+region = Rect2(416, 830, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="raised_2"]
+atlas = ExtResource("1")
+region = Rect2(832, 830, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="open_3"]
+atlas = ExtResource("1")
+region = Rect2(0, 1245, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="half_3"]
+atlas = ExtResource("1")
+region = Rect2(416, 1245, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="raised_3"]
+atlas = ExtResource("1")
+region = Rect2(832, 1245, 416, 415)
+filter_clip = true
+
+[sub_resource type="AtlasTexture" id="icon"]
+atlas = ExtResource("1")
+region = Rect2(1248, 0, 256, 256)
+filter_clip = true
+
+[resource]
+animations = [{
+"frames": [{"duration": 1.0, "texture": SubResource("icon")}],
+"loop": false, "name": &"icon", "speed": 1.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_0")}],
+"loop": true, "name": &"stand-0", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("half_0")}, {"duration": 1.0, "texture": SubResource("raised_0")}, {"duration": 1.0, "texture": SubResource("open_0")}],
+"loop": false, "name": &"door-0", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_1")}],
+"loop": true, "name": &"stand-1", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("half_1")}, {"duration": 1.0, "texture": SubResource("raised_1")}, {"duration": 1.0, "texture": SubResource("open_1")}],
+"loop": false, "name": &"door-1", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_2")}],
+"loop": true, "name": &"stand-2", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("half_2")}, {"duration": 1.0, "texture": SubResource("raised_2")}, {"duration": 1.0, "texture": SubResource("open_2")}],
+"loop": false, "name": &"door-2", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("open_3")}],
+"loop": true, "name": &"stand-3", "speed": 10.0
+}, {
+"frames": [{"duration": 1.0, "texture": SubResource("half_3")}, {"duration": 1.0, "texture": SubResource("raised_3")}, {"duration": 1.0, "texture": SubResource("open_3")}],
+"loop": false, "name": &"door-3", "speed": 10.0
+}]

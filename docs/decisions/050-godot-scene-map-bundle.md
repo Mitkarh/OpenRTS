@@ -12,15 +12,18 @@
 
 1. В Godot открыть `res://examples/maps/TerrainAuthoringMap.tscn`. **Build scene-map bundle** сохраняет и публикует карту. **Build and play map** запускает Sandbox с готовым манифестом. Авторские карты используют эту кнопку для запуска. F6 открывает авторский корень напрямую и показывает диагностическое сообщение.
 2. Для запуска из меню указать путь к `.scenemap.json` в `Match.Maps` игрового манифеста. «Учебная карта Godot» зарегистрирована в Sandbox. Для локального запуска любого bundle доступен `--map`. Сетевой запуск scene-map запланирован для B6.
-3. Для поставки разместить манифест и проекцию под `res://content/`. Пресет **Scene Map Pack** упаковывает ресурсы Godot, YAML и проекции. Каталог `artifacts/` предназначен для локальных сборок. Команда экспорта проверяет все зарегистрированные bundles до упаковки. Экспортированные ресурсы используют remap Godot, поэтому в PCK проверяются проекция и соответствие корня карты. Сверка хешей исходных файлов выполняется до упаковки. [Документация Godot по экспорту](https://docs.godotengine.org/en/stable/tutorials/export/exporting_projects.html).
+3. Для поставки разместить манифест и проекцию под `res://content/`. Пресет **Scene Map Pack** упаковывает ресурсы Godot, YAML и проекции. Каталог `artifacts/` предназначен для локальных сборок. Команда экспорта проверяет установленные 2D compiled maps, 3D bundles и их ресурсы до упаковки. В PCK проверяются доступность ресурсов с учётом remap Godot, проекция и соответствие корня карты. Сверка хешей исходных файлов выполняется до упаковки. [Документация Godot по экспорту](https://docs.godotengine.org/en/stable/tutorials/export/exporting_projects.html).
 
 ```sh
 ./tools/dev.sh scene-map res://examples/maps/TerrainAuthoringMap.tscn
 ./tools/dev.sh headless --map=content/scene-maps/terrain-authoring-sample.scenemap.json --ticks=32
 ./tools/dev.sh scene-map-pack /tmp/openrts.pck
+./tools/dev.sh verify-map-export
 ```
 
 Пресет PCK настроен на macOS arm64. Для экспорта Godot должен видеть совместимый с `global.json` SDK и пакеты целевого .NET runtime. Для сборки приложения нужен установленный Godot .NET export template.
+
+`verify-map-export` собирает «Скалистый перевал» в чистой временной копии проекта, отключает addon и повторно импортирует ресурсы. Проверка запускает установленные карты из проекта и через `--main-pack` из отдельного каталога с PCK и сборками ExportRelease. Для 3D проверяются сцена, скрипт декорации и начальные свойства. Для 2D сравниваются отчёты симуляции после восьми тиков.
 
 ## Сборка и проверка
 

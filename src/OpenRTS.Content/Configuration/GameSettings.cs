@@ -30,14 +30,19 @@ public sealed class MatchChoice
 public sealed record GameSettings(SimulationSettings Simulation, MatchSettings Match)
 {
     public SensorRangeSettings SensorRanges { get; init; } = new();
+    public PresentationSettings Presentation { get; init; } = new();
     public static GameSettings Load(IEnumerable<ContentSource> sources)
     {
         var definitions = DefinitionSet.Load(sources);
         foreach (var (id, node) in definitions.All)
-            if (id is not ("Simulation" or "Match" or "SensorRanges")) throw node.Error(id, "Unknown settings section; expected Simulation, Match or SensorRanges.");
+            if (id is not ("Simulation" or "Match" or "SensorRanges" or "Presentation"))
+                throw node.Error(id, "Unknown settings section. Expected Simulation, Match, SensorRanges or Presentation.");
         T Read<T>(string id) where T : new() => definitions.All.TryGetValue(id, out var node) ? Options.Bind<T>(node, id) : new();
         var result = new GameSettings(Read<SimulationSettings>("Simulation"), Read<MatchSettings>("Match"))
-            { SensorRanges = Read<SensorRangeSettings>("SensorRanges") };
+        {
+            SensorRanges = Read<SensorRangeSettings>("SensorRanges"),
+            Presentation = Read<PresentationSettings>("Presentation")
+        };
         foreach (string path in new[] { result.Match.DefaultMap, result.Match.DefaultStartSet, result.Match.AiConfig }
             .Concat(result.Match.Maps.Select(choice => choice.Path)).Concat(result.Match.StartingSets.Select(choice => choice.Path)))
         {

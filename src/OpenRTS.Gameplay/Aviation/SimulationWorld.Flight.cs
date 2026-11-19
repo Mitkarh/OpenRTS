@@ -438,6 +438,7 @@ public sealed partial class SimulationWorld
         var airbase = TypeOf(provider).Airbase!;
         var start = BasePoint(provider, airbase.RunwayStart!.Value);
         var end = BasePoint(provider, airbase.RunwayEnd!.Value);
+        if (airbase.ReverseLanding) (start, end) = (end, start);
         if (f.Phase == FlightPhase.RunwayLanding)
         {
             if (PreciseFlightMove(actor, end, flight.Speed, synchronize: true))

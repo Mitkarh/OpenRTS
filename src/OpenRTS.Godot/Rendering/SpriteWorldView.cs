@@ -1,5 +1,6 @@
 using Godot;
 using OpenRTS.Content;
+using OpenRTS.Core.Orders;
 using OpenRTS.Core;
 using OpenRTS.Core.Visibility;
 
@@ -19,7 +20,7 @@ public sealed class SpriteWorldView
             return Frames[i];
         }
     }
-    private sealed record Part(ModelPart Definition, Sequence[]?[] Sequences, ModelAnimation?[] Animations, int Mount, uint Visible, uint Hidden, uint SpinWhen, uint LoopWhen, int LoopAnimation);
+    private sealed record Part(ModelPart Definition, Sequence[]?[] Sequences, ModelAnimation?[] Animations, int Mount, uint Visible, uint Hidden, uint SpinWhen, uint LoopWhen, int LoopAnimation, int WorkAnimation);
     private sealed record Model(UnitDefinition Unit, Part[] Parts, ModelState[] States, uint Damaged, uint Destroyed, uint NearlyDestroyed,
         ModelDrawLayer DrawLayer, int DrawLayers, double SortOffset, int PartLayerCount);
     private readonly record struct DrawItem(int Index, int Layer, double Y, uint Id) : IComparable<DrawItem>
@@ -35,6 +36,8 @@ public sealed class SpriteWorldView
     private const int ModelLayers = 3, PreviewLayer = 3, AirLayer = 4, LayerCount = AirLayer + 1;
     private const float LayerStep = 0.4f, LayerSpan = 0.32f, ShadowHeight = 0.38f;
     private const float HoverLiftScale = 0.45f;
+    private const float SpriteBaseHeight = 0.04f;
+    public const float GroundMarkerHeight = SpriteBaseHeight / 2;
     public const float OverlayHeight = 2f;
     private readonly Model[] _models;
     private readonly WorkFlightVisual _workFlights;
@@ -66,9 +69,13 @@ public sealed class SpriteWorldView
     public int MaximumParts { get; }
 
     private readonly Func<uint, Color> _ownerColor;
+    private Vector3 _depthAxis = Vector3.Up;
     private float _flightSurface;
     private NavigationGrid? _reliefSurface;
     internal float FlightSurface => _flightSurface;
+
+    // Moving along an orthographic view ray changes depth while preserving the projected anchor.
+    internal void AlignDepthWithCamera(Camera3D camera) => _depthAxis = camera.Basis.Z / camera.Basis.Z.Y;
 
     public void SetFlightSurface(NavigationGrid? grid, bool reliefProjection = false)
     {
@@ -147,7 +154,9 @@ public sealed class SpriteWorldView
                     uint Mask(IEnumerable<string>? names) { uint mask = 0; if (names is not null) foreach (string name in names) mask |= type.StateMask(name); return mask; }
                     uint State(string? name) => name is null ? 0 : type.StateMask(name);
                     parts[p] = new(part, sequences, animations, part.Mount is null ? -1 : type.Weapons.ToList().FindIndex(m => m.Id == part.Mount),
-                        Mask(part.VisibleWhen), Mask(part.HiddenWhen), State(part.SpinWhen), State(part.LoopWhen), part.LoopAnimation is null ? -1 : type.AnimationIndex(part.LoopAnimation));
+                        Mask(part.VisibleWhen), Mask(part.HiddenWhen), State(part.SpinWhen), State(part.LoopWhen),
+                        part.LoopAnimation is null ? -1 : type.AnimationIndex(part.LoopAnimation),
+                        part.AimAtConstruction ? type.AnimationIndex("produce") : -1);
                 }
                 int drawLayers = 0;
                 foreach (var part in definition.Parts) drawLayers |= 1 << (int)(part.DrawLayer ?? definition.DrawLayer);
@@ -280,7 +289,7 @@ public sealed class SpriteWorldView
         foreach (var item in _drawOrder.AsSpan(0, drawCount))
         {
             float stride = LayerSpan / layerCounts[item.Layer];
-            _drawDepths[item.Index * LayerCount + item.Layer] = (0.04f + item.Layer * LayerStep + ranks[item.Layer]++ * stride, stride);
+            _drawDepths[item.Index * LayerCount + item.Layer] = (SpriteBaseHeight + item.Layer * LayerStep + ranks[item.Layer]++ * stride, stride);
         }
         for (int i = 0; i < at; i++)
         {
@@ -330,14 +339,24 @@ public sealed class SpriteWorldView
                         extraFlash = Math.Max(extraFlash, kick * (float)style.Flash); extraRecoil += kick * (float)style.Recoil;
                         playback = clip; animation = clip.Animation;
                     }
+                float? constructionAngle = part.AimAtConstruction && !ghost && construct < 0
+                    ? ConstructionAngle(pose, alpha, at) : null;
+                if (constructionAngle.HasValue && runtime.WorkAnimation >= 0 && runtime.Sequences[runtime.WorkAnimation] is not null)
+                {
+                    animation = runtime.WorkAnimation;
+                    playback = new(animation, 0, 0);
+                }
                 var effect = runtime.Animations[animation]!;
                 var facing = effect.Facing ?? part.Facing;
                 float angle = facing == ModelFacing.Body ? body : weapon;
                 if (!ghost && facing == ModelFacing.Weapon && runtime.Mount >= 0 && pose.WeaponOffset + runtime.Mount < weapons.Length)
                 {
                     var aim = weapons[pose.WeaponOffset + runtime.Mount];
-                    angle = Angle(aim.PreviousFacing, aim.Facing, alpha);
+                    angle = part.AimAtConstruction && aim.Target == default && !aim.Animation.IsActive(tick)
+                        ? body + MathF.PI : Angle(aim.PreviousFacing, aim.Facing, alpha);
                 }
+                else if (part.AimAtConstruction) angle = body + MathF.PI;
+                angle = constructionAngle ?? angle;
                 if (part.Spin != 0 && (runtime.SpinWhen == 0 || (view.States & runtime.SpinWhen) != 0))
                 {
                     double seconds = time / tickRate;
@@ -370,7 +389,8 @@ public sealed class SpriteWorldView
                 pivots[p] = mount;
                 float buildScale = playback.DurationTicks > 0 ? Mathf.Lerp((float)effect.ScaleFrom, 1, progress) : 1;
                 Vector2 size = new((float)part.Width * scale * buildScale, (float)part.Height * scale * buildScale);
-                if (part.EmitterSpin)
+                // Directional rotor frames already include the height of the fixed mounting point.
+                if (part.EmitterSpin && part.Facings == 0)
                 {
                     var emitter = pose.Emitter;
                     float deploy = emitter.Moving || !emitter.HasStealthRotor ? 0 :
@@ -394,11 +414,22 @@ public sealed class SpriteWorldView
                 }
                 int layer = ghost ? PreviewLayer : pose.Flight.Airborne ? AirLayer : (int)(part.DrawLayer ?? model.DrawLayer);
                 var (depth, stride) = _drawDepths[i * LayerCount + layer];
-                TintedBatch(frame, partTint).Add(new(center.X, elevation + depth + part.Layer * (stride / model.PartLayerCount), center.Y), drawAngle, size, partTint, team);
+                var position = new Vector3(center.X, elevation, center.Y) + _depthAxis * (depth + part.Layer * (stride / model.PartLayerCount));
+                TintedBatch(frame, partTint).Add(position, drawAngle, size, partTint, team);
                 SpriteCount++;
             }
         }
         foreach (var batch in _batches) batch.Publish();
+    }
+
+    private float? ConstructionAngle(in EntityPose pose, float alpha, int count)
+    {
+        if (pose.Order.Target == default || pose.Order.Phase != OrderPhase.Engaging ||
+            pose.Order.Kind is not (UnitActionKind.Build or UnitActionKind.UpgradeSupport)) return null;
+        int index = Array.BinarySearch(_ordered, 0, count, pose with { Id = pose.Order.Target }, _poseOrder);
+        if (index < 0) return null;
+        var offset = Interpolate(_ordered[index], alpha) - Interpolate(pose, alpha);
+        return offset.X == 0 && offset.Z == 0 ? null : MathF.Atan2(offset.X, -offset.Z);
     }
 
     public static float Angle(FacingDirection previous, FacingDirection current, float alpha)

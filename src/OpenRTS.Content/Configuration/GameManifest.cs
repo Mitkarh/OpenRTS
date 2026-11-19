@@ -67,4 +67,6 @@ public sealed class GameManifest
     public UnitCatalog LoadUnits(IEnumerable<ContentSource>? rules = null, IEnumerable<ContentSource>? weapons = null) =>
         UnitCatalog.Load(rules ?? Rules, Terrain.Count == 0 ? null : LocomotionCatalog.Load(Terrain),
             Weapons.Count == 0 && weapons is null ? null : WeaponCatalog.Load(weapons ?? Weapons));
+
+    public ModelCatalog LoadModels() => ModelCatalog.Load(Models, Settings.Presentation.ModelOverrides);
 }

@@ -1,0 +1,17 @@
+Presentation:
+  Renderer: Godot3D
+  Camera: Isometric
+  ModelOverrides:
+    infantry-rifle: iso-infantry-rifle
+    tank: iso-tank
+    power-plant: iso-power-plant
+    headquarters: iso-radar
+    crane: iso-crane
+    helipad: iso-helipad
+    airfield: iso-airfield
+    bunker-upgradable: iso-bunker
+    stealth-generator: iso-stealth-generator
+    shield-generator: iso-shield-generator
+    supply-center: iso-supply-center
+    barracks: iso-barracks
+    upgradable-factory: iso-factory
