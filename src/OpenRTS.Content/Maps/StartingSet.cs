@@ -7,8 +7,15 @@ namespace OpenRTS.Content;
 
 public sealed class StartingSet
 {
-    internal sealed record Entry(string Type, WorldPosition Offset, Source Source);
-    internal IReadOnlyList<Entry> Units { get; }
+    public sealed record Entry(string Type, WorldPosition Offset, Source Source)
+    {
+        public WorldPosition At(WorldPosition anchor, bool reverse)
+        {
+            int sign = reverse ? -1 : 1;
+            return new(anchor.X + sign * Offset.X, anchor.Y + sign * Offset.Y);
+        }
+    }
+    public IReadOnlyList<Entry> Units { get; }
     public string Id { get; }
     public long Credits { get; }
     public string Fingerprint { get; }
@@ -17,7 +24,7 @@ public sealed class StartingSet
     {
         Id = id;
         Credits = credits;
-        Units = units;
+        Units = Array.AsReadOnly(units);
         using var data = new MemoryStream();
         using var writer = new BinaryWriter(data, Encoding.UTF8, leaveOpen: true);
         writer.Write(1);

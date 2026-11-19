@@ -91,14 +91,13 @@ public sealed class GameMap
 
             if (startingSet is null) continue;
             var anchor = _slots[slot];
-            int sign = anchor.Reverse ? -1 : 1;
             for (int i = 0; i < startingSet.Units.Count; i++)
             {
                 var unit = startingSet.Units[i];
                 string label = $"{path}/{startingSet.Id}.units[{i}]";
                 if (!_types.TryGetValue(unit.Type, out int type))
                     throw new ContentException(unit.Source, label, $"Unknown unit '{unit.Type}'.");
-                var point = new WorldPosition(anchor.Position.X + sign * unit.Offset.X, anchor.Position.Y + sign * unit.Offset.Y);
+                var point = unit.At(anchor.Position, anchor.Reverse);
                 if (point.X < 0 || point.X >= Grid.Width * Grid.CellSize || point.Y < 0 || point.Y >= Grid.Height * Grid.CellSize)
                     throw new ContentException(unit.Source, label, $"Unit '{unit.Type}' at ({point.X}, {point.Y}) is outside the map.");
                 placements.Add(new(label, type, OnGround(point), player.Id, unit.Source, IsStart: true));

@@ -24,6 +24,8 @@ public partial class OpenRtsEditorPlugin
         layout.AddChild(new Label { Text = "Starting set" });
         _playtestSets = new();
         layout.AddChild(_playtestSets);
+        _playtestSets.ItemSelected += _ => SyncPlaytestPreview();
+        _playtestStarts.MultiSelected += (_, _) => SyncPlaytestPreview();
         _playtestDialog.Confirmed += () =>
         {
             string[] slots = _playtestStarts.GetSelectedItems().Order().Select(index => _playtestStarts.GetItemText(index)).ToArray();
@@ -67,6 +69,8 @@ public partial class OpenRtsEditorPlugin
             _playtestSets.SetItemMetadata(index, choice.Path);
             if (choice.Path == match.DefaultStartSet) _playtestSets.Select(index);
         }
+        if (root is OpenRtsMap2D map && (_map2D != map || _manifest2D is null)) RefreshPreview2D(map);
+        SyncPlaytestPreview();
         _playtestDialog.PopupCentered();
     }
 }

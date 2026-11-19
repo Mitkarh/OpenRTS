@@ -61,6 +61,7 @@ public partial class OpenRtsEditorPlugin
         _semanticId = new() { PlaceholderText = "Semantic ID, e.g. patrol/tank" }; _dock.AddChild(_semanticId);
         Button("Select by ID", () => SelectById(_semanticId.Text));
         Button("Select error source", SelectErrorSource);
+        SetupPreview2D();
         SetInputEventForwardingAlwaysEnabled();
     }
 
@@ -88,7 +89,9 @@ public partial class OpenRtsEditorPlugin
         _refreshTime += delta;
         if (_refreshTime < 0.15) return;
         _refreshTime = 0;
-        var root = EditorInterface.Singleton.GetEditedSceneRoot() as OpenRtsMap;
+        var edited = EditorInterface.Singleton.GetEditedSceneRoot();
+        if (edited is OpenRtsMap2D map2D) { UpdatePreview2D(map2D); return; }
+        var root = edited as OpenRtsMap;
         if (root is null) { ClearPreview(); return; }
         if (_previewRoot != root || _previewContent != root.ContentManifest) _refresh = true;
         foreach (Node node in EditorInterface.Singleton.GetSelection().GetSelectedNodes())
@@ -132,6 +135,7 @@ public partial class OpenRtsEditorPlugin
     private void ClearPreview()
     {
         _preview?.Dispose(); _preview = null; _previewRoot = null; _brushCursor = null;
+        ClearPreview2D();
     }
 
     private OpenRtsTerrainBrush CurrentBrush()
@@ -252,7 +256,7 @@ public partial class OpenRtsEditorPlugin
     {
         IEnumerable<(Node Node, string Id)> Find(Node node, string prefix)
         {
-            if (node is OpenRtsMapGroup group) prefix += group.InstanceId + "/";
+            if (MapAuthoringIdentity.GroupId(node) is { } id) prefix += id + "/";
             if (node is OpenRtsMapObject or OpenRtsMapStart or OpenRtsMapObject2D or OpenRtsMapStart2D)
                 yield return (node, prefix + node.Get(MapAuthoringIdentity.IdField(node)).AsString());
             foreach (Node child in node.GetChildren())
@@ -264,12 +268,20 @@ public partial class OpenRtsEditorPlugin
     {
         var editor = EditorInterface.Singleton; editor.GetSelection().Clear(); editor.GetSelection().AddNode(node); editor.EditNode(node);
     }
+    private static Node? ErrorNode(Node root, string message)
+    {
+        int start = message.IndexOf("::", StringComparison.Ordinal), end = message.IndexOf(":1:1", Math.Max(0, start), StringComparison.Ordinal);
+        return start >= 0 && end > start ? root.GetNodeOrNull<Node>(message[(start + 2)..end]) : null;
+    }
     internal void SelectErrorSource()
     {
         if (_lastError is null || EditorInterface.Singleton.GetEditedSceneRoot() is not { } root) return;
         string message = _lastError.Message;
-        int start = message.IndexOf("::", StringComparison.Ordinal), end = message.IndexOf(":1:1", Math.Max(0, start), StringComparison.Ordinal);
-        if (start >= 0 && end > start && root.GetNodeOrNull<Node>(message[(start + 2)..end]) is { } node && node != root)
+        var node = ErrorNode(root, message);
+        if (root is OpenRtsMap2D map2D && (node as TileMapLayer ?? map2D.Terrain) is { } layer &&
+            FindDiagnosticCell(message, map2D.Size) is { } cell)
+        { FocusCell(layer, cell); return; }
+        if (node is not null && node != root)
         { SelectNode(node); return; }
         string? mapId = root is OpenRtsMap map3D ? map3D.MapId : (root as OpenRtsMap2D)?.MapId;
         if (mapId is not null)

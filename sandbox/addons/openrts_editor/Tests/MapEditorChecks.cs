@@ -214,10 +214,83 @@ internal static class MapEditorChecks
         finally { reopened.Free(); }
 
         await Check2DOperations(plugin, map, expectedShape, check);
-        if (isometric) await CheckLocalPlaytest(plugin, map, check);
+        if (isometric)
+        {
+            await CheckLocalPlaytest(plugin, map, check);
+            CheckPrefab2D(plugin, map, check);
+        }
 
         GD.Print($"OPENRTS_MAP_2D:{sceneName}, {expected.Source.Width}x{expected.Source.Height}, {expected.Source.Slots.Count} starts, " +
             $"{expected.Source.Objects.Count} objects, gameplay={expected.GameplayFingerprint}, data={expected.DataFingerprint}");
+    }
+
+    private static void CheckPrefab2D(OpenRtsEditorPlugin plugin, OpenRtsMap2D map, Action<bool, string> check)
+    {
+        using var prefab = GD.Load<PackedScene>("res://examples/maps/AuthoringSquad2D.tscn");
+        var group = prefab.Instantiate<OpenRtsMapGroup2D>(PackedScene.GenEditState.Instance);
+        group.Position = map.Terrain!.MapToLocal(new(5, 10));
+        group.Order = MapAuthoringIdentity.NextOrder(map);
+        map.AddChild(group);
+        group.Owner = map;
+        map.SetEditableInstance(group, true);
+        map.SetEditableInstance(group.GetNode("Section"), true);
+        group.GetNode<OpenRtsMapObject2D>("Section/Rifleman").InitialHealth = 60;
+        var selection = EditorInterface.Singleton.GetSelection();
+        selection.Clear();
+        selection.AddNode(group);
+        plugin.DuplicateSelected();
+        var copy = (OpenRtsMapGroup2D)selection.GetSelectedNodes().Single();
+        copy.Position = map.Terrain.MapToLocal(new(8, 12));
+        var undo = plugin.GetUndoRedo().GetHistoryUndoRedo(plugin.GetUndoRedo().GetObjectHistoryId(map));
+        undo.Undo();
+        check(copy.GetParent() is null, "A 2D prefab duplicate could not be undone.");
+        undo.Redo();
+        try
+        {
+            var source = MapSceneExtractor2D.Extract(map);
+            check(copy.SceneFilePath == group.SceneFilePath && copy.InstanceId != group.InstanceId &&
+                copy.GetNode("Section").SceneFilePath == group.GetNode("Section").SceneFilePath &&
+                map.IsEditableInstance(copy.GetNode("Section")) &&
+                source.Objects.Single(o => o.Id == "squad/section/rifle") is { InitialHealth: 60 } first &&
+                source.Objects.Single(o => o.Id == copy.InstanceId + "/section/rifle") is { InitialHealth: 60 } second &&
+                second.Position.X - first.Position.X == 3 * 1024 && second.Position.Y - first.Position.Y == 2 * 1024,
+                "The nested prefab did not retain its override, explicit namespace and projection when duplicated.");
+            plugin.SelectById(copy.InstanceId + "/section/rifle");
+            check(selection.GetSelectedNodes().Single() == copy.GetNode("Section/Rifleman"), "The dock did not select a nested 2D object by ID.");
+            plugin.RefreshPreview2D(map);
+            var manifest = GameManifest.Load(ProjectSettings.GlobalizePath(map.ContentManifest));
+            var set = StartingSet.Load(manifest.Files.Read(manifest.Settings.Match.DefaultStartSet));
+            var starts = source.Slots.SelectMany(slot => set.Units.Select(unit => unit.At(slot.Position!.Value, slot.Reverse))).ToArray();
+            check(plugin.Preview2D is { SpriteCount: > 0, GeometryCount: > 0 } preview &&
+                preview.StartPositions.SequenceEqual(starts) && preview.Owner is null, "Native preview missed Models, geometry or the true start offsets.");
+            using var packed = new PackedScene();
+            check(packed.Pack(map) == Error.Ok, "The edited 2D scene could not be packed.");
+            const string savedPath = "res://artifacts/maps/p1-prefab-check.tscn";
+            check(ResourceSaver.Save(packed, savedPath) == Error.Ok, "The nested 2D prefab scene could not be saved.");
+            using var saved = ResourceLoader.Load<PackedScene>(savedPath, cacheMode: ResourceLoader.CacheMode.Ignore);
+            var reopened = saved.Instantiate<OpenRtsMap2D>();
+            try
+            {
+                check(MapSceneExtractor2D.Extract(reopened).Write() == source.Write(), "Duplicated instance overrides did not survive save/reopen.");
+            }
+            finally { reopened.Free(); }
+
+            selection.Clear();
+            var section = copy.GetNode<OpenRtsMapGroup2D>("Section");
+            selection.AddNode(section);
+            var start = new OpenRtsMapStart2D { Position = new(16, 8), Reverse = true };
+            plugin.AddMarker2D(map, start);
+            var nestedStart = MapSceneExtractor2D.Extract(map).Slots.Single(slot => slot.Id == copy.InstanceId + "/section/" + start.StartId);
+            check(start.GetParent() == section && start.Owner == map && nestedStart.Reverse,
+                "A start added inside an editable prefab did not use its group context.");
+            undo.Undo();
+        }
+        finally
+        {
+            selection.Clear();
+            undo.Undo();
+            group.Free();
+        }
     }
 
     private static async Task Check2DOperations(OpenRtsEditorPlugin plugin, OpenRtsMap2D map,

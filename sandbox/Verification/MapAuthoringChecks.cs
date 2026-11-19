@@ -18,6 +18,7 @@ public partial class MapAuthoringChecks : Node
         {
             Run();
             MapTerrainChecks.Run(Check);
+            CheckVisualLayers2D();
             CheckDiagonalRelief();
             CheckDiagonalCliffMap();
             CheckAircraftOnReliefMaps();
@@ -26,6 +27,62 @@ public partial class MapAuthoringChecks : Node
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
         finally { foreach (Node child in GetChildren()) child.Free(); }
+    }
+
+    private void CheckVisualLayers2D()
+    {
+        var root = GD.Load<PackedScene>("res://examples/maps/RockyPass.tscn").Instantiate<OpenRtsMap2D>();
+        AddChild(root);
+        var catalog = GameManifest.Load(ProjectSettings.GlobalizePath(root.ContentManifest)).LoadUnits();
+        var original = MapCompiler.Compile(MapSceneExtractor2D.Extract(root), catalog);
+        var terrain = root.Terrain!;
+        var ramp = new Vector2I(15, 14);
+        var atlas = terrain.GetCellAtlasCoords(ramp);
+        int source = terrain.GetCellSourceId(ramp);
+        TileMapLayer Overlay(OpenRtsMap2D map, Vector2I at, Vector2I tile)
+        {
+            var overlay = new TileMapLayer { TileSet = map.Terrain!.TileSet };
+            map.AddChild(overlay);
+            overlay.Owner = map;
+            overlay.SetCell(at, 0, tile);
+            return overlay;
+        }
+        var lower = Overlay(root, ramp, atlas);
+        var upper = Overlay(root, ramp, Vector2I.Zero);
+        root.VisualLayers = [lower, upper];
+        var colored = MapCompiler.Compile(MapSceneExtractor2D.Extract(root), catalog);
+        Check(colored.GameplayFingerprint == original.GameplayFingerprint && colored.DataFingerprint != original.DataFingerprint &&
+            colored.Map.VisualAt(ramp.X, ramp.Y) == "grass" && colored.Source.Surface!.SequenceEqual(original.Source.Surface!),
+            "The last visual paint must win without replacing the gameplay ramp.");
+        root.VisualLayers = [upper, lower];
+        Check(MapCompiler.Compile(MapSceneExtractor2D.Extract(root), catalog).Write() == original.Write(),
+            "Swapping visual layer priority did not restore the original appearance.");
+        using var packed = new PackedScene();
+        Check(packed.Pack(root) == Error.Ok, "Visual layers could not be serialized.");
+        var reopened = packed.Instantiate<OpenRtsMap2D>();
+        try
+        {
+            Check(reopened.VisualLayers.Count == 2 && MapCompiler.Compile(MapSceneExtractor2D.Extract(reopened), catalog).Write() == original.Write(),
+                "Visual layer order did not survive serialization.");
+        }
+        finally { reopened.Free(); }
+        var seams = MapReliefDiagnostics.Scan(original.Map.Grid).ToHashSet();
+        terrain.SetCell(ramp, source, Vector2I.Zero);
+        var changed = MapCompiler.Compile(MapSceneExtractor2D.Extract(root), catalog);
+        Check(MapReliefDiagnostics.Scan(changed.Map.Grid).Except(seams).Any(edge => edge.Ramp && (edge.Cell == ramp || edge.Neighbor == ramp)),
+            "Replacing a ramp tile did not flag its newly discontinuous seam.");
+        terrain.SetCell(ramp, source, atlas, (int)TileSetAtlasSource.TransformFlipH);
+        Reject(() => MapSceneExtractor2D.Extract(root), "A visual layer hid an invalid flipped gameplay ramp.");
+
+        var cliff = GD.Load<PackedScene>("res://examples/maps/DiagonalCliffs.tscn").Instantiate<OpenRtsMap2D>();
+        AddChild(cliff);
+        var cliffCatalog = GameManifest.Load(ProjectSettings.GlobalizePath(cliff.ContentManifest)).LoadUnits();
+        var before = MapCompiler.Compile(MapSceneExtractor2D.Extract(cliff), cliffCatalog);
+        var cut = cliff.Terrain!.GetUsedCells().First(cell => cliff.Terrain.GetCellTileData(cell).GetCustomData("UpperTerrainId").AsString() == "mud");
+        cliff.VisualLayers = [Overlay(cliff, cut, new(6, 0))];
+        var after = MapCompiler.Compile(MapSceneExtractor2D.Extract(cliff), cliffCatalog);
+        Check(after.Map.UpperVisualAt(cut.X, cut.Y) == "water" && after.GameplayFingerprint == before.GameplayFingerprint &&
+            after.DataFingerprint != before.DataFingerprint, "Visual styling of the upper triangle changed gameplay.");
     }
 
     private void CheckIndirectFireMap()

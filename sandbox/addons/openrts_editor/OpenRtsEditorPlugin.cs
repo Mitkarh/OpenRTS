@@ -37,7 +37,11 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         RefreshOwners();
         Button("Add object", AddObject);
         Button("Add start", AddStart);
-        _addGroup = Button("Add reusable group", () => AddMarker(new OpenRtsMapGroup()));
+        _addGroup = Button("Add reusable group", () =>
+        {
+            if (EditedMap() is OpenRtsMap2D map) AddMarker2D(map, new OpenRtsMapGroup2D());
+            else AddMarker(new OpenRtsMapGroup());
+        });
         Button("Duplicate selected", DuplicateSelected);
         Button("Repair IDs and order", RepairIdentities);
         SetupTerrainTools();
@@ -112,6 +116,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         _types.Clear();
         foreach (var unit in catalog.Units) _types.AddItem(unit.Id);
         if (root is OpenRtsMap map) LoadPreviewCatalog(map, catalog);
+        else ReloadPreview2D();
         RefreshOwners();
         _status.Text = $"{catalog.Units.Count} types. Select a marker to edit its properties in Inspector.";
     }
@@ -146,17 +151,17 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         var root = EditedMap();
         var selection = EditorInterface.Singleton.GetSelection().GetSelectedNodes().ToArray();
         var nodes = selection.Where(n => root is OpenRtsMap2D
-                ? n.GetParent() == root && n is OpenRtsMapObject2D or OpenRtsMapStart2D
+                ? root.IsAncestorOf(n) && n is OpenRtsMapObject2D or OpenRtsMapStart2D or OpenRtsMapGroup2D
                 : root.IsAncestorOf(n) && n is OpenRtsMapObject or OpenRtsMapStart or OpenRtsMapGroup)
             .Where(n => !selection.Any(other => other != n && other.IsAncestorOf(n))).ToArray();
         if (nodes.Length == 0) throw new ArgumentException("Select one or more object/start/group markers.");
         var nextOrders = new Dictionary<Node, IEnumerator<int>>();
-        var copies = new List<(Node Parent, Node Copy)>();
+        var copies = new List<(Node Parent, Node Original, Node Copy)>();
         try
         {
             foreach (var node in nodes)
             {
-                var copy = node.Duplicate(); copies.Add((node.GetParent(), copy));
+                var copy = node.Duplicate(); copies.Add((node.GetParent(), node, copy));
                 copy.Set(MapAuthoringIdentity.IdField(copy), MapAuthoringIdentity.NewId());
                 if (MapAuthoringIdentity.HasOrder(copy))
                 {
@@ -171,9 +176,22 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         catch { foreach (var pair in copies) pair.Copy.Free(); throw; }
         finally { foreach (var orders in nextOrders.Values) orders.Dispose(); }
         var undo = GetUndoRedo(); undo.CreateAction("Duplicate OpenRTS markers", customContext: root);
-        foreach (var pair in copies) AddAttachment(undo, root, pair.Parent, pair.Copy);
+        foreach (var pair in copies)
+        {
+            AddAttachment(undo, root, pair.Parent, pair.Copy);
+            RestoreEditableInstances(pair.Original, pair.Copy);
+        }
         undo.CommitAction();
         if (root is OpenRtsMap2D) SelectMarkers(copies.Select(pair => pair.Copy).ToArray());
+
+        void RestoreEditableInstances(Node original, Node copy)
+        {
+            if (original.SceneFilePath.Length != 0 && root.IsEditableInstance(original))
+                undo.AddDoMethod(root, Node.MethodName.SetEditableInstance, copy, true);
+            foreach (Node child in original.GetChildren())
+                if (copy.GetNodeOrNull<Node>(new NodePath(child.Name)) is { } counterpart)
+                    RestoreEditableInstances(child, counterpart);
+        }
     }
 
     private void AttachUndo(Node root, Node parent, Node[] nodes, string action)
@@ -341,7 +359,9 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
 
     private void UpdateMapTools(Node? node)
     {
-        _terrainTools.Visible = _addGroup.Visible = _buildBundle.Visible = node is OpenRtsMap;
+        _terrainTools.Visible = _buildBundle.Visible = node is OpenRtsMap;
+        _addGroup.Visible = node is OpenRtsMap or OpenRtsMap2D;
+        _tools2D.Visible = node is OpenRtsMap2D;
     }
     internal void Invalidate(string message) { _generation++; _build?.Cancel(); _status.Text = message; }
     private void Fail(Exception error) { _lastError = error; _status.Text = "Failed: " + error.Message; GD.PushError("OpenRTS authoring: " + error.Message); }

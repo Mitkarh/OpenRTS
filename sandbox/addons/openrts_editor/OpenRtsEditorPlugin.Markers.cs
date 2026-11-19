@@ -66,7 +66,7 @@ public partial class OpenRtsEditorPlugin
         else AddMarker(new OpenRtsMapStart());
     }
 
-    private void AddMarker2D(OpenRtsMap2D root, Marker2D marker)
+    internal void AddMarker2D(OpenRtsMap2D root, Node2D marker)
     {
         if (root.Terrain is not { } layer)
         {
@@ -74,10 +74,12 @@ public partial class OpenRtsEditorPlugin
             throw new ArgumentException("Assign the map's Terrain TileMapLayer first.");
         }
         marker.Set(MapAuthoringIdentity.IdField(marker), MapAuthoringIdentity.NewId());
-        if (marker is OpenRtsMapObject2D obj) obj.Order = MapAuthoringIdentity.NextOrder(root);
-        marker.Name = marker is OpenRtsMapObject2D unit ? unit.TypeId : "Start";
-        marker.Position = layer.MapToLocal(root.Size / 2);
-        AttachUndo(root, root, [marker], "Add OpenRTS marker");
+        var selected = EditorInterface.Singleton.GetSelection().GetSelectedNodes();
+        var parent = selected.Count == 1 && selected[0] is OpenRtsMapGroup2D group && root.IsAncestorOf(group) ? group : (Node2D)root;
+        if (MapAuthoringIdentity.HasOrder(marker)) marker.Set("Order", MapAuthoringIdentity.NextOrder(parent));
+        marker.Name = marker is OpenRtsMapObject2D unit ? unit.TypeId : marker is OpenRtsMapStart2D ? "Start" : "Group";
+        if (parent == root) marker.Position = layer.MapToLocal(root.Size / 2);
+        AttachUndo(root, parent, [marker], "Add OpenRTS marker");
     }
 }
 #endif

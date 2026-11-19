@@ -8,11 +8,12 @@ namespace OpenRTS.Godot.Authoring;
 /// <summary>Call on the Godot owner thread. The returned snapshot contains no Godot references.</summary>
 public static class MapSceneExtractor
 {
-    private sealed class Context(string prefix, int[] order)
+    internal sealed class Context(string prefix, int[] order)
     {
         internal readonly string Prefix = prefix;
         internal readonly int[] Order = order;
         internal readonly HashSet<string> Ids = new(StringComparer.Ordinal);
+        internal readonly HashSet<string> StartIds = new(StringComparer.Ordinal);
         internal readonly HashSet<int> Orders = [];
     }
 
@@ -93,7 +94,7 @@ public static class MapSceneExtractor
             objects.Select(o => o.Object).ToArray(), origin: Origin(root));
     }
 
-    private static int CompareOrder(int[] first, int[] second)
+    internal static int CompareOrder(int[] first, int[] second)
     {
         for (int i = 0; i < Math.Min(first.Length, second.Length); i++)
             if (first[i] != second[i]) return first[i].CompareTo(second[i]);

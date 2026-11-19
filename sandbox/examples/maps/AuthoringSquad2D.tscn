@@ -1,0 +1,10 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/openrts_editor/OpenRtsMapGroup2D.cs" id="1"]
+[ext_resource type="PackedScene" path="res://examples/maps/AuthoringSection2D.tscn" id="2"]
+
+[node name="AuthoringSquad2D" type="Node2D"]
+script = ExtResource("1")
+InstanceId = "squad"
+
+[node name="Section" parent="." instance=ExtResource("2")]

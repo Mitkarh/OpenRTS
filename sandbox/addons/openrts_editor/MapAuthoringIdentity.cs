@@ -11,25 +11,34 @@ public static class MapAuthoringIdentity
         OpenRtsMapObject => nameof(OpenRtsMapObject.ObjectId),
         OpenRtsMapStart => nameof(OpenRtsMapStart.StartId),
         OpenRtsMapGroup => nameof(OpenRtsMapGroup.InstanceId),
+        OpenRtsMapGroup2D => nameof(OpenRtsMapGroup2D.InstanceId),
         OpenRtsMapObject2D => nameof(OpenRtsMapObject2D.ObjectId),
         OpenRtsMapStart2D => nameof(OpenRtsMapStart2D.StartId),
         _ => throw new ArgumentException("Select an object, start or group marker.")
     };
 
-    public static bool HasOrder(Node node) => node is OpenRtsMapObject or OpenRtsMapGroup or OpenRtsMapObject2D;
+    public static bool HasOrder(Node node) => node is OpenRtsMapObject or OpenRtsMapGroup or OpenRtsMapObject2D or OpenRtsMapGroup2D;
+
+    public static string? GroupId(Node node) => node switch
+    {
+        OpenRtsMapGroup group => group.InstanceId,
+        OpenRtsMapGroup2D group => group.InstanceId,
+        _ => null
+    };
 
     public static IEnumerable<Node> ContextChildren(Node context)
     {
-        if (context is OpenRtsMap2D)
+        bool canvas = context is OpenRtsMap2D or OpenRtsMapGroup2D;
+        return Visit(context);
+        IEnumerable<Node> Visit(Node parent)
         {
-            foreach (Node child in context.GetChildren())
-                if (child is OpenRtsMapStart2D or OpenRtsMapObject2D) yield return child;
-            yield break;
-        }
-        foreach (Node child in context.GetChildren())
-        {
-            if (child is OpenRtsMapGroup or OpenRtsMapObject or OpenRtsMapStart) yield return child;
-            if (child is not OpenRtsMapGroup and not OpenRtsMap) foreach (var descendant in ContextChildren(child)) yield return descendant;
+            foreach (Node child in parent.GetChildren())
+            {
+                if (canvas ? child is OpenRtsMapGroup2D or OpenRtsMapObject2D or OpenRtsMapStart2D :
+                    child is OpenRtsMapGroup or OpenRtsMapObject or OpenRtsMapStart) yield return child;
+                if (child is not (OpenRtsMapGroup or OpenRtsMap or OpenRtsMapGroup2D or OpenRtsMap2D))
+                    foreach (var descendant in Visit(child)) yield return descendant;
+            }
         }
     }
 
@@ -50,11 +59,15 @@ public static class MapAuthoringIdentity
     public static Node Context(Node node)
     {
         for (Node? parent = node.GetParent(); parent is not null; parent = parent.GetParent())
-            if (parent is OpenRtsMap or OpenRtsMapGroup or OpenRtsMap2D) return parent;
+            if (parent is OpenRtsMap or OpenRtsMapGroup or OpenRtsMap2D or OpenRtsMapGroup2D) return parent;
         throw new ArgumentException("Marker must belong to a map/group.");
     }
 
-    public static void Repair(Node context, Action<Node, string, Variant> set)
+    public static void Repair(Node context, Action<Node, string, Variant> set) =>
+        Repair(context, set, "", new(StringComparer.Ordinal), new(StringComparer.Ordinal));
+
+    private static void Repair(Node context, Action<Node, string, Variant> set, string prefix,
+        HashSet<string> objects, HashSet<string> starts)
     {
         var children = ContextChildren(context).ToArray();
         var ids = new HashSet<string>(StringComparer.Ordinal);
@@ -66,10 +79,14 @@ public static class MapAuthoringIdentity
         {
             string field = IdField(node), id = node.Get(field).AsString();
             var scope = node is OpenRtsMapStart2D ? starts2D : ids;
-            bool invalidLocalId = context is not OpenRtsMap2D && (id.Contains('/') || id is "." or "..");
-            if (string.IsNullOrWhiteSpace(id) || invalidLocalId || node is OpenRtsMapStart2D && id == "neutral" || !scope.Add(id))
+            bool local = context is not OpenRtsMap2D || node is OpenRtsMapGroup2D;
+            bool invalidLocalId = local && (id.Contains('/') || id is "." or "..");
+            var composed = node is OpenRtsMapObject2D ? objects : node is OpenRtsMapStart2D ? starts : null;
+            if (string.IsNullOrWhiteSpace(id) || invalidLocalId || node is OpenRtsMapStart2D && id == "neutral" ||
+                !scope.Add(id) || composed?.Add(prefix + id) == false)
             {
                 id = NewId(); scope.Add(id); set(node, field, id);
+                composed?.Add(prefix + id);
             }
             if (HasOrder(node))
             {
@@ -80,7 +97,7 @@ public static class MapAuthoringIdentity
                     set(node, "Order", next); orders.Add(next);
                 }
             }
-            if (node is OpenRtsMapGroup) Repair(node, set);
+            if (node is OpenRtsMapGroup or OpenRtsMapGroup2D) Repair(node, set, prefix + id + "/", objects, starts);
         }
     }
 }
