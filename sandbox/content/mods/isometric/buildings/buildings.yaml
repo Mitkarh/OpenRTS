@@ -139,6 +139,8 @@ factory:
       howitzer: { Unit: howitzer, Cost: 1200, Ticks: 250 }
       mlrs: { Unit: mlrs, Cost: 1500, Ticks: 300 }
       tomahawk: { Unit: tomahawk, Cost: 2000, Ticks: 400 }
+      scud: { Unit: scud, Cost: 2250, Ticks: 450 }
+      shield-truck: { Unit: shield-truck }
       # repair: { Mount: repair, AutoCast: true }
   ActionPanel:
     Buttons:
@@ -151,6 +153,8 @@ factory:
       howitzer: { Label: Самоходная гаубица, Order: 4 }
       mlrs: { Label: Реактивная установка залпового огня, Order: 5 }
       tomahawk: { Label: Установка крылатой ракеты, Order: 6 }
+      scud: { Label: SCUD, Order: 8 }
+      shield-truck: { Label: Генератор щита, Order: 9 }
       # repair: { Label: Ремонт, Cursor: repair, Order: 4 }
   Footprint: { Rows: ["#####", "#####", "#####", ".+++.", ".+++."] }
   Armaments:

@@ -26,6 +26,7 @@ public partial class Sandbox3D
             _scout = frame.Poses[0].Id;
             _secondScout = frame.Poses[1].Id;
             _secondStart = frame.Poses[1].Current;
+            VerifyModularVehicles(frame.Poses);
             VerifySelectionAndCamera();
             VerifyReliefPicking();
             Press(Key.M);
@@ -93,6 +94,33 @@ public partial class Sandbox3D
                 GetTree().Quit();
                 break;
         }
+    }
+
+    private void VerifyModularVehicles(ReadOnlySpan<EntityPose> poses)
+    {
+        int verified = 0;
+        foreach (var vehicle in poses)
+        {
+            if (!_models[vehicle.UnitType].ModularVehicle) continue;
+            var actor = _actors[vehicle.Id];
+            var turret = (Node3D)actor.Node.FindChild("TurretSocket", recursive: true, owned: false);
+            var animation = (AnimationPlayer)actor.Node.FindChild("AnimationPlayer", recursive: true, owned: false);
+            var north = FacingDirection.North;
+            var east = FacingDirection.FromQuarterTurns(1);
+            if (_models[vehicle.UnitType].Crane)
+                Check(Mathf.IsEqualApprox(turret.Rotation.Y, Mathf.Pi), "The idle builder did not park its boom over the rear deck.");
+            var aiming = vehicle with { Previous = vehicle.Current with { Y = vehicle.Current.Y + 32 }, WeaponCount = 1,
+                Presentation = vehicle.Presentation with { BodyFacing = north, PreviousBodyFacing = north,
+                    WeaponFacing = east, PreviousWeaponFacing = east } };
+            actor.Apply(aiming, 1, _terrain.NormalAt(vehicle.Current));
+            Check(turret.GetChildCount() == 1 && (turret.GlobalBasis * Vector3.Forward).Dot(Vector3.Right) > 0.999f,
+                "Vehicle turret did not point east independently of the north-facing hull.");
+            Check(animation.CurrentAnimation == "Drive" && animation.GetAnimation("Drive").GetTrackCount() > 0,
+                "Moving the vehicle did not start its running gear animation.");
+            actor.Apply(vehicle, 1, _terrain.NormalAt(vehicle.Current));
+            verified++;
+        }
+        Check(verified == 3, "The 3D fixture must exercise the medium tank, tracked APC and builder truck.");
     }
 
     private void VerifySelectionAndCamera()

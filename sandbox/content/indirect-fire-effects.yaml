@@ -11,19 +11,17 @@ salvo-rocket:
     Size: 0.30
     SmokeSize: 0.21
     SmokeTicks: 18
-cruise-missile:
+^cruise-missile-effect:
   Inherits: missile
   Effect:
-    ProjectileTexture: res://assets/effects/indirect-fire/cruise-missile.png
     Size: 0.59
     ImpactSize: 1.3
     SmokeSize: 0.34
     SmokeTicks: 26
     MountedRocket: { ChassisOffset: -0.30, TailOffset: -0.54, Height: 0.24, LaunchPitch: 18 }
-ballistic-missile:
+^ballistic-missile-effect:
   Inherits: missile
   Effect:
-    ProjectileTexture: res://assets/effects/indirect-fire/ballistic-missile.png
     Size: 0.70
     ImpactSize: 1.6
     SmokeSize: 0.50

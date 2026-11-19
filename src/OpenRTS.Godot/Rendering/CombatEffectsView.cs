@@ -13,12 +13,20 @@ public sealed partial class CombatEffectsView
     private readonly List<WorldEvent> _events = [];
     private readonly Dictionary<EntityId, EntityPose> _workSources = [];
     private readonly Dictionary<string, (ColoredMeshBatch Batch, float Aspect)> _projectileSprites = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ColoredMeshBatch> _projectileModels = new(StringComparer.Ordinal);
     private readonly ColoredMeshBatch _rounds = new(new SphereMesh { Radius = 0.5f, Height = 1, RadialSegments = 8, Rings = 4 }, "Projectiles");
     private readonly ColoredMeshBatch _beams = new(new BoxMesh { Size = Vector3.One }, "Tracers");
     private readonly ColoredMeshBatch _impacts = new(new SphereMesh { Radius = 0.5f, Height = 1, RadialSegments = 12, Rings = 4 }, "Impacts");
+    private Vector3 _overlayOffset = Vector3.Up * SpriteWorldView.OverlayHeight;
     public Node3D Node { get; } = new() { Name = "CombatEffects" };
     public int ProjectileCount { get; private set; }
     public int ActiveEffects => _events.Count;
+    internal void AlignDepthWithCamera(Camera3D camera)
+    {
+        var back = camera.Basis.Z;
+        _overlayOffset = back * (SpriteWorldView.OverlayHeight / back.Y);
+    }
+
     public CombatEffectsView(UnitCatalog units, EffectCatalog effects, ModelCatalog? models = null)
     {
         _units = units; _effects = effects;
@@ -26,6 +34,8 @@ public sealed partial class CombatEffectsView
         foreach (var type in units.Units) foreach (var mount in type.Weapons)
         {
             if (!effects.Weapons.TryGetValue(mount.Weapon.Id, out var style)) throw new ArgumentException("Missing effect: " + mount.Weapon.Id);
+            if (style.ProjectileModel is { } modelPath && !_projectileModels.ContainsKey(modelPath))
+                AddProjectileModel(modelPath, (float)style.Size);
             if (style.ProjectileTexture is not { } path || _projectileSprites.ContainsKey(path)) continue;
             var texture = GD.Load<Texture2D>(path) ?? throw new ArgumentException("Missing projectile texture: " + path);
             var material = new StandardMaterial3D
@@ -36,6 +46,11 @@ public sealed partial class CombatEffectsView
             var batch = new ColoredMeshBatch(new PlaneMesh { Size = Vector2.One }, "ProjectileSprites", material);
             _projectileSprites.Add(path, (batch, (float)texture.GetWidth() / texture.GetHeight()));
             Node.AddChild(batch.Node);
+        }
+        if (_projectileModels.Count > 0)
+        {
+            AddProjectileLight(new Vector3(-54, -38, 0), 0.9f);
+            AddProjectileLight(new Vector3(-29, 136, 0), 0.45f);
         }
         _hasMountedRockets = effects.Weapons.Values.Any(style => style.MountedRocket is not null);
         Node.AddChild(_rounds.Node); Node.AddChild(_beams.Node); Node.AddChild(_impacts.Node); Node.AddChild(_smoke.Node);
@@ -55,6 +70,7 @@ public sealed partial class CombatEffectsView
         alpha = Math.Clamp(alpha, 0, 1);
         _rounds.Clear(); _beams.Clear(); _impacts.Clear(); ProjectileCount = shots.Length;
         foreach (var sprite in _projectileSprites.Values) sprite.Batch.Clear();
+        foreach (var batch in _projectileModels.Values) batch.Clear();
         if (tick < _lastSmokeTick) _puffs.Clear();
         bool emitSmoke = tick != _lastSmokeTick;
         _lastSmokeTick = tick;
@@ -103,7 +119,7 @@ public sealed partial class CombatEffectsView
             }
             var point = previous.Lerp(current, alpha);
             float size = (float)style.Size;
-            if (style.ProjectileTexture is { } path) ProjectileSprite(path, point, forward, size, eye);
+            if (style.ProjectileModel is not null || style.ProjectileTexture is not null) ProjectileVisual(style, point, forward, eye);
             else _rounds.Add(point, new(size, size, size * 1.7f), PitchBasis(forward, eye), Color(style.Color));
             if (weapon.Projectile == ProjectileKind.Missile)
             {
@@ -164,6 +180,7 @@ public sealed partial class CombatEffectsView
         if (write < _events.Count) _events.RemoveRange(write, _events.Count - write);
         _rounds.Publish(); _beams.Publish(); _impacts.Publish();
         foreach (var sprite in _projectileSprites.Values) sprite.Batch.Publish();
+        foreach (var batch in _projectileModels.Values) batch.Publish();
     }
     internal WorldPosition WorkSource(in EntityPose actor, WorldPosition target, float alpha)
     {
@@ -182,6 +199,6 @@ public sealed partial class CombatEffectsView
     }
     private static float Lift(int elevation, HoverEndpoints endpoint, HoverEndpoints hover, float flightSurface) =>
         (hover & endpoint) != 0 ? SpriteWorldView.HoverLift(elevation / 1024f, flightSurface) : 0;
-    private static Vector3 Position(WorldPosition p) => new(p.X / 1024f, p.Elevation / 1024f + SpriteWorldView.OverlayHeight, p.Y / 1024f);
+    private Vector3 Position(WorldPosition p) => new Vector3(p.X, p.Elevation, p.Y) / 1024f + _overlayOffset;
     private static Color Color(double[] c, float alpha = 1) => new((float)c[0], (float)c[1], (float)c[2], alpha);
 }

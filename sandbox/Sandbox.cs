@@ -738,6 +738,7 @@ public partial class Sandbox : Node3D
             camera.RotationDegrees = new(-35.26439f, 45, 0);
             camera.Position = center + camera.Basis.Z * side;
             _sprites?.AlignDepthWithCamera(camera);
+            _combatEffects?.AlignDepthWithCamera(camera);
         }
         else if (_rampTerrain is not null)
         {
@@ -745,11 +746,11 @@ public partial class Sandbox : Node3D
             camera.Position = center + new Vector3(0, 1, 4.1f) + camera.Basis.Z * side;
         }
         else camera.RotationDegrees = new(-90, 0, 0);
-        if (_showcase && (isometric || _rampTerrain is not null))
+        if (_showcase && !isometric && _rampTerrain is not null)
         {
             // Move the existing overlay lift along the view ray so height does not shift its screen position.
             var offset = (camera.Basis.Z / camera.Basis.Z.Y - Vector3.Up) * SpriteWorldView.OverlayHeight;
-            if (!isometric) _selectionRing!.Position = offset;
+            _selectionRing!.Position = offset;
             _combatEffects!.Node.Position = offset;
         }
         _camera = camera;

@@ -7,10 +7,11 @@ internal sealed class ColoredMeshBatch
     internal readonly MultiMeshInstance3D Node;
     private float[] _buffer = [];
     private int _count;
-    internal ColoredMeshBatch(Mesh mesh, string name, Material? material = null)
+    internal ColoredMeshBatch(Mesh mesh, string name, Material? material = null, bool preserveMaterials = false)
     {
-        mesh.SurfaceSetMaterial(0, material ?? new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            VertexColorUseAsAlbedo = true, Transparency = BaseMaterial3D.TransparencyEnum.Alpha });
+        if (!preserveMaterials)
+            mesh.SurfaceSetMaterial(0, material ?? new StandardMaterial3D { ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                VertexColorUseAsAlbedo = true, Transparency = BaseMaterial3D.TransparencyEnum.Alpha });
         Node = new() { Name = name, Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = mesh } };
     }
     internal void Clear() => _count = 0;

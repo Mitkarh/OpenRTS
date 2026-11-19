@@ -1,0 +1,9 @@
+cruise-missile:
+  Inherits: ^cruise-missile-effect
+  Effect:
+    ProjectileTexture: res://assets/effects/indirect-fire/cruise-missile.png
+
+ballistic-missile:
+  Inherits: ^ballistic-missile-effect
+  Effect:
+    ProjectileTexture: res://assets/effects/indirect-fire/ballistic-missile.png

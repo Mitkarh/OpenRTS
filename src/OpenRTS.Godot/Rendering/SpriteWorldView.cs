@@ -23,14 +23,14 @@ public sealed class SpriteWorldView
     private sealed record Part(ModelPart Definition, Sequence[]?[] Sequences, ModelAnimation?[] Animations, int Mount, uint Visible, uint Hidden, uint SpinWhen, uint LoopWhen, int LoopAnimation, int WorkAnimation);
     private sealed record Model(UnitDefinition Unit, Part[] Parts, ModelState[] States, uint Damaged, uint Destroyed, uint NearlyDestroyed,
         ModelDrawLayer DrawLayer, int DrawLayers, double SortOffset, int PartLayerCount);
-    private readonly record struct DrawItem(int Index, int Layer, double Y, uint Id) : IComparable<DrawItem>
+    private readonly record struct DrawItem(int Index, int Layer, double Depth, uint Id) : IComparable<DrawItem>
     {
         public int CompareTo(DrawItem other)
         {
             int layer = Layer.CompareTo(other.Layer);
             if (layer != 0) return layer;
-            int y = Y.CompareTo(other.Y);
-            return y != 0 ? y : Id.CompareTo(other.Id);
+            int depth = Depth.CompareTo(other.Depth);
+            return depth != 0 ? depth : Id.CompareTo(other.Id);
         }
     }
     private const int ModelLayers = 3, PreviewLayer = 3, AirLayer = 4, LayerCount = AirLayer + 1;
@@ -70,12 +70,18 @@ public sealed class SpriteWorldView
 
     private readonly Func<uint, Color> _ownerColor;
     private Vector3 _depthAxis = Vector3.Up;
+    private Vector2 _sortAxis = Vector2.Down;
     private float _flightSurface;
     private NavigationGrid? _reliefSurface;
     internal float FlightSurface => _flightSurface;
 
-    // Moving along an orthographic view ray changes depth while preserving the projected anchor.
-    internal void AlignDepthWithCamera(Camera3D camera) => _depthAxis = camera.Basis.Z / camera.Basis.Z.Y;
+    internal void AlignDepthWithCamera(Camera3D camera)
+    {
+        var back = camera.Basis.Z;
+        // Moving along an orthographic view ray preserves the projected anchor.
+        _depthAxis = back / back.Y;
+        _sortAxis = new Vector2(back.X, back.Z).Normalized();
+    }
 
     public void SetFlightSurface(NavigationGrid? grid, bool reliefProjection = false)
     {
@@ -161,7 +167,8 @@ public sealed class SpriteWorldView
                 int drawLayers = 0;
                 foreach (var part in definition.Parts) drawLayers |= 1 << (int)(part.DrawLayer ?? definition.DrawLayer);
                 _models[i] = new(type, parts, type.States.Select(name => definition.States[name]).ToArray(), definition.DamagedState is null ? 0 : type.StateMask(definition.DamagedState), definition.DestroyedState is null ? 0 : type.StateMask(definition.DestroyedState), type.States.Contains("nearly-destroyed") ? type.StateMask("nearly-destroyed") : 0,
-                    definition.DrawLayer, drawLayers, definition.SortOffset, definition.Parts.Max(part => part.Layer) + 1);
+                    definition.DrawLayer, drawLayers, definition.SortOffset,
+                    definition.Parts.Max(part => Math.Max(part.Layer, part.FarLayer ?? 0)) + 1);
                 MaximumParts = Math.Max(MaximumParts, parts.Length);
             }
         }
@@ -272,12 +279,14 @@ public sealed class SpriteWorldView
             var pose = _ordered[i];
             var model = _models[pose.UnitType];
             int mask = _ghostIds.Contains(pose.Id) ? 1 << PreviewLayer : pose.Flight.Airborne ? 1 << AirLayer : model.DrawLayers;
-            double sortY = (pose.Previous.Y + ((long)pose.Current.Y - pose.Previous.Y) * (double)alpha) / 1024 + model.SortOffset;
+            double x = pose.Previous.X + ((long)pose.Current.X - pose.Previous.X) * (double)alpha;
+            double y = pose.Previous.Y + ((long)pose.Current.Y - pose.Previous.Y) * (double)alpha;
+            double depth = (x * _sortAxis.X + y * _sortAxis.Y) / WorldPosition.UnitsPerCell + model.SortOffset;
             while (mask != 0)
             {
                 int layer = System.Numerics.BitOperations.TrailingZeroCount(mask);
                 mask &= mask - 1;
-                _drawOrder[drawCount] = new(i, layer, sortY, pose.Id.Value);
+                _drawOrder[drawCount] = new(i, layer, depth, pose.Id.Value);
                 layerCounts[layer]++;
                 if (drawCount > 0 && _drawOrder[drawCount - 1].CompareTo(_drawOrder[drawCount]) > 0) sorted = false;
                 drawCount++;
@@ -378,7 +387,9 @@ public sealed class SpriteWorldView
                     angle = direction * step;
                 }
                 Vector2 mount = part.Parent < 0 ? origin : pivots[part.Parent];
-                mount += Rotate(new((float)part.OffsetX * scale, (float)part.OffsetY * scale), part.Parent < 0 ? body : angles[part.Parent]);
+                var parentOffset = Rotate(new((float)part.OffsetX * scale, (float)part.OffsetY * scale),
+                    part.Parent < 0 ? body : angles[part.Parent]);
+                mount += parentOffset;
                 angles[p] = angle;
                 float drawAngle = (part.Facings == 0 ? angle : 0) + Mathf.DegToRad((float)part.SpriteRotation);
                 float progress = playback.DurationTicks > 0 ? (float)Math.Clamp((time - playback.StartTick) / playback.DurationTicks, 0, 1) : 0;
@@ -414,7 +425,9 @@ public sealed class SpriteWorldView
                 }
                 int layer = ghost ? PreviewLayer : pose.Flight.Airborne ? AirLayer : (int)(part.DrawLayer ?? model.DrawLayer);
                 var (depth, stride) = _drawDepths[i * LayerCount + layer];
-                var position = new Vector3(center.X, elevation, center.Y) + _depthAxis * (depth + part.Layer * (stride / model.PartLayerCount));
+                int partLayer = part.FarLayer is int farLayer && parentOffset.Dot(new(_depthAxis.X, _depthAxis.Z)) < 0
+                    ? farLayer : part.Layer;
+                var position = new Vector3(center.X, elevation, center.Y) + _depthAxis * (depth + partLayer * (stride / model.PartLayerCount));
                 TintedBatch(frame, partTint).Add(position, drawAngle, size, partTint, team);
                 SpriteCount++;
             }

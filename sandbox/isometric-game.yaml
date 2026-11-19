@@ -3,6 +3,7 @@ Title: OpenRTS Isometric Sandbox
 Rules:
   - content/units/units-infantry.yaml
   - content/units/units-vehicles.yaml
+  - content/mods/isometric/units.yaml
   - content/units/units-aircraft.yaml
   - content/mods/isometric/buildings/buildings.yaml
   - content/units/buildings-defense.yaml
@@ -22,6 +23,7 @@ Models:
 Effects:
   - content/effects.yaml
   - content/indirect-fire-effects.yaml
+  - content/mods/isometric/rocket-effects.yaml
 Settings:
   - content/settings/simulation.yaml
   - content/settings/sensor-ranges.yaml

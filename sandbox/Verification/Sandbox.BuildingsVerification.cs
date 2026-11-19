@@ -105,6 +105,16 @@ public partial class Sandbox
                 ? CheckBunker() : [];
             var generatorPreview = overrides.TryGetValue("stealth-generator", out var stealthModel) &&
                 stealthModel == "iso-stealth-generator" ? CheckGenerators() : [];
+            var tankPreview = overrides.TryGetValue("tank", out var tankModel) && tankModel == "iso-tank"
+                ? CheckTank() : [];
+            var apcPreview = overrides.TryGetValue("apc-upgradable", out var apcModel) &&
+                apcModel == "iso-apc-upgradable" ? CheckTrackedApc() : [];
+            var truckPreview = overrides.TryGetValue("supply-truck", out var truckModel) &&
+                truckModel == "iso-supply-truck" ? CheckMilitaryTruck() : [];
+            var specialistPreview = overrides.TryGetValue("ballistic-carrier", out var ballisticModel) &&
+                ballisticModel == "iso-ballistic-carrier" ? CheckSpecialistTrucks() : [];
+            var supplyOverlap = directionalPower && _manifest.Settings.Presentation.Camera == OpenRTS.Content.GameCamera.Isometric &&
+                overrides.TryGetValue("supply-center", out var supplyModel) && supplyModel == "iso-supply-center" ? CheckSupplyOcclusion() : [];
             var layerA = poses.Single(p => p.Id.Value == 17); var layerB = poses.Single(p => p.Id.Value == 18) with { Previous = layerA.Current, Current = layerA.Current };
             _sprites.Apply([layerB, layerA], 1, tick, rate);
             var overlap = (directionalPower ? IsometricBatch("power-plant") : Batch("power-plant")).Multimesh.Buffer;
@@ -170,19 +180,89 @@ public partial class Sandbox
                     _sprites.Apply(generatorPreview, 1, rate, rate);
                     await CaptureBuildings("buildings-generators.png");
                 }
+                if (tankPreview.Length > 0)
+                {
+                    _camera!.Size = 7.3f;
+                    _camera.Position = new Vector3(33.5f, 0, 35.5f) + _camera.Basis.Z * 60 + _camera.Basis.Y * 0.3f;
+                    _sprites.Apply(tankPreview, 1, 0, rate);
+                    await CaptureBuildings("buildings-medium-tank.png");
+                }
+                if (apcPreview.Length > 0)
+                {
+                    _camera!.Size = 7.3f;
+                    _camera.Position = new Vector3(33.5f, 0, 35.5f) + _camera.Basis.Z * 60 + _camera.Basis.Y * 0.36f;
+                    _sprites.Apply(apcPreview, 1, 0, rate);
+                    await CaptureBuildings("buildings-tracked-apc.png");
+                }
+                if (truckPreview.Length > 0)
+                {
+                    _camera!.Size = 8.7f;
+                    _camera.Position = new Vector3(34.2f, 0, 33.8f) + _camera.Basis.Z * 60 + _camera.Basis.Y * 0.5f;
+                    var cruise = truckPreview[^1];
+                    WeaponPose[] mounted = [new(cruise.Id, 0, cruise.Presentation.WeaponFacing,
+                        cruise.Presentation.WeaponFacing, AnimationPlayback.None, 0, 0, default)];
+                    truckPreview[^1] = cruise with { WeaponCount = 1 };
+                    _sprites.Apply(truckPreview, 1, 0, rate, mounted);
+                    _combatEffects!.Apply([], 1, 0, actors: truckPreview, weapons: mounted, cameraBack: _camera.Basis.Z);
+                    await CaptureBuildings("buildings-military-truck.png");
+                    _combatEffects.Apply([], 1, 0);
+                }
+                if (specialistPreview.Length > 0)
+                {
+                    _camera!.Size = 7.5f;
+                    _camera.Position = new Vector3(34, 0, 34) + _camera.Basis.Z * 60 + _camera.Basis.Y * 0.45f;
+                    var launchers = specialistPreview.Skip(2).Select(p => new WeaponPose(p.Id, 0,
+                        p.Presentation.WeaponFacing, p.Presentation.WeaponFacing, AnimationPlayback.None, 0, 0, default)).ToArray();
+                    _sprites.Apply(specialistPreview, 1, 0, rate, launchers);
+                    _combatEffects!.Apply([], 1, 0, actors: specialistPreview, weapons: launchers, cameraBack: _camera.Basis.Z);
+                    await CaptureBuildings("buildings-specialist-trucks.png");
+                    _combatEffects.Apply([], 1, 0);
+                }
+                if (supplyOverlap.Length > 0)
+                {
+                    _camera!.Size = 8;
+                    _camera.Position = new Vector3(30, 0, 33) + _camera.Basis.Z * 60 + _camera.Basis.Y;
+                    _sprites.Apply(supplyOverlap, 1, 0, rate);
+                    await CaptureBuildings("buildings-supply-occlusion.png");
+                }
             }
             GD.Print($"OPENRTS_BUILDINGS:PASS footprint terrain, wrecks, sizes, states, radar, doors, stacking and 10000-building batches; nodes={nodes}");
             GD.Print("OPENRTS_SIMULATION:" + JsonSerializer.Serialize(report)); GetTree().Quit();
 
-            MultiMeshInstance3D IsometricBatch(string file) => _sprites.Node.GetChildren().OfType<MultiMeshInstance3D>()
+            MultiMeshInstance3D IsometricBatch(string file, string category = "buildings") =>
+                AssetBatch(category + "/isometric/" + file);
+
+            MultiMeshInstance3D BuildingBatch(string path) => AssetBatch("buildings/" + path);
+
+            MultiMeshInstance3D AssetBatch(string path) => _sprites.Node.GetChildren().OfType<MultiMeshInstance3D>()
                 .Single(node => node.Multimesh.VisibleInstanceCount > 0 &&
                     node.Multimesh.Mesh.SurfaceGetMaterial(0) is ShaderMaterial material &&
                     material.GetShaderParameter("sprite_texture").AsGodotObject() is Texture2D texture &&
-                    texture.ResourcePath.EndsWith("/isometric/" + file + ".png", StringComparison.Ordinal));
+                    texture.ResourcePath == "res://assets/" + path + ".png");
 
-            Vector4 SpriteFrame(string file)
+            EntityPose[] CheckSupplyOcclusion()
             {
-                var material = (ShaderMaterial)IsometricBatch(file).Multimesh.Mesh.SurfaceGetMaterial(0);
+                var center = new WorldPosition(31 * 1024 + 512, 34 * 1024);
+                var supply = poses.Single(p => p.Id.Value == 5) with { Previous = center, Current = center };
+                supply = supply with { Presentation = supply.Presentation with
+                    { Body = new(_catalog.Units[supply.UnitType].IdleAnimation, 0, 0), States = 0 } };
+                var plant = poses.Single(p => p.Id.Value == 17);
+                plant = plant with { Presentation = plant.Presentation with { Owner = 2 } };
+                var behind = new WorldPosition(center.X - 2560, center.Y - 2048);
+                var rearPlant = plant with { Previous = behind, Current = behind };
+                _sprites.Apply([rearPlant, supply], 1, 0, rate);
+                Check(BuildingBatch("supply-center").Multimesh.Buffer[7] > IsometricBatch("power-plant").Multimesh.Buffer[7],
+                    "The supply center must cover a power plant behind it.");
+                var inFront = center with { X = center.X + 3584 };
+                _sprites.Apply([supply, plant with { Previous = inFront, Current = inFront }], 1, 0, rate);
+                Check(IsometricBatch("power-plant").Multimesh.Buffer[7] > BuildingBatch("supply-center").Multimesh.Buffer[7],
+                    "Moving the power plant along world X must be able to put it in front of the supply center.");
+                return [rearPlant, supply];
+            }
+
+            Vector4 SpriteFrame(string file, string category = "buildings")
+            {
+                var material = (ShaderMaterial)IsometricBatch(file, category).Multimesh.Mesh.SurfaceGetMaterial(0);
                 return material.GetShaderParameter("uv_rect").AsVector4();
             }
 
@@ -290,6 +370,223 @@ public partial class Sandbox
                 return [stealth, complete with { Current = previewCenter, Previous = previewCenter }];
             }
 
+            EntityPose[] CheckTank()
+            {
+                const string hull = "medium-tank-hull", turret = "medium-tank-turret";
+                int typeIndex = _catalog!.Units.ToList().FindIndex(unit => unit.Id == "tank");
+                var type = _catalog.Units[typeIndex];
+                var north = FacingDirection.North;
+                var east = FacingDirection.FromQuarterTurns(1);
+                var south = FacingDirection.FromQuarterTurns(2);
+                var west = FacingDirection.FromQuarterTurns(3);
+                EntityPose Pose(uint id, uint owner, int x, int y, FacingDirection body, FacingDirection gun)
+                {
+                    var point = new WorldPosition(x * 512, y * 512);
+                    return new(new(id), typeIndex, point, point,
+                        new(owner, body, body, gun, gun, new(type.IdleAnimation, 0, 0), AnimationPlayback.None, 0));
+                }
+
+                var pose = Pose(101, 1, 62, 76, north, east);
+                _sprites.Apply([pose], 1, 0, rate);
+                var standingHull = SpriteFrame(hull, "units");
+                var aimingTurret = SpriteFrame(turret, "units");
+                Check(standingHull.Y == 0 && Mathf.IsEqualApprox(aimingTurret.Y, 0.5f) &&
+                    Mathf.IsEqualApprox(standingHull.W, 1f / 16) && Mathf.IsEqualApprox(aimingTurret.W, 1f / 16),
+                    "Medium tank did not select independent directional hull and turret frames.");
+                CheckAnchor(hull, pose, "body", "units");
+                CheckAnchor(turret, pose, "turret", "units");
+
+                var nextFacing = new FacingDirection(199, -1000);
+                var turning = pose with { Presentation = pose.Presentation with
+                    { BodyFacing = nextFacing, PreviousBodyFacing = nextFacing, Body = new(type.MoveAnimation, 0, 0) } };
+                _sprites.Apply([turning], 0, (int)Math.Ceiling(rate / 12d), rate);
+                var movingHull = SpriteFrame(hull, "units");
+                Check(Mathf.IsEqualApprox(movingHull.Y, standingHull.W) &&
+                    Mathf.IsEqualApprox(movingHull.X, standingHull.Z) && SpriteFrame(turret, "units") == aimingTurret,
+                    "Medium tank lost its adjacent heading, tread animation, or independent aim.");
+
+                var style = OpenRTS.Content.EffectCatalog.Load(_manifest.Effects).Weapons["cannon"];
+                var muzzle = _combatEffects!.LaunchVisual(typeIndex, 0, new(1, pose.Id, pose.Current, north, east), style, Vector3.Right);
+                var expected = new Vector3(pose.Current.X / 1024f + 1.474f, 0.917f, pose.Current.Y / 1024f);
+                Check(muzzle is { } launch && _camera!.UnprojectPosition(launch.Center).DistanceTo(_camera.UnprojectPosition(expected)) < 0.05f,
+                    "The cannon effect missed the visible muzzle of the east-facing turret.");
+                _sprites.Apply(poses, 1, tick, rate, weapons);
+                return [pose, Pose(102, 2, 67, 71, south, west), Pose(103, 1, 72, 66, west, new(707, 707))];
+            }
+
+            EntityPose[] CheckTrackedApc()
+            {
+                const string bodyAtlas = "tracked-apc-hull";
+                var units = _catalog!.Units.ToList();
+                int apc = units.FindIndex(unit => unit.Id == "apc-mg");
+                int missileApc = units.FindIndex(unit => unit.Id == "apc-rocket");
+                var north = FacingDirection.North;
+                var east = FacingDirection.FromQuarterTurns(1);
+                var south = FacingDirection.FromQuarterTurns(2);
+                var west = FacingDirection.FromQuarterTurns(3);
+                EntityPose Pose(int index, int type, FacingDirection body, FacingDirection gun, string? upgrade = null)
+                {
+                    var point = new WorldPosition((62 + 5 * index) * 512, (76 - 5 * index) * 512);
+                    uint state = upgrade is null ? 0 : units[type].StateMask(upgrade);
+                    return new(new((uint)(111 + index)), type, point, point,
+                        new(index == 1 ? 2u : 1u, body, body, gun, gun,
+                            new(units[type].IdleAnimation, 0, 0), AnimationPlayback.None, state));
+                }
+
+                var gunApc = Pose(0, apc, east, north);
+                _sprites.Apply([gunApc], 1, 0, rate);
+                var idleHull = SpriteFrame(bodyAtlas, "units");
+                var gunFrame = SpriteFrame("tracked-apc-turret", "units");
+                Check(Mathf.IsEqualApprox(idleHull.Y, 0.5f) && gunFrame.Y == 0 &&
+                    Mathf.IsEqualApprox(gunFrame.W, 1f / 16) && _sprites.SpriteCount == 2,
+                    "The APC's hull and turret did not select independent directions.");
+                CheckAnchor(bodyAtlas, gunApc, "body", "units");
+                var center = new Vector3(gunApc.Current.X / 1024f, 0, gunApc.Current.Y / 1024f);
+                var pivot = SpriteScreenPivot("tracked-apc-turret", gunApc, "turret", "units");
+                Check(pivot.DistanceTo(_camera!.UnprojectPosition(center + Vector3.Right * 0.246f)) < 0.05f,
+                    "The APC turret socket did not rotate with the hull.");
+                var driving = gunApc with { Presentation = gunApc.Presentation with { Body = new(units[apc].MoveAnimation, 0, 0) } };
+                _sprites.Apply([driving], 0, (int)Math.Ceiling(rate / 12d), rate);
+                Check(Mathf.IsEqualApprox(SpriteFrame(bodyAtlas, "units").X, idleHull.Z),
+                    "The APC lost its second tread frame.");
+                var effect = OpenRTS.Content.EffectCatalog.Load(_manifest.Effects).Weapons["rifle"];
+                var muzzle = _combatEffects!.LaunchVisual(apc, 0, new(1, gunApc.Id, gunApc.Current, east, north), effect, Vector3.Forward);
+                Check(muzzle is { } launch && _camera.UnprojectPosition(launch.Center).DistanceTo(
+                    _camera.UnprojectPosition(center + new Vector3(.288f, 1.098f, -.563f))) < 0.05f,
+                    "The APC shot effect did not follow the off-center turret.");
+
+                var cannon = Pose(1, apc, south, east, "cannon");
+                var rockets = Pose(2, apc, west, south, "rockets");
+                foreach (var (pose, atlas) in new[] { (cannon, "tracked-apc-cannon"), (rockets, "tracked-apc-missiles"),
+                             (Pose(2, missileApc, west, south), "tracked-apc-missiles") })
+                {
+                    _sprites.Apply([pose], 1, 0, rate);
+                    Check(_sprites.SpriteCount == 2 && Mathf.IsEqualApprox(SpriteFrame(atlas, "units").W, 1f / 16),
+                        "An APC variant selected the wrong turret or drew two towers.");
+                }
+                _sprites.Apply(poses, 1, tick, rate, weapons);
+                return [gunApc, cannon, rockets];
+            }
+
+            EntityPose[] CheckMilitaryTruck()
+            {
+                const string hull = "military-truck-hull", cab = "military-truck-cab", crane = "military-truck-crane";
+                const string empty = "military-truck-cargo-empty", loaded = "military-truck-cargo-loaded";
+                const string salvo = "military-truck-mlrs", rail = "military-truck-tomahawk";
+                var units = _catalog!.Units.ToList();
+                var north = FacingDirection.North;
+                var south = FacingDirection.FromQuarterTurns(2);
+                var east = FacingDirection.FromQuarterTurns(1);
+                EntityPose Truck(uint id, string name, int x, int y, FacingDirection body, FacingDirection aim, bool carrying = false)
+                {
+                    int type = units.FindIndex(unit => unit.Id == name);
+                    var point = new WorldPosition(x * 512, y * 512);
+                    uint state = carrying ? units[type].StateMask("loaded") : 0;
+                    return new(new(id), type, point, point,
+                        new(1, body, body, aim, aim, new(units[type].IdleAnimation, 0, 0), AnimationPlayback.None, state));
+                }
+
+                var builder = Truck(201, "construction-engineer", 63, 70, south, east);
+                _sprites.Apply([builder], 1, 0, rate);
+                Check(SpriteFrame(crane, "units").Y == 0, "The idle truck crane did not point aft.");
+                var site = new EntityId(209);
+                var working = builder with { Order = new(UnitActionKind.Build, OrderPhase.Engaging, default, site, 0, 0) };
+                var target = builder.Current with { X = builder.Current.X + 2048 };
+                _sprites.Apply([working], 1, 0, rate, projects: [new(site, 1, units.FindIndex(unit => unit.Id == "power-plant"), target, false)]);
+                Check(Mathf.IsEqualApprox(SpriteFrame(crane, "units").Y, 0.5f), "The mobile crane did not turn toward the site.");
+
+                var emptyTruck = Truck(202, "supply-truck", 69, 64, south, south);
+                var loadedTruck = Truck(203, "supply-truck", 74, 59, north, north, carrying: true);
+                var emptyVariant = emptyTruck with { Presentation = emptyTruck.Presentation with
+                    { Body = new(units[emptyTruck.UnitType].MoveAnimation, 0, 0) } };
+                _sprites.Apply([emptyVariant], 0, (int)Math.Ceiling(rate / 12d), rate);
+                var wheel = SpriteFrame(hull, "units");
+                Check(Mathf.IsEqualApprox(wheel.X, 3 * wheel.Z), "The supply truck did not reach the second wheel frame.");
+                Check(!_sprites.Node.GetChildren().OfType<MultiMeshInstance3D>().Any(n =>
+                    n.Multimesh.VisibleInstanceCount > 0 && n.Multimesh.Mesh.SurfaceGetMaterial(0) is ShaderMaterial material &&
+                    material.GetShaderParameter("sprite_texture").AsGodotObject() is Texture2D texture &&
+                    texture.ResourcePath.EndsWith("/" + loaded + ".png", StringComparison.Ordinal)),
+                    "An empty supply truck still drew its loaded bed.");
+                float emptyHeight = IsometricBatch(empty, "units").Multimesh.Buffer[7];
+                Check(emptyHeight < IsometricBatch(cab, "units").Multimesh.Buffer[7] &&
+                    emptyHeight > IsometricBatch(hull, "units").Multimesh.Buffer[7],
+                    "The empty cargo bed must sit between the deck and the cab from the front.");
+                _sprites.Apply([loadedTruck], 1, 0, rate);
+                Check(_sprites.SpriteCount == 3 &&
+                    IsometricBatch(loaded, "units").Multimesh.Buffer[7] > IsometricBatch(cab, "units").Multimesh.Buffer[7],
+                    "The loaded cargo bed must replace the empty bed and cover the deck from the rear.");
+                CheckAnchor(hull, loadedTruck, "body", "units");
+                CheckAnchor(cab, loadedTruck, "cab", "units");
+
+                var salvoTruck = Truck(204, "mlrs", 64, 77, north, north);
+                var cruiseTruck = Truck(205, "tomahawk", 70, 71, south, south);
+                var effects = OpenRTS.Content.EffectCatalog.Load(_manifest.Effects);
+                foreach (var (truck, file, effectId) in new[] { (salvoTruck, salvo, "salvo-rocket"), (cruiseTruck, rail, "cruise-missile") })
+                {
+                    var frames = new System.Collections.Generic.HashSet<Vector4>();
+                    for (int direction = 0; direction < 32; direction++)
+                    {
+                        float yaw = direction * MathF.Tau / 32;
+                        var aim = new FacingDirection((int)(MathF.Sin(yaw) * 1024), (int)(-MathF.Cos(yaw) * 1024));
+                        _sprites.Apply([truck with { Presentation = truck.Presentation with
+                            { WeaponFacing = aim, PreviousWeaponFacing = aim } }], 1, 0, rate);
+                        frames.Add(SpriteFrame(file, "units"));
+                    }
+                    Check(frames.Count == 32, file + " did not select 32 independent mount facings.");
+                    var style = effects.Weapons[effectId];
+                    var launch = _combatEffects!.LaunchVisual(truck.UnitType, 0,
+                        new(1, truck.Id, truck.Current, north, east), style, Vector3.Right);
+                    var expected = new Vector3(truck.Current.X / 1024f + 0.58f, 1.019f, truck.Current.Y / 1024f + 0.56f);
+                    if (style.MountedRocket is not null)
+                        expected = new(truck.Current.X / 1024f - 0.94f, 0.994f, truck.Current.Y / 1024f + 0.56f);
+                    Check(launch.HasValue, file + " did not publish a visual launch point.");
+                    var (flightDirection, center) = launch!.Value;
+                    var anchor = style.MountedRocket is null ? center : center - flightDirection * (float)style.Size;
+                    Check(_camera!.UnprojectPosition(_combatEffects.Node.ToGlobal(anchor)).DistanceTo(_camera.UnprojectPosition(expected)) < 0.05f,
+                        file + " did not align its projectile with the visible mount.");
+                }
+                _sprites.Apply(poses, 1, tick, rate, weapons);
+                return [builder, emptyTruck, loadedTruck, salvoTruck, cruiseTruck];
+            }
+
+            EntityPose[] CheckSpecialistTrucks()
+            {
+                var units = _catalog!.Units.ToList();
+                var north = FacingDirection.North;
+                var east = FacingDirection.FromQuarterTurns(1);
+                var south = FacingDirection.FromQuarterTurns(2);
+                EntityPose DisplayTruck(int index, string id, int x, int y, FacingDirection body, FacingDirection aim) =>
+                    new(new((uint)(220 + index)), units.FindIndex(type => type.Id == id), new(x * 512, y * 512), new(x * 512, y * 512),
+                        new(1, body, body, aim, aim, new(0, 0, 0), AnimationPlayback.None, 0));
+
+                var stealthTruck = DisplayTruck(0, "stealth-truck", 62, 71, south, south) with
+                    { Emitter = new(8192, 6144, 0, 0, false, true) };
+                _sprites.Apply([stealthTruck], 1, 0, rate);
+                var emitterAtRest = SpriteFrame("military-truck-stealth-rotor", "units");
+                _sprites.Apply([stealthTruck], 1, rate / 2, rate);
+                Check(SpriteFrame("military-truck-stealth-rotor", "units") != emitterAtRest,
+                    "Deployed mobile stealth rotor did not spin.");
+                _sprites.Apply([stealthTruck with { Emitter = stealthTruck.Emitter with { Moving = true } }], 1, rate / 2, rate);
+                Check(SpriteFrame("military-truck-stealth-rotor", "units") == emitterAtRest,
+                    "The mobile stealth rotor must stop while driving.");
+
+                var shieldTruck = DisplayTruck(1, "shield-truck", 68, 65, north, north);
+                _sprites.Apply([shieldTruck], 1, 0, rate);
+                Check(_sprites.SpriteCount == 3 && IsometricBatch("military-truck-shield", "units").Multimesh.VisibleInstanceCount == 1,
+                    "The mobile shield generator did not draw its shared chassis and projector.");
+
+                var scud = DisplayTruck(2, "scud", 66, 77, south, east);
+                var cruise = DisplayTruck(3, "tomahawk", 72, 71, north, north);
+                _sprites.Apply([scud], 1, 0, rate);
+                var frame = SpriteFrame("military-truck-scud", "units");
+                _sprites.Apply([scud with { Presentation = scud.Presentation with { WeaponFacing = north, PreviousWeaponFacing = north } }], 1, 0, rate);
+                Check(SpriteFrame("military-truck-scud", "units") == frame, "SCUD deck yaw must ignore weapon aim.");
+                _sprites.Apply([scud with { Presentation = scud.Presentation with { BodyFacing = east, PreviousBodyFacing = east } }], 1, 0, rate);
+                Check(SpriteFrame("military-truck-scud", "units") != frame, "SCUD deck must turn with the chassis.");
+                _sprites.Apply(poses, 1, tick, rate, weapons);
+                return [stealthTruck, shieldTruck, scud with { WeaponCount = 1 }, cruise with { WeaponOffset = 1, WeaponCount = 1 }];
+            }
+
             void CheckDoor(EntityPose pose, string file, uint state, int rows, int firstRow = 0)
             {
                 int door = _catalog.Units[pose.UnitType].AnimationIndex("door");
@@ -314,19 +611,19 @@ public partial class Sandbox
                 }
             }
 
-            void CheckAnchor(string file, EntityPose pose, string partId)
+            void CheckAnchor(string file, EntityPose pose, string partId, string category = "buildings")
             {
-                var pivot = SpriteScreenPivot(file, pose, partId);
+                var pivot = SpriteScreenPivot(file, pose, partId, category);
                 var ground = new Vector3(pose.Current.X, pose.Current.Elevation, pose.Current.Y) / WorldPosition.UnitsPerCell;
                 float error = pivot.DistanceTo(_camera!.UnprojectPosition(ground));
                 Check(error < 0.05f, $"{file}.{partId} at quarter turn {pose.QuarterTurns} missed its ground anchor by {error:F2} pixels.");
             }
 
-            Vector2 SpriteScreenPivot(string file, EntityPose pose, string partId)
+            Vector2 SpriteScreenPivot(string file, EntityPose pose, string partId, string category = "buildings")
             {
                 var model = _modelCatalog!.Models[_catalog!.Presentations[pose.UnitType].Model!];
                 var part = model.Parts.Single(p => p.Id == partId);
-                var sprite = IsometricBatch(file).Multimesh.Buffer;
+                var sprite = IsometricBatch(file, category).Multimesh.Buffer;
                 float x = (float)part.PivotX - 0.5f, z = (float)part.PivotY - 0.5f;
                 var pivot = new Vector3(sprite[3] + x * sprite[0] + z * sprite[2],
                     sprite[7] + x * sprite[4] + z * sprite[6], sprite[11] + x * sprite[8] + z * sprite[10]);

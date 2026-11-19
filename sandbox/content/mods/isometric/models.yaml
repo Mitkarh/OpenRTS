@@ -4,6 +4,285 @@ iso-infantry-rifle:
 
 iso-tank:
   Inherits: tank
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/units/isometric/medium-tank-hull.tres
+        Size: [3.43796, 3.43796]
+        Pivot: [0.59554, 0.59554]
+        Facings: 32
+      turret:
+        Resource: res://resources/units/isometric/medium-tank-turret.tres
+        Size: [3.41606, 3.43796]
+        Pivot: [0.76603, 0.76752]
+        Offset: [0, 0]
+        -Muzzle:
+        MuzzleLocal: [0, 0.917, -1.474]
+        Facings: 32
+    Animations:
+      move: { Sequence: travel, Parts: [body], Bob: 0 }
+      fire: { Sequence: stand, Parts: [turret], Recoil: 0, Flash: 0.38 }
+
+iso-tank-mixed:
+  Inherits: tank
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/units/isometric/medium-tank-hull.tres
+        Size: [3.43796, 3.43796]
+        Pivot: [0.59554, 0.59554]
+        Facings: 32
+      turret:
+        Parent: body
+        Resource: res://resources/buildings/isometric/bunker-mixed-turret.tres
+        Size: [3.41606, 3.43796]
+        Pivot: [0.76603, 0.76752]
+        Offset: [0, 0]
+        Muzzle: [0.32, 0.31]
+        Facings: 16
+        Layer: 3
+    Animations:
+      move: { Sequence: travel, Parts: [body], Bob: 0 }
+      fire: { Sequence: stand, Parts: [turret], Recoil: 0, Flash: 0.38 }
+      missiles: { Sequence: stand, Parts: [turret], Recoil: 0, Flash: 0.38 }
+
+^iso-apc-hull:
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/units/isometric/tracked-apc-hull.tres
+        Size: [3.63504, 3.63504]
+        Pivot: [0.61747, 0.61747]
+        Facings: 32
+    Animations:
+      move: { Sequence: travel, Parts: [body], Bob: 0 }
+
+iso-apc-upgradable:
+  Inherits: apc-upgradable
+  Inherits@hull: ^iso-apc-hull
+  Model:
+    Parts:
+      turret:
+        Resource: res://resources/units/isometric/tracked-apc-turret.tres
+        Size: [2.03650, 2.03650]
+        Pivot: [0.91935, 0.91935]
+        Offset: [0, -0.246]
+        -Muzzle:
+        MuzzleLocal: [0.042, 1.098, -0.563]
+        Facings: 32
+      rocket:
+        Resource: res://resources/units/isometric/tracked-apc-missiles.tres
+        Size: [1.83942, 1.83942]
+        Pivot: [0.91071, 0.91071]
+        Offset: [0, -0.246]
+        -Muzzle:
+        MuzzleLocal: [0, 1.116, -0.210]
+        Facings: 32
+      cannon:
+        Resource: res://resources/units/isometric/tracked-apc-cannon.tres
+        Size: [2.18978, 2.18978]
+        Pivot: [0.92500, 0.92500]
+        Offset: [0, -0.246]
+        -Muzzle:
+        MuzzleLocal: [0, 1.125, -0.675]
+        Facings: 32
+    Animations:
+      fire:
+        {
+          Sequence: stand,
+          Parts: [turret, rocket, cannon],
+          Recoil: 0,
+          Flash: 0.35,
+        }
+
+iso-apc-missiles:
+  Inherits: apc-missiles
+  Inherits@hull: ^iso-apc-hull
+  Model:
+    Parts:
+      turret:
+        Resource: res://resources/units/isometric/tracked-apc-missiles.tres
+        Size: [1.83942, 1.83942]
+        Pivot: [0.91071, 0.91071]
+        Offset: [0, -0.246]
+        -Muzzle:
+        MuzzleLocal: [0, 1.116, -0.210]
+        Facings: 32
+    Animations:
+      fire: { Sequence: stand, Parts: [turret], Recoil: 0, Flash: 0.40 }
+
+^iso-truck-hull:
+  Model:
+    Parts:
+      body:
+        Resource: res://resources/units/isometric/military-truck-hull.tres
+        Size: [3.70073, 3.70073]
+        Pivot: [0.60651, 0.60651]
+        Facings: 32
+      cab:
+        Parent: body
+        Resource: res://resources/units/isometric/military-truck-cab.tres
+        Size: [3.48175, 3.48175]
+        Pivot: [0.67610, 0.67610]
+        Facings: 32
+        Layer: 2
+    Animations:
+      move: { Sequence: travel, Parts: [body], Bob: 0 }
+
+iso-engineer:
+  Inherits: engineer
+  Inherits@hull: ^iso-truck-hull
+  Model:
+    Parts:
+      crane:
+        Parent: body
+        Resource: res://resources/units/isometric/military-truck-crane.tres
+        Size: [2.69343, 2.69343]
+        Pivot: [0.93902, 0.93902]
+        Offset: [0, 0.56]
+        Facings: 32
+        Facing: Weapon
+        Mount: main
+        AimAtConstruction: true
+        Layer: 3
+        FarLayer: 1
+    Animations:
+      idle: { Sequence: stand, Parts: [body, cab, crane] }
+      repair: { Sequence: stand, Parts: [crane], Flash: 0 }
+
+iso-supply-truck:
+  Inherits: supply-truck
+  Inherits@hull: ^iso-truck-hull
+  Model:
+    Parts:
+      empty:
+        Parent: body
+        Resource: res://resources/units/isometric/military-truck-cargo-empty.tres
+        Size: [2.51825, 2.51825]
+        Pivot: [0.78696, 0.78696]
+        Offset: [0, 0.56]
+        Facings: 32
+        Layer: 3
+        FarLayer: 1
+      loaded:
+        Parent: body
+        Resource: res://resources/units/isometric/military-truck-cargo-loaded.tres
+        Size: [2.62774, 2.62774]
+        Pivot: [0.79583, 0.79583]
+        Offset: [0, 0.56]
+        Facings: 32
+        Layer: 3
+        FarLayer: 1
+    Animations:
+      idle: { Sequence: stand, Parts: [body, cab, empty, loaded] }
+      move: { Sequence: travel, Parts: [body] }
+
+iso-salvo-carrier:
+  Inherits: salvo-carrier
+  Inherits@hull: ^iso-truck-hull
+  Model:
+    Parts:
+      turret:
+        Resource: res://resources/units/isometric/military-truck-mlrs.tres
+        Size: [2.36496, 2.36496]
+        Pivot: [0.89352, 0.89352]
+        Offset: [0, 0.56]
+        Facings: 32
+        SpriteRotation: 0
+        Layer: 3
+        FarLayer: 1
+        -Muzzle:
+        MuzzleLocal: [0, 1.019, -0.58]
+    Animations:
+      idle: { Sequence: stand, Parts: [body, cab, turret] }
+      fire: { Sequence: stand, Parts: [turret], Recoil: 0, Flash: 0.26 }
+
+iso-cruise-carrier:
+  Inherits: cruise-carrier
+  Inherits@hull: ^iso-truck-hull
+  Model:
+    Parts:
+      turret:
+        Resource: res://resources/units/isometric/military-truck-tomahawk.tres
+        Size: [1.90511, 1.90511]
+        Pivot: [0.91379, 0.91379]
+        Offset: [0, 0.56]
+        Facings: 32
+        Layer: 3
+        FarLayer: 1
+        -Muzzle:
+        MuzzleLocal: [0, 0.994, 0.94]
+    Animations:
+      idle: { Sequence: stand, Parts: [body, cab, turret] }
+      fire: { Sequence: stand, Parts: [turret], Recoil: 0, Flash: 0 }
+
+iso-stealth-truck:
+  Inherits: ^sprite
+  Inherits@hull: ^iso-truck-hull
+  Model:
+    Parts:
+      cab: { Layer: 3 }
+      deck:
+        Parent: body
+        Resource: res://resources/units/isometric/military-truck-stealth.tres
+        Size: [2.49635, 2.49635]
+        Pivot: [0.78509, 0.78509]
+        Offset: [0, 0.56]
+        Facings: 32
+        Layer: 4
+        FarLayer: 1
+      rotor:
+        Parent: body
+        Resource: res://resources/units/isometric/military-truck-stealth-rotor.tres
+        Size: [2.12409, 2.12409]
+        Pivot: [0.92268, 0.92268]
+        Offset: [0, 0.56]
+        Facings: 32
+        Spin: 140
+        EmitterSpin: true
+        Layer: 5
+        FarLayer: 2
+    Animations:
+      idle: { Sequence: stand, Parts: [body, cab, deck, rotor] }
+      fire: { Sequence: stand, Parts: [rotor] }
+
+iso-shield-truck:
+  Inherits: ^sprite
+  Inherits@hull: ^iso-truck-hull
+  Model:
+    Parts:
+      deck:
+        Parent: body
+        Resource: res://resources/units/isometric/military-truck-shield.tres
+        Size: [2.56204, 2.54015]
+        Pivot: [0.79060, 0.79741]
+        Offset: [0, 0.56]
+        Facings: 32
+        Layer: 3
+        FarLayer: 1
+    Animations:
+      idle: { Sequence: stand, Parts: [body, cab, deck] }
+
+iso-ballistic-carrier:
+  Inherits: ballistic-carrier
+  Inherits@hull: ^iso-truck-hull
+  Model:
+    Parts:
+      deck:
+        Parent: body
+        Facing: Body
+        Mount: main
+        Resource: res://resources/units/isometric/military-truck-scud.tres
+        Size: [2.56204, 2.56204]
+        Pivot: [0.79060, 0.79060]
+        Offset: [0, 0.56]
+        Facings: 32
+        Layer: 3
+        FarLayer: 1
+        MuzzleLocal: [0, 1.205, 1.14]
+    Animations:
+      idle: { Sequence: stand, Parts: [body, cab, deck] }
+      fire: { Sequence: stand, Parts: [deck] }
 
 iso-power-plant:
   Inherits: power-plant
@@ -107,7 +386,13 @@ iso-bunker:
         Layer: 3
     Animations:
       idle: { Sequence: stand, Parts: [body, ruins, workfx, cannon, missiles] }
-      construct: { Sequence: stand, Parts: [body, cannon, missiles], ScaleFrom: 0.86, OpacityFrom: 0.28 }
+      construct:
+        {
+          Sequence: stand,
+          Parts: [body, cannon, missiles],
+          ScaleFrom: 0.86,
+          OpacityFrom: 0.28,
+        }
       fire: { Sequence: stand, Parts: [cannon, missiles], Flash: 0.32 }
 
 iso-stealth-generator:
@@ -152,6 +437,7 @@ iso-supply-center:
         Size: [7.33577, 7.35766]
         Pivot: [0.64478, 0.64583]
         Facings: 4
+        DrawLayer: World
       -door:
       -workfx:
     Animations:
@@ -168,6 +454,7 @@ iso-barracks:
         Size: [6.13139, 6.10949]
         Pivot: [0.64286, 0.64158]
         Facings: 4
+        DrawLayer: World
       -door:
       workfx: { Offset: [0, 0.65], Size: [0.65, 0.65] }
     Animations:
@@ -183,6 +470,7 @@ iso-factory:
         Size: [9.10949, 9.08759]
         Pivot: [0.70433, 0.70361]
         Facings: 4
+        DrawLayer: World
         HiddenWhen: [destroyed, heavy]
       heavy:
         Resource: res://resources/buildings/isometric/factory-heavy.tres
@@ -191,7 +479,6 @@ iso-factory:
         Offset: [0, 0]
         Layer: 0
         Facings: 4
-        DrawLayer: Surface
       -door:
       ruins: { Size: [5, 3], Offset: [0, -1] }
       workfx: { Offset: [0, 0.75], Size: [0.8, 0.8] }

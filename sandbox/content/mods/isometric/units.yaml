@@ -1,0 +1,9 @@
+shield-truck:
+  Inherits: ^unit
+  Health: { HP: 350, Armor: Light }
+  Movement: { Locomotor: tracked }
+  Buildable: { Ticks: 450, Cost: 1500 }
+  Presentation:
+    Model: iso-shield-truck
+    Name: Мобильный генератор щита
+    Animations: [idle, move]

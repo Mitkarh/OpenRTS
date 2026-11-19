@@ -4,6 +4,15 @@ Presentation:
   ModelOverrides:
     infantry-rifle: iso-infantry-rifle
     tank: iso-tank
+    tank-mixed: iso-tank-mixed
+    apc-upgradable: iso-apc-upgradable
+    apc-missiles: iso-apc-missiles
+    engineer: iso-engineer
+    supply-truck: iso-supply-truck
+    salvo-carrier: iso-salvo-carrier
+    cruise-carrier: iso-cruise-carrier
+    ballistic-carrier: iso-ballistic-carrier
+    stealth-truck: iso-stealth-truck
     power-plant: iso-power-plant
     headquarters: iso-radar
     crane: iso-crane

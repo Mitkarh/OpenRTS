@@ -21,4 +21,5 @@ Models:
 Effects:
   - content/effects.yaml
   - content/indirect-fire-effects.yaml
+  - content/rocket-sprite-effects.yaml
 Settings: [content/settings]

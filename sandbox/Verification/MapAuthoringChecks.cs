@@ -23,6 +23,7 @@ public partial class MapAuthoringChecks : Node
             CheckDiagonalCliffMap();
             CheckAircraftOnReliefMaps();
             CheckIndirectFireMap();
+            CheckIndirectFireMap(isometric: true);
             GD.Print($"OPENRTS_AUTHORING_CHECKS:{_checks} passed"); GetTree().Quit();
         }
         catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
@@ -85,11 +86,11 @@ public partial class MapAuthoringChecks : Node
             after.DataFingerprint != before.DataFingerprint, "Visual styling of the upper triangle changed gameplay.");
     }
 
-    private void CheckIndirectFireMap()
+    private void CheckIndirectFireMap(bool isometric = false)
     {
         var root = GD.Load<PackedScene>("res://examples/maps/IndirectFire.tscn").Instantiate<OpenRtsMap2D>();
         AddChild(root);
-        var manifest = GameManifest.Load(ProjectSettings.GlobalizePath(root.ContentManifest));
+        var manifest = GameManifest.Load(ProjectSettings.GlobalizePath(isometric ? "res://isometric-game.yaml" : root.ContentManifest));
         var catalog = manifest.LoadUnits();
         var compiled = MapCompiler.Compile(MapSceneExtractor2D.Extract(root), catalog);
         var map = MapCompiler.Read(new("indirect-fire", compiled.Write()), catalog).Map;
@@ -101,10 +102,14 @@ public partial class MapAuthoringChecks : Node
         var rounds = new ProjectilePose[128];
         var actors = new EntityPose[world.Count];
         var mounts = new WeaponPose[world.WeaponCount];
-        var batches = view.Node.GetChildren().OfType<MultiMeshInstance3D>()
+        var textures = view.Node.GetChildren().OfType<MultiMeshInstance3D>()
             .Select(batch => (batch.Multimesh, Texture: (batch.Multimesh.Mesh.SurfaceGetMaterial(0) as StandardMaterial3D)?.AlbedoTexture))
             .Where(batch => !string.IsNullOrEmpty(batch.Texture?.ResourcePath))
             .ToDictionary(batch => batch.Texture!.ResourcePath, batch => batch.Multimesh);
+        var batches = new[] { "howitzer", "salvo-rocket", "cruise-missile", "ballistic-missile" }.ToDictionary(
+            id => id, id => effects.Weapons[id].ProjectileModel is { } model
+                ? view.Node.GetNode<MultiMeshInstance3D>(model.GetFile().GetBaseName()).Multimesh
+                : textures[effects.Weapons[id].ProjectileTexture!]);
         var smoke = view.Node.GetNode<MultiMeshInstance3D>("RocketSmoke").Multimesh;
         var flashes = view.Node.GetNode<MultiMeshInstance3D>("Impacts").Multimesh;
         var kinds = new HashSet<ProjectileTrajectory>();
@@ -131,7 +136,7 @@ public partial class MapAuthoringChecks : Node
                 var effect = effects.Weapons[weapon.Id];
                 if (effect.MountedRocket is null) continue;
                 var channel = mounts[actor.WeaponOffset];
-                var batch = batches[effect.ProjectileTexture!];
+                var batch = batches[weapon.Id];
                 if (channel.WindupEndTick == world.Tick + 1)
                 {
                     Check(batch.VisibleInstanceCount == 1, weapon.Id + ": ready projectile missing during windup.");
@@ -148,7 +153,7 @@ public partial class MapAuthoringChecks : Node
             {
                 var weapon = catalog.Units[shot.UnitType].Weapons[shot.Mount].Weapon;
                 var effect = effects.Weapons[weapon.Id];
-                var batch = batches[effect.ProjectileTexture!];
+                var batch = batches[weapon.Id];
                 if (shot.Current.Elevation > 1536) kinds.Add(weapon.Trajectory);
                 if (!checkedMuzzle && shot.Departure.Tick == world.Tick && weapon.Id == "howitzer")
                 {

@@ -10,7 +10,7 @@ public sealed record ModelPart(string Id, int Parent, string Resource, ModelFaci
     double Width, double Height, double PivotX, double PivotY, double OffsetX, double OffsetY, int Layer, string? Mount = null, ReadOnlyCollection<string>? VisibleWhen = null, ReadOnlyCollection<string>? HiddenWhen = null,
     double Spin = 0, string? SpinWhen = null, string? LoopWhen = null, string? LoopAnimation = null, int Facings = 0,
     ModelDrawLayer? DrawLayer = null, bool EmitterSpin = false, double SpriteRotation = 0, (double X, double Y)? Muzzle = null,
-    bool AimAtConstruction = false);
+    bool AimAtConstruction = false, (double X, double Y, double Z)? MuzzleLocal = null, int? FarLayer = null);
 public sealed record ModelAnimation(string Sequence, ReadOnlyCollection<string> Parts, double Bob, double Recoil, double Flash, double ScaleFrom = 1, double OpacityFrom = 1, double SlideX = 0, double SlideY = 0, ModelFacing? Facing = null);
 public sealed record ModelState(double Red, double Green, double Blue, double Scale, double Opacity, double Pulse = 0);
 public sealed record ModelDefinition(string Id, ReadOnlyCollection<ModelPart> Parts,
@@ -49,16 +49,25 @@ public sealed class ModelCatalog
                     if (part.Parent is not null && !options.Parts.ContainsKey(part.Parent)) throw node.Error(id + ".Model.Parts." + name, "Unknown parent: " + part.Parent);
                     int parent = part.Parent is null ? -1 : ordered.FindIndex(p => p.Id == part.Parent);
                     if (part.Parent is not null && parent < 0) continue;
+                    if (part.FarLayer.HasValue && parent < 0)
+                        throw node.Error(id + ".Model.Parts." + name + ".FarLayer", "A far layer requires a parent.");
                     if (part.DrawLayer is { } layer && !Enum.IsDefined(layer))
                         throw node.Error(id + ".Model.Parts." + name + ".DrawLayer", "Unknown sprite layer.");
                     ValidateVector(part.Size, 0.01, 32, "Size"); ValidateVector(part.Pivot, 0, 1, "Pivot"); ValidateVector(part.Offset, -32, 32, "Offset");
                     if (part.Muzzle is { } muzzle)
-                    {
                         ValidateVector(muzzle, 0, 1, "Muzzle");
-                        if (part.Mount is null || ordered.Any(other => other.Mount == part.Mount && other.Muzzle.HasValue))
+                    if (part.MuzzleLocal is { } localMuzzle &&
+                        (localMuzzle.Length != 3 || localMuzzle.Any(v => !double.IsFinite(v) || Math.Abs(v) > 32)))
+                        throw node.Error(id + ".Model.Parts." + name + ".MuzzleLocal", "Requires three finite values in -32..32.");
+                    if (part.Muzzle is not null || part.MuzzleLocal is not null)
+                    {
+                        if (part.Muzzle is not null && part.MuzzleLocal is not null)
+                            throw node.Error(id + ".Model.Parts." + name, "Use one muzzle coordinate system per part.");
+                        if (part.Mount is null || ordered.Any(other => other.Mount == part.Mount && (other.Muzzle.HasValue || other.MuzzleLocal.HasValue)))
                             throw node.Error(id + ".Model.Parts." + name + ".Muzzle", "Each muzzle must name a distinct Mount.");
                     }
-                    ordered.Add(new(name, parent, part.Resource, part.Facing, part.Size[0], part.Size[1], part.Pivot[0], part.Pivot[1], part.Offset[0], part.Offset[1], part.Layer, part.Mount, Array.AsReadOnly(part.VisibleWhen), Array.AsReadOnly(part.HiddenWhen), part.Spin, part.SpinWhen, part.LoopWhen, part.LoopAnimation, part.Facings, part.DrawLayer, part.EmitterSpin, part.SpriteRotation, part.Muzzle is { } point ? (point[0], point[1]) : null, part.AimAtConstruction));
+                    ordered.Add(new(name, parent, part.Resource, part.Facing, part.Size[0], part.Size[1], part.Pivot[0], part.Pivot[1], part.Offset[0], part.Offset[1], part.Layer, part.Mount, Array.AsReadOnly(part.VisibleWhen), Array.AsReadOnly(part.HiddenWhen), part.Spin, part.SpinWhen, part.LoopWhen, part.LoopAnimation, part.Facings, part.DrawLayer, part.EmitterSpin, part.SpriteRotation, part.Muzzle is { } point ? (point[0], point[1]) : null, part.AimAtConstruction,
+                        part.MuzzleLocal is { } local ? (local[0], local[1], local[2]) : null, part.FarLayer));
                     pending.RemoveAt(i--); progress = true;
                 }
                 if (!progress) throw node.Error(id + ".Model.Parts", "Part parent cycle.");
@@ -133,6 +142,7 @@ public sealed class ModelCatalog
         public string? Parent { get; set; }
         public string? Mount { get; set; }
         public double[]? Muzzle { get; set; }
+        public double[]? MuzzleLocal { get; set; }
         public string[] VisibleWhen { get; set; } = [];
         public string[] HiddenWhen { get; set; } = [];
         [Range(-720.0, 720.0)] public double Spin { get; set; }
@@ -148,6 +158,7 @@ public sealed class ModelCatalog
         public double[] Pivot { get; set; } = [0.5, 0.5];
         public double[] Offset { get; set; } = [0, 0];
         [Range(0, 16)] public int Layer { get; set; }
+        [Range(0, 16)] public int? FarLayer { get; set; }
         public ModelDrawLayer? DrawLayer { get; set; }
     }
     private sealed class AnimationOptions

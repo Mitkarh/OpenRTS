@@ -13,7 +13,9 @@
 | Бункер | `infrastructure/bunker.glb` | Шестиугольный корпус OpenRTS с одним узлом `TurretMount`. Исходник Blender в `Assets/buildings/infrastructure/bunker`. |
 | Стелс-генератор и генератор щита | `infrastructure/stealth-generator.glb`, `infrastructure/shield-generator.glb` | Модели OpenRTS по концептам инфраструктуры. Исходники Blender в `Assets/buildings/infrastructure`. |
 | Нефтепереработка | `kenney/refinery.glb` | `building-c` из [Kenney City Kit (Industrial) 2.0](https://kenney.nl/assets/city-kit-industrial). GLB использует общий `Textures/colormap.png`. |
-| Танк и гусеничный БТР | `quaternius/tank.glb`, `apc.glb` | `Tank2.glb` и `Tank3.glb` из [Animated Tanks Pack](https://quaternius.com/packs/animatedtanks.html). Взяты из [публичного зеркала GLB](https://github.com/trebeljahr/quaternius-showcase/tree/main/public/glb/tank_pack). |
+| Средний танк | `vehicles/MediumTank.tscn` | Корпус и башня OpenRTS в отдельных GLB. Исходник Blender и рецепт в соседнем репозитории `Assets/vehicles/medium-tank`. |
+| Гусеничный БТР | `vehicles/TrackedAPC.tscn` | Корпус и башня OpenRTS в отдельных GLB. Исходник Blender и рецепт в соседнем репозитории `Assets/vehicles/tracked-apc`. |
+| Грузовик 6×6 | `vehicles/EngineeringTruck.tscn`, `SupplyTruckEmpty.tscn`, `SupplyTruckLoaded.tscn`, `SalvoTruck.tscn`, `CruiseTruck.tscn` | Общее шасси с анимацией колёс и пять сменных модулей. Сборки доступны в `AssetShowcase.tscn`. Исходник Blender и рецепт в соседнем репозитории `Assets/vehicles/military-truck`. |
 | Инженерная машина | `quaternius/engineer.glb` | `Tank4.glb` из того же зеркала. В Blender 5.3 удалён меш `Tank_Gun`, применён масштаб оставшегося `Tank_Turret` и переэкспортированы четыре клипа гусениц. [Исходник Blender](sources/sandbox3d-engineer.blend) · [Папка оригинальных .blend](https://drive.google.com/drive/folders/1MsH24X-roZs9c_UILBbchk2Ue5cMeE9A). |
 | Пехотинец | `quaternius/Infantry.tscn` | Манекен и 46 клипов из [Universal Animation Library Standard](https://store.godotengine.org/asset/quaternius/universal-animation-library/). [Пистолет Quaternius](https://poly.pizza/m/J3i9KDQ3kt) закреплён на `DEF-hand.R`. При запуске сцена проигрывает `Pistol_Idle`. |
 
@@ -31,6 +33,12 @@
 | `pistol.glb` | `4622ab2909aa0f4e88b74a13f52f9e28183a6ff5fca5896fc7e98d44008f2148` |
 
 ## 2D-полигон
+
+У среднего танка в изометрии по 32 ракурса корпуса и башни, две фазы гусениц в движении и командные панели. Поле `MuzzleLocal` задаёт точку вспышки в единицах сцены относительно опорной точки. Она поворачивается вместе с направлением текущего кадра башни. [Корпус](../../sandbox/assets/units/isometric/medium-tank-hull.png) · [Башня](../../sandbox/assets/units/isometric/medium-tank-turret.png)
+
+Гусеничный БТР использует корпус с двумя фазами гусениц, общую точку крепления и три взаимозаменяемые башни. Корпус и каждый модуль имеют по 32 направления. Переднее крепление поворачивается вместе с корпусом, башня следует направлению наведения. [Атлас корпуса](../../sandbox/assets/units/isometric/tracked-apc-hull.png) · [Пулемётная башня](../../sandbox/assets/units/isometric/tracked-apc-turret.png) · [Ракетная башня](../../sandbox/assets/units/isometric/tracked-apc-missiles.png) · [Пушечная башня](../../sandbox/assets/units/isometric/tracked-apc-cannon.png)
+
+Модульный грузовик использует общее шасси для строителя, снабжения, MLRS и Tomahawk. У всех деталей 32 направления, у шасси две фазы движения колёс. Кабина и палуба имеют отдельные спрайты для перекрытия задних модулей. Кузов переключается по состоянию `loaded`. Поворот крана следует за стройплощадкой или ремонтом, установки вращаются по направлению оружейного крепления. `FarLayer` задаёт слой детали, когда её точка крепления находится за корпусом относительно камеры. Для готовой ракеты Tomahawk `MuzzleLocal` задаёт опору хвоста на направляющей. [Изометрические модели](../../sandbox/content/mods/isometric/models.yaml)
 
 Изометрические электростанция, радар, кран, вертолётная площадка и аэродром имеют по четыре ракурса корпуса. Кран и радар используют общее основание. Антенна и стрела крана используют отдельные атласы по 16 направлений. Радар вращается во времени симуляции. Для крана адаптер берёт направление из цели приказа строительства или из ремонтного крепления и переключает кадры подъёма крюка. [Определения моделей](../../sandbox/content/mods/isometric/models.yaml)
 

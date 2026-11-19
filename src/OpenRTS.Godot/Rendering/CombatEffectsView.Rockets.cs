@@ -7,6 +7,7 @@ namespace OpenRTS.Godot.Rendering;
 public sealed partial class CombatEffectsView
 {
     private const int MaxSmokePuffs = 4096;
+    private const uint ProjectileLightingLayer = 1u << 19;
     private readonly record struct SmokePuff(Vector3 Position, float Size, double Start, int Duration);
 
     private readonly bool _hasMountedRockets;
@@ -24,37 +25,48 @@ public sealed partial class CombatEffectsView
                 if (channel.Reloading) continue;
                 var weapon = mounts[channel.Mount].Weapon;
                 var style = _effects.Weapons[weapon.Id];
-                if (style.MountedRocket is not { } mount || style.ProjectileTexture is not { } path) continue;
+                if (style.MountedRocket is not { } mount) continue;
                 float phase = channel.WindupEndTick > 0 && weapon.WindupTicks > 0
                     ? Mathf.SmoothStep(0, 1, 1 - (channel.WindupEndTick - tick - alpha) / weapon.WindupTicks) : 0;
-                var body = actor.Presentation;
-                var (direction, center) = MountedRocket(mount, Position(actor.Previous).Lerp(Position(actor.Current), alpha),
-                    SpriteWorldView.Angle(body.PreviousBodyFacing, body.BodyFacing, alpha),
+                var view = actor.Presentation;
+                var (direction, center) = MountedRocket(actor.UnitType, channel.Mount, mount,
+                    Position(actor.Previous).Lerp(Position(actor.Current), alpha),
+                    SpriteWorldView.Angle(view.PreviousBodyFacing, view.BodyFacing, alpha),
                     SpriteWorldView.Angle(channel.PreviousFacing, channel.Facing, alpha), phase, (float)style.Size);
-                ProjectileSprite(path, center, direction, (float)style.Size, eye);
+                ProjectileVisual(style, center, direction, eye);
             }
         }
     }
 
-    private static (Vector3 Direction, Vector3 Center) MountedRocket(MountedRocketStyle style, Vector3 position,
-        float body, float mount, float phase, float halfLength)
+    private (Vector3 Direction, Vector3 Center) MountedRocket(int unit, int mountIndex, MountedRocketStyle style,
+        Vector3 position, float body, float mount, float phase, float halfLength)
     {
         float yaw = style.FollowsBody ? body : mount;
+        // A mounted projectile pivots around its tail until departure.
+        var socket = MountVisual(unit, mountIndex, body, yaw, spatialOnly: true);
+        if (socket is { } local) yaw = local.Angle;
         var horizontal = new Vector3(MathF.Sin(yaw), 0, -MathF.Cos(yaw));
-        var tail = position + new Vector3(MathF.Sin(body), 0, -MathF.Cos(body)) * (float)style.ChassisOffset +
+        var tail = socket is { } anchor ? position + anchor.Point : position +
+            new Vector3(MathF.Sin(body), 0, -MathF.Cos(body)) * (float)style.ChassisOffset +
             horizontal * (float)style.TailOffset + Vector3.Up * (float)style.Height;
         float pitch = Mathf.DegToRad((float)style.LaunchPitch * phase);
         var direction = horizontal * MathF.Cos(pitch) + Vector3.Up * MathF.Sin(pitch);
         return (direction, tail + direction * halfLength);
     }
 
-    private (Vector3 Direction, Vector3 Center)? LaunchVisual(int unit, int mount, ProjectileDeparture launch, EffectStyle style, Vector3 direction)
+    internal (Vector3 Direction, Vector3 Center)? LaunchVisual(int unit, int mount, ProjectileDeparture launch, EffectStyle style, Vector3 direction)
     {
         float body = SpriteWorldView.Angle(launch.BodyFacing, launch.BodyFacing, 1);
         float weapon = SpriteWorldView.Angle(launch.MountFacing, launch.MountFacing, 1);
         var origin = Position(launch.Origin);
         if (style.MountedRocket is { } rocket)
-            return MountedRocket(rocket, origin, body, weapon, 1, (float)style.Size);
+            return MountedRocket(unit, mount, rocket, origin, body, weapon, 1, (float)style.Size);
+        var socket = MountVisual(unit, mount, body, weapon, spatialOnly: false);
+        return socket is { } anchor ? (direction, origin + anchor.Point) : null;
+    }
+
+    private (Vector3 Point, float Angle)? MountVisual(int unit, int mount, float body, float weapon, bool spatialOnly)
+    {
         if (_models[unit] is not { } model) return null;
         var mountId = _units.Units[unit].Weapons[mount].Id;
         Span<Vector2> pivots = stackalloc Vector2[model.Parts.Count];
@@ -71,19 +83,58 @@ public sealed partial class CombatEffectsView
             angles[i] = angle;
             var offset = new Vector2((float)part.OffsetX, (float)part.OffsetY);
             pivots[i] = part.Parent < 0 ? offset.Rotated(body) : pivots[part.Parent] + offset.Rotated(angles[part.Parent]);
-            if (part.Mount != mountId || part.Muzzle is not { } point) continue;
+            if (part.Mount != mountId) continue;
+            if (part.MuzzleLocal is { } localMuzzle)
+            {
+                var tip = pivots[i] + new Vector2((float)localMuzzle.X, (float)localMuzzle.Z).Rotated(angle);
+                return (new Vector3(tip.X, (float)localMuzzle.Y, tip.Y), angle);
+            }
+            if (spatialOnly || part.Muzzle is not { } point) continue;
             var local = new Vector2((float)((point.X - part.PivotX) * part.Width), (float)((point.Y - part.PivotY) * part.Height));
             float drawAngle = (part.Facings == 0 ? angle : 0) + Mathf.DegToRad((float)part.SpriteRotation);
             var muzzle = pivots[i] + local.Rotated(drawAngle);
-            return (direction, origin + new Vector3(muzzle.X, 0, muzzle.Y));
+            return (new Vector3(muzzle.X, 0, muzzle.Y), angle);
         }
         return null;
     }
 
-    private void ProjectileSprite(string path, Vector3 point, Vector3 direction, float halfLength, Vector3 eye)
+    private void AddProjectileModel(string path, float halfLength)
     {
-        var (batch, aspect) = _projectileSprites[path];
-        float length = 2 * halfLength;
+        var asset = GD.Load<PackedScene>(path) ?? throw new ArgumentException("Missing projectile model: " + path);
+        var root = asset.Instantiate<Node3D>();
+        try
+        {
+            var instances = root.FindChildren("*", "MeshInstance3D", recursive: true, owned: false);
+            var instance = root as MeshInstance3D ?? (instances.Count == 1 ? (MeshInstance3D)instances[0] : null);
+            if (instance?.Mesh is not { } mesh || instances.Count > 1 ||
+                !instance.Transform.IsEqualApprox(Transform3D.Identity) || !root.Transform.IsEqualApprox(Transform3D.Identity))
+                throw new ArgumentException("Projectile model requires one identity-transformed mesh: " + path);
+            var bounds = mesh.GetAabb();
+            if (MathF.Abs(bounds.Position.Z + halfLength) > 0.025f ||
+                MathF.Abs(bounds.End.Z - halfLength) > 0.025f)
+                throw new ArgumentException("Projectile model length must match twice Effect.Size and be centered: " + path);
+            var batch = new ColoredMeshBatch(mesh, path.GetFile().GetBaseName(), preserveMaterials: true);
+            batch.Node.Layers = ProjectileLightingLayer;
+            _projectileModels.Add(path, batch);
+            Node.AddChild(batch.Node);
+        }
+        finally { root.Free(); }
+    }
+
+    private void AddProjectileLight(Vector3 rotation, float energy) => Node.AddChild(new DirectionalLight3D
+    {
+        RotationDegrees = rotation, LightEnergy = energy, LightCullMask = ProjectileLightingLayer
+    });
+
+    private void ProjectileVisual(EffectStyle style, Vector3 point, Vector3 direction, Vector3 eye)
+    {
+        if (style.ProjectileModel is { } model)
+        {
+            _projectileModels[model].Add(point, Vector3.One, PitchBasis(direction, Vector3.Up), Colors.White);
+            return;
+        }
+        var (batch, aspect) = _projectileSprites[style.ProjectileTexture!];
+        float length = 2 * (float)style.Size;
         batch.Add(point, new(length * aspect, 1, length), PitchBasis(direction, eye), Colors.White);
     }
 
