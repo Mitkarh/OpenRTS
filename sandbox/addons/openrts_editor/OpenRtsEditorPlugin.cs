@@ -81,6 +81,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
     public override void _ExitTree()
     {
         Invalidate("Plugin disabled.");
+        Playtest?.Stop();
         CancelStroke(); ClearPreview(); _selectedTransforms.Clear();
         SceneChanged -= OnSceneChanged;
         GetUndoRedo().VersionChanged -= OnEdited;
@@ -246,6 +247,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         _lastError = null;
         Invalidate("Extracting…");
         var stop = _build = new(); int generation = _generation;
+        if (play) _playtestBuild = stop;
         string? staged = null;
         try
         {
@@ -295,6 +297,13 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
             }
             CheckInputs();
             CheckContent();
+            if (play && Playtest is { } previous)
+            {
+                previous.Stop();
+                await previous.Completion.WaitAsync(TimeSpan.FromSeconds(10), stop.Token);
+                CheckInputs();
+                CheckContent();
+            }
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
             if (sourceOnly) output = output[..^".ortmap.json".Length] + ".mapsource.json";
             else if (bundle) output = output[..^".ortmap.json".Length] + SceneMapBundle.Suffix;
@@ -318,7 +327,9 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
                 staged = null;
             }
             string resource = ProjectSettings.LocalizePath(output);
-            if (play) PlayMap(resource, contentPath, receipt!, record);
+            if (play)
+                LaunchPlaytest(resource, contentPath, receipt!, new(edited.GetInstanceId(),
+                    selectedStarts?.ToArray(), selectedStartSet, record));
             string validation = verification is not null ? $"Godot and headless agree after {verification.Tick} ticks ({verification.EntityCount} objects)." :
                 receipt is not null ? "Selected local match validated." :
                 sourceOnly ? "Structural validation only." : "Placed objects validated; starting armies are checked at match creation.";
@@ -331,6 +342,7 @@ public partial class OpenRtsEditorPlugin : EditorPlugin
         finally
         {
             if (_build == stop) _build = null;
+            if (_playtestBuild == stop) _playtestBuild = null;
             stop.Dispose();
             if (staged is not null) File.Delete(staged);
         }

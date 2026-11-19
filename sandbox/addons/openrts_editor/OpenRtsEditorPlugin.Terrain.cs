@@ -89,6 +89,7 @@ public partial class OpenRtsEditorPlugin
         _refreshTime += delta;
         if (_refreshTime < 0.15) return;
         _refreshTime = 0;
+        UpdatePlaytestControls();
         var edited = EditorInterface.Singleton.GetEditedSceneRoot();
         if (edited is OpenRtsMap2D map2D) { UpdatePreview2D(map2D); return; }
         var root = edited as OpenRtsMap;

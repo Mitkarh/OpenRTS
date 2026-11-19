@@ -54,13 +54,6 @@ public partial class OpenRtsEditorPlugin
         ["--path", ProjectSettings.GlobalizePath("res://"), "res://Main.tscn", "--", "--map=" + map, "--mod=" + mod,
             "--local-playtest=" + receipt.Write()];
 
-    private static void PlayMap(string map, string mod, LocalMapPlaytest receipt, bool record)
-    {
-        string[] args = PlayMapArguments(map, mod, receipt);
-        int process = OS.CreateProcess(OS.GetExecutablePath(), record ? [.. args, "--record-playtest"] : args);
-        if (process <= 0) throw new IOException("Godot could not start the map player.");
-    }
-
     private static async Task<SimulationReport> VerifyMap(string path, string mod, LocalMapPlaytest receipt,
         GameManifest manifest, UnitCatalog catalog, CancellationToken stop)
     {

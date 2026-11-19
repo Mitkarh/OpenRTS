@@ -11,6 +11,9 @@ using OpenRTS.Godot.Controls;
 
 public partial class Sandbox : Node3D
 {
+    internal const string PlaytestReadyLine = "OPENRTS_PLAYTEST_READY";
+    private bool _managedPlaytest, _playtestReady;
+    private Task<int>? _playtestStop;
     private SandboxSession? _session;
     private bool _networkEnded;
     private bool _fogScenario;
@@ -58,6 +61,7 @@ public partial class Sandbox : Node3D
     public override void _Ready()
     {
         bool verify = Array.Exists(OS.GetCmdlineUserArgs(), a => a == "--verify");
+        _managedPlaytest = OS.GetCmdlineUserArgs().Contains("--managed-playtest");
         bool checkBundles = false;
         try
         {
@@ -79,6 +83,7 @@ public partial class Sandbox : Node3D
                 if (arg.StartsWith("--replay-map=", StringComparison.Ordinal)) { _replayMapPath = arg[13..]; continue; }
                 if (arg.StartsWith("--replay-start-set=", StringComparison.Ordinal)) { _replaySetPath = arg[19..]; continue; }
                 if (arg == "--record-playtest") { _recordPlaytest = true; continue; }
+                if (arg == "--managed-playtest") continue;
                 if (arg == "--verify-menu") { _verifyMenu = true; continue; }
                 if (arg.StartsWith("--menu-captures=", StringComparison.Ordinal)) { _menuCaptures = arg[16..]; continue; }
                 if (arg == "--network-net3") { _networkVerifyNet3 = true; continue; }
@@ -138,8 +143,13 @@ public partial class Sandbox : Node3D
             if (replayRequested && (mapPath is not null || _skirmish || _verifySimulation) ||
                 !replayRequested && (_replayMapPath is not null || _replaySetPath is not null))
                 throw new ArgumentException("Выберите повтор и при необходимости укажите --replay-map и --replay-start-set.");
-            if (_recordPlaytest && localPlaytest is null)
-                throw new ArgumentException("Запись playtest требует проверенных параметров запуска из редактора.");
+            if ((_recordPlaytest || _managedPlaytest) && localPlaytest is null)
+                throw new ArgumentException("Запуск playtest требует проверенных параметров из редактора.");
+            if (_managedPlaytest) _playtestStop = Task.Run(() =>
+            {
+                using var input = Console.OpenStandardInput();
+                return input.ReadByte();
+            });
             if (_networkVerifyMapPath is not null && !_verifyNetwork)
                 throw new ArgumentException("--network-map is a network verification option.");
             if (localPlaytest is not null && (mapPath is null || startSetPath is not null || _skirmish || mapPath == AviationScenario.Map))
@@ -241,7 +251,7 @@ public partial class Sandbox : Node3D
         catch (Exception error)
         {
             GD.PushError(error.ToString());
-            if (checkBundles || _verifyMenu || _verifyNetwork || _verifyReplayPath is not null || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup || _verifyRamps) GetTree().Quit(1);
+            if (_managedPlaytest || checkBundles || _verifyMenu || _verifyNetwork || _verifyReplayPath is not null || verify || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup || _verifyRamps) GetTree().Quit(1);
             else AddOverlay("Ошибка загрузки контента\n" + error.Message);
         }
     }
@@ -325,6 +335,17 @@ public partial class Sandbox : Node3D
 
     public override void _Process(double delta)
     {
+        if (_playtestStop?.IsCompleted == true)
+        {
+            try
+            {
+                _playtestStop.GetAwaiter().GetResult();
+                if (_playtestReady && _recordPlaytest) SaveLocalReplay();
+                GetTree().Quit();
+            }
+            catch (Exception error) { GD.PushError(error.ToString()); GetTree().Quit(1); }
+            return;
+        }
         if (_matchSetup is not null)
         {
             UpdateMatchSetup();
@@ -374,6 +395,11 @@ public partial class Sandbox : Node3D
                 RefreshSelection(); UpdateRadarContacts(frame); UpdateConstructionView(frame); UpdateCommandPanel(frame); UpdateSelection(alpha); UpdateRtsCursor(); if (_buildings) UpdateFootprintPreview();
             }
             _obstacles?.Apply(frame.Grid);
+            if (_managedPlaytest && !_playtestReady && (!_recordPlaytest || frame.Tick > 0))
+            {
+                _playtestReady = true;
+                GD.Print(PlaytestReadyLine);
+            }
             while (_session.TryReadEvent(out var value))
             {
                 if (PlayerFog) { if (value.ForViewer(_fogViewer) is not { } filtered) continue; value = filtered; }
@@ -502,7 +528,7 @@ public partial class Sandbox : Node3D
             _session = null;
             bool verifyReconnect = _verifyNetwork && _networkVerifyReconnect && _networkVerifyRole == "join" && !_networkReconnectAttempted &&
                 _networkResume is not null && error is System.IO.IOException;
-            if ((_verifyNetwork && !verifyReconnect) || _verifyReplayPath is not null || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup || _verifyRamps) GetTree().Quit(1);
+            if (_managedPlaytest || (_verifyNetwork && !verifyReconnect) || _verifyReplayPath is not null || _verifySimulation || _verifyControls || _verifySkirmish || _verifyActions || _verifyMatchSetup || _verifyRamps) GetTree().Quit(1);
             else if (replayFailed) ShowNetworkFailure(error.Message, "Ошибка повтора");
             else if (_networkMode != 0) ShowNetworkFailure(error.Message);
             else if (_label is not null)

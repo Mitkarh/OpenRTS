@@ -39,17 +39,35 @@ public partial class Sandbox
                 InstantiateMapScene(map)!.Free();
                 GD.Print("OPENRTS_SCENEMAP_CHECK:" + path);
             }
-            else GD.Print("OPENRTS_COMPILED_MAP_CHECK:" + path);
+            else
+            {
+                CheckMapTerrainTextures(map);
+                GD.Print("OPENRTS_COMPILED_MAP_CHECK:" + path);
+            }
         }
     }
 
     internal static void CheckSceneMapDependencies(SceneMapBundle bundle)
     {
-        // Godot remaps source resources in exported packages. The export command checks the loose inputs first.
-        if (OS.HasFeature("template") || OS.HasFeature("openrts_scene_map_pack")) return;
+        // The export command checks source hashes before Godot remaps the resources.
+        bool packed = OS.HasFeature("template") || OS.HasFeature("openrts_scene_map_pack");
         foreach (var (path, sha) in bundle.Dependencies)
-            if (!Godot.FileAccess.FileExists(path) || !string.Equals(Godot.FileAccess.GetSha256(path), sha, StringComparison.OrdinalIgnoreCase))
-                throw new IOException($"Scene-map is stale or incomplete. Rebuild {bundle.Scene}. Changed: {path}.");
+        {
+            bool exists = Godot.FileAccess.FileExists(path);
+            if (!exists && !(packed && ResourceLoader.Exists(path)))
+                throw new IOException($"Scene-map {bundle.Scene} is missing dependency {path}.");
+            if (!packed && !string.Equals(Godot.FileAccess.GetSha256(path), sha, StringComparison.OrdinalIgnoreCase))
+                throw new IOException($"Scene-map is stale. Rebuild {bundle.Scene}. Changed: {path}.");
+        }
+    }
+
+    private static void CheckMapTerrainTextures(GameMap map, OpenRtsMap? root = null)
+    {
+        if (root?.DrawCompiledTerrain == false && !map.Grid.HasSurface) return;
+        foreach (string id in map.VisualIds)
+            if ((root is null || !root.VisualTextures.TryGetValue(id, out var texture) || texture is null) &&
+                !ResourceLoader.Exists("res://resources/terrain/" + id + ".tres", "Texture2D"))
+                throw new IOException($"Map {map.Id} is missing terrain texture {id}.");
     }
 
     private OpenRtsMap? InstantiateMapScene(GameMap? map)
@@ -63,11 +81,7 @@ public partial class Sandbox
         {
             if (entry is not OpenRtsMap root || root.MapId != map.Id || root.ContentManifest != bundle.Mod)
                 throw new IOException($"Scene-map entry does not match {map.Id}: {bundle.Scene}.");
-            if (root.DrawCompiledTerrain)
-                foreach (string id in map.VisualIds)
-                    if ((!root.VisualTextures.TryGetValue(id, out var texture) || texture is null) &&
-                        !ResourceLoader.Exists("res://resources/terrain/" + id + ".tres", "Texture2D"))
-                        throw new IOException($"Scene-map {map.Id} is missing terrain texture {id}.");
+            CheckMapTerrainTextures(map, root);
             return root;
         }
         catch { entry.Free(); throw; }

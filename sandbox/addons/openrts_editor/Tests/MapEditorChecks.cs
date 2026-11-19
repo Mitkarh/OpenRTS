@@ -128,9 +128,17 @@ internal static class MapEditorChecks
             await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
             await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
             Check(editor.GetEditedSceneRoot() == root, "The 3D sample was not restored for the cancellation check.");
+            var playedBundle = await plugin.BuildAsync(play: true, selectedStarts: ["west"], selectedStartSet: MapScenario.InfantryStartSet);
+            var bundleChild = plugin.Playtest!;
+            Check(playedBundle is not null && playedBundle.Path.EndsWith(SceneMapBundle.Suffix, StringComparison.Ordinal),
+                "3D playtest did not launch its bundle: " + plugin.Status);
+            await WaitForPlaytest(tree, bundleChild);
+            Check(bundleChild.State.Ready, "3D bundle did not start: " + bundleChild.Diagnostics);
             pending = plugin.BuildAsync();
             editor.SetPluginEnabled("openrts_editor", false);
             await pending;
+            Check(await bundleChild.Completion.WaitAsync(TimeSpan.FromSeconds(10)) == 0 && !bundleChild.State.Forced,
+                "Disabling the plugin did not stop its playtest cleanly: " + bundleChild.Diagnostics);
             await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
             Check(!editor.IsPluginEnabled("openrts_editor") && File.ReadAllText(path) == good, "Plugin disable did not cancel its pending job.");
             editor.SetPluginEnabled("openrts_editor", true);
@@ -216,7 +224,7 @@ internal static class MapEditorChecks
         await Check2DOperations(plugin, map, expectedShape, check);
         if (isometric)
         {
-            await CheckLocalPlaytest(plugin, map, check);
+            await CheckLocalPlaytest(plugin, map, tree, check);
             CheckPrefab2D(plugin, map, check);
         }
 
@@ -406,7 +414,14 @@ internal static class MapEditorChecks
         check(rejected, "A flipped directional visual compiled with the unflipped VisualId.");
     }
 
-    private static async Task CheckLocalPlaytest(OpenRtsEditorPlugin plugin, OpenRtsMap2D map, Action<bool, string> check)
+    private static async Task WaitForPlaytest(SceneTree tree, PlaytestProcess process)
+    {
+        var deadline = System.Diagnostics.Stopwatch.StartNew();
+        while (process.State is { Ready: false, ExitCode: null } && deadline.Elapsed < TimeSpan.FromSeconds(30))
+            await tree.ToSignal(tree, SceneTree.SignalName.ProcessFrame);
+    }
+
+    private static async Task CheckLocalPlaytest(OpenRtsEditorPlugin plugin, OpenRtsMap2D map, SceneTree tree, Action<bool, string> check)
     {
         var manifest = GameManifest.Load(ProjectSettings.GlobalizePath(map.ContentManifest));
         string path = ProjectSettings.GlobalizePath(map.CompiledPath);
@@ -451,6 +466,24 @@ internal static class MapEditorChecks
         var repeat = await plugin.BuildAsync(verify: true, selectedStarts: ["west"], selectedStartSet: set);
         check(repeat is not null && File.ReadAllText(path) == previous, "Repeating a valid match failed after the refusal.");
 
+        var launch = await plugin.BuildAsync(play: true, selectedStarts: ["west"], selectedStartSet: set);
+        check(launch is not null && plugin.Playtest is not null, "2D playtest did not launch: " + plugin.Status);
+        var first = plugin.Playtest!;
+        await WaitForPlaytest(tree, first);
+        check(first.State.Ready && first.State.ExitCode is null, "2D playtest did not become ready: " + first.Diagnostics);
+        var restart = await plugin.RestartPlaytest();
+        var restarted = plugin.Playtest!;
+        check(restart?.Playtest?.Write() == launch!.Playtest?.Write() && restarted.Id != first.Id &&
+            await first.Completion == 0 && !first.State.Forced, "Restart did not replace the first child with the same match.");
+        await WaitForPlaytest(tree, restarted);
+        check(restarted.State.Ready, "Restarted playtest did not become ready: " + restarted.Diagnostics);
+        plugin.StopPlaytest();
+        check(await restarted.Completion.WaitAsync(TimeSpan.FromSeconds(10)) == 0 && !restarted.State.Forced,
+            "Stop did not close Godot cleanly: " + restarted.Diagnostics);
+        var cancelled = plugin.RestartPlaytest();
+        plugin.StopPlaytest();
+        check(await cancelled is null && plugin.Playtest == restarted, "Stopping a pending restart launched a new child.");
+
         var tile = map.Terrain!.GetCellTileData(Vector2I.Zero)!;
         var visual = tile.GetCustomData("VisualId");
         tile.SetCustomData("VisualId", "p0-missing-terrain-resource");
@@ -460,8 +493,13 @@ internal static class MapEditorChecks
             check(failed is null && plugin.Status.Contains("Godot map verification failed", StringComparison.Ordinal) &&
                 plugin.Status.Contains("p0-missing-terrain-resource", StringComparison.Ordinal) && File.ReadAllText(path) == previous,
                 "Failed Godot verification replaced a previously published compiled map: " + plugin.Status);
+            check(await plugin.RestartPlaytest() is not null, "Restart from stopped state did not launch.");
+            var badChild = plugin.Playtest!;
+            check(await badChild.Completion.WaitAsync(TimeSpan.FromSeconds(30)) != 0 && !badChild.State.Ready &&
+                badChild.Diagnostics.Contains("p0-missing-terrain-resource", StringComparison.Ordinal),
+                "A failed child did not expose its exit code and missing asset: " + badChild.Diagnostics);
         }
-        finally { tile.SetCustomData("VisualId", visual); }
+        finally { tile.SetCustomData("VisualId", visual); File.WriteAllText(path, previous); }
     }
 
     private static async Task CheckReliefMap(OpenRtsEditorPlugin plugin, SceneTree tree, Action<bool, string> check)
